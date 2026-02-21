@@ -1,26 +1,8 @@
-/*
- * Hospital Patient Alarm System - ESP32-S3 Master Device
- * 
- * This code runs on the ESP32-S3 master device.
- * It creates a Wi-Fi Access Point and hosts a web server with:
- *   - Public dashboard at /
- *   - Admin panel at /admin
- *   - REST API for slave devices
- * 
- * Required Libraries (install via Arduino Library Manager):
- *   - ESPAsyncWebServer (by me-no-dev)
- *   - AsyncTCP (by me-no-dev)
- *   - ArduinoJson (by Benoit Blanchon)
- * 
- * Board: ESP32-S3 Dev Module
- */
-
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
-// ============ CONFIGURATION ============
 const char* AP_SSID     = "HospitalAlarm";
 const char* AP_PASSWORD = "hospital123";
 
@@ -28,9 +10,8 @@ const char* ADMIN_USER = "admin";
 const char* ADMIN_PASS = "admin1234";
 
 #define MAX_SLAVES 20
-#define BUZZER_PIN 4  // Optional buzzer pin
+#define BUZZER_PIN 4
 
-// ============ DATA STRUCTURES ============
 struct Slave {
   char slaveId[32];
   char patientName[64];
@@ -38,8 +19,8 @@ struct Slave {
   char room[16];
   bool alertActive;
   bool registered;
-  unsigned long lastAlertTime; // millis timestamp
-  bool used;                   // slot in use
+  unsigned long lastAlertTime;
+  bool used;
 };
 
 Slave slaves[MAX_SLAVES];
@@ -47,15 +28,11 @@ int slaveCount = 0;
 
 AsyncWebServer server(80);
 
-// ============ HELPER FUNCTIONS ============
-
 bool checkAdminAuth(AsyncWebServerRequest *request) {
   if (!request->hasHeader("Authorization")) return false;
   String authHeader = request->header("Authorization");
   if (!authHeader.startsWith("Basic ")) return false;
-  // Decode Base64 and check credentials
-  // Expected: base64("admin:admin1234")
-  String expected = "YWRtaW46YWRtaW4xMjM0"; // base64 of admin:admin1234
+  String expected = "YWRtaW46YWRtaW4xMjM0";
   String provided = authHeader.substring(6);
   provided.trim();
   return (provided == expected);
@@ -118,7 +95,6 @@ String getSlavesJson() {
   return output;
 }
 
-// ============ SEED DATA ============
 void seedData() {
   const char* ids[]   = {"s1",           "s2",           "s3",         "s4",              "s5"};
   const char* names[] = {"Maria Garcia", "James Wilson", "Sarah Chen", "Robert Johnson",  "Emily Davis"};
@@ -137,12 +113,9 @@ void seedData() {
   }
   slaveCount = 5;
 
-  // Set s2 as having an active alert for demo
   slaves[1].alertActive = true;
   slaves[1].lastAlertTime = millis();
 }
-
-// ============ HTML PAGES ============
 
 const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -517,31 +490,25 @@ setInterval(()=>{if($('admin-page').style.display!=='none')loadSlaves();},3000);
 )rawliteral";
 
 
-// ============ SETUP ============
 void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n=== Hospital Patient Alarm System ===");
   Serial.println("Starting ESP32-S3 Master...");
 
-  // Optional buzzer
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
 
-  // Initialize slave array
   memset(slaves, 0, sizeof(slaves));
 
-  // Seed demo data
   seedData();
 
-  // Setup Wi-Fi Access Point
   WiFi.softAP(AP_SSID, AP_PASSWORD);
   Serial.print("AP IP address: ");
   Serial.println(WiFi.softAPIP());
   Serial.print("SSID: ");
   Serial.println(AP_SSID);
 
-  // === SERVE HTML PAGES ===
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send_P(200, "text/html", DASHBOARD_HTML);
   });
@@ -550,13 +517,11 @@ void setup() {
     request->send_P(200, "text/html", ADMIN_HTML);
   });
 
-  // === API: Get all slaves ===
   server.on("/api/slaves", HTTP_GET, [](AsyncWebServerRequest *request) {
     String json = getSlavesJson();
     request->send(200, "application/json", json);
   });
 
-  // === API: Register slave ===
   AsyncCallbackJsonWebHandler* registerHandler = new AsyncCallbackJsonWebHandler("/api/register",
     [](AsyncWebServerRequest *request, JsonVariant &json) {
       JsonObject obj = json.as<JsonObject>();
@@ -580,7 +545,6 @@ void setup() {
   );
   server.addHandler(registerHandler);
 
-  // === API: Trigger alert ===
   AsyncCallbackJsonWebHandler* alertHandler = new AsyncCallbackJsonWebHandler("/api/alert",
     [](AsyncWebServerRequest *request, JsonVariant &json) {
       JsonObject obj = json.as<JsonObject>();
@@ -605,7 +569,6 @@ void setup() {
       slaves[idx].alertActive = true;
       slaves[idx].lastAlertTime = millis();
 
-      // Buzz
       digitalWrite(BUZZER_PIN, HIGH);
       delay(200);
       digitalWrite(BUZZER_PIN, LOW);
@@ -617,7 +580,6 @@ void setup() {
   );
   server.addHandler(alertHandler);
 
-  // === API: Admin login ===
   AsyncCallbackJsonWebHandler* loginHandler = new AsyncCallbackJsonWebHandler("/api/admin/login",
     [](AsyncWebServerRequest *request, JsonVariant &json) {
       JsonObject obj = json.as<JsonObject>();
@@ -633,7 +595,6 @@ void setup() {
   );
   server.addHandler(loginHandler);
 
-  // === API: Add slave (admin, auth required) ===
   AsyncCallbackJsonWebHandler* addSlaveHandler = new AsyncCallbackJsonWebHandler("/api/slaves",
     [](AsyncWebServerRequest *request, JsonVariant &json) {
       if (!checkAdminAuth(request)) { sendUnauthorized(request); return; }
@@ -676,7 +637,6 @@ void setup() {
   );
   server.addHandler(addSlaveHandler);
 
-  // === API: Clear alert (admin, auth required) ===
   server.on("/api/clearAlert/*", HTTP_POST, [](AsyncWebServerRequest *request) {
     if (!checkAdminAuth(request)) { sendUnauthorized(request); return; }
 
@@ -695,11 +655,9 @@ void setup() {
     Serial.printf("Alert cleared for %s\n", slaveId.c_str());
   });
 
-  // === Handle PUT and DELETE via onNotFound (admin, auth required) ===
   server.onNotFound([](AsyncWebServerRequest *request) {
     String url = request->url();
 
-    // Handle DELETE /api/slaves/:id
     if (request->method() == HTTP_DELETE && url.startsWith("/api/slaves/")) {
       if (!checkAdminAuth(request)) { sendUnauthorized(request); return; }
 
@@ -725,7 +683,6 @@ void setup() {
     request->send(404, "application/json", "{\"message\":\"Not found\"}");
   });
 
-  // Handle PUT with body for updating slaves (admin, auth required)
   server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     String url = request->url();
 
@@ -761,7 +718,6 @@ void setup() {
     }
   });
 
-  // Start server
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -772,9 +728,7 @@ void setup() {
   Serial.println("Open http://192.168.4.1 in your browser");
 }
 
-// ============ LOOP ============
 void loop() {
-  // Check if any alert is active and blink buzzer
   bool anyAlert = false;
   for (int i = 0; i < MAX_SLAVES; i++) {
     if (slaves[i].used && slaves[i].alertActive) {
@@ -784,7 +738,6 @@ void loop() {
   }
 
   if (anyAlert) {
-    // Short beep every 5 seconds
     static unsigned long lastBeep = 0;
     if (millis() - lastBeep > 5000) {
       digitalWrite(BUZZER_PIN, HIGH);
