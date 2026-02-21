@@ -15,7 +15,7 @@ const char* ADMIN_PASS = "admin1234";
 struct Slave {
   char slaveId[32];
   char patientName[64];
-  char bed[16];
+  char bed[16];ma
   char room[16];
   bool alertActive;
   bool registered;
@@ -503,7 +503,15 @@ void setup() {
 
   seedData();
 
-  WiFi.softAP(AP_SSID);
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(
+    IPAddress(192, 168, 4, 1),
+    IPAddress(192, 168, 4, 1),
+    IPAddress(255, 255, 255, 0)
+  );
+  delay(100);
+  WiFi.softAP(AP_SSID, NULL, 1, 0, 4);
+  delay(500);
   Serial.print("AP IP address: ");
   Serial.println(WiFi.softAPIP());
   Serial.print("SSID: ");
