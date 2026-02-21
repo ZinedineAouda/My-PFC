@@ -310,26 +310,49 @@ void setupSlaveRoutes() {
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Alert queued\"}");
   });
 
-  AsyncCallbackJsonWebHandler* connectHandler = new AsyncCallbackJsonWebHandler("/api/connect",
-    [](AsyncWebServerRequest *request, JsonVariant &json) {
-      JsonObject obj = json.as<JsonObject>();
-      const char* ssid = obj["ssid"] | "";
-      const char* pass = obj["password"] | "";
-      const char* master = obj["masterIP"] | "http://192.168.4.1";
-      const char* devId = obj["slaveId"] | "";
+  setupServer.on("/api/connect", HTTP_POST,
+    [](AsyncWebServerRequest *request) {},
+    NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+      static String bodyBuf;
+      if (index == 0) bodyBuf = "";
+      bodyBuf += String((char*)data).substring(0, len);
+      if (index + len < total) return;
+
+      JsonDocument doc;
+      DeserializationError err = deserializeJson(doc, bodyBuf);
+      bodyBuf = "";
+      if (err) {
+        Serial.print("JSON parse error: ");
+        Serial.println(err.c_str());
+        request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+        return;
+      }
+      const char* ssid = doc["ssid"] | "";
+      const char* pass = doc["password"] | "";
+      const char* master = doc["masterIP"] | "http://192.168.4.1";
+      const char* devId = doc["slaveId"] | "";
 
       if (strlen(ssid) == 0) {
         request->send(400, "application/json", "{\"success\":false,\"message\":\"Missing SSID\"}");
         return;
       }
 
-      strncpy(targetSSID, ssid, sizeof(targetSSID));
-      strncpy(targetPass, pass, sizeof(targetPass));
-      strncpy(masterURL, master, sizeof(masterURL));
-      if (strlen(devId) > 0) strncpy(slaveId, devId, sizeof(slaveId));
+      strncpy(targetSSID, ssid, sizeof(targetSSID) - 1);
+      targetSSID[sizeof(targetSSID) - 1] = '\0';
+      strncpy(targetPass, pass, sizeof(targetPass) - 1);
+      targetPass[sizeof(targetPass) - 1] = '\0';
+      strncpy(masterURL, master, sizeof(masterURL) - 1);
+      masterURL[sizeof(masterURL) - 1] = '\0';
+      if (strlen(devId) > 0) {
+        strncpy(slaveId, devId, sizeof(slaveId) - 1);
+        slaveId[sizeof(slaveId) - 1] = '\0';
+      }
 
+      Serial.printf("Connecting to: %s\n", targetSSID);
       WiFi.mode(WIFI_AP_STA);
-      if (strlen(pass) > 0) {
+      delay(100);
+      if (strlen(targetPass) > 0) {
         WiFi.begin(targetSSID, targetPass);
       } else {
         WiFi.begin(targetSSID);
@@ -339,27 +362,27 @@ void setupSlaveRoutes() {
       while (WiFi.status() != WL_CONNECTED && attempts < 30) {
         delay(500);
         attempts++;
+        Serial.print(".");
         digitalWrite(LED_PIN, !digitalRead(LED_PIN));
       }
+      Serial.println();
       digitalWrite(LED_PIN, LED_OFF);
 
       if (WiFi.status() == WL_CONNECTED) {
         wifiConnected = true;
         setupDone = true;
-        Serial.print("Connected to: ");
-        Serial.println(targetSSID);
-        Serial.print("IP: ");
+        Serial.print("Connected! IP: ");
         Serial.println(WiFi.localIP());
         String resp = "{\"success\":true,\"ip\":\"" + WiFi.localIP().toString() + "\"}";
         request->send(200, "application/json", resp);
       } else {
+        Serial.println("Connection failed");
         WiFi.disconnect();
         WiFi.mode(WIFI_AP);
         request->send(200, "application/json", "{\"success\":false,\"message\":\"Could not connect\"}");
       }
     }
   );
-  setupServer.addHandler(connectHandler);
 }
 
 bool registerWithMaster() {
