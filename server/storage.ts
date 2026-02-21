@@ -1,25 +1,38 @@
-import type { Slave, InsertSlave, UpdateSlave } from "@shared/schema";
+import type { Slave, InsertSlave, UpdateSlave, ApproveSlave } from "@shared/schema";
 
 export interface IStorage {
   getAllSlaves(): Slave[];
+  getApprovedSlaves(): Slave[];
   getSlave(slaveId: string): Slave | undefined;
   addSlave(data: InsertSlave): Slave;
+  approveSlave(slaveId: string, data: ApproveSlave): Slave | undefined;
   updateSlave(slaveId: string, data: UpdateSlave): Slave | undefined;
   deleteSlave(slaveId: string): boolean;
-  registerSlave(slaveId: string): boolean;
+  registerSlave(slaveId: string): Slave;
   triggerAlert(slaveId: string): { success: boolean; reason?: string };
   clearAlert(slaveId: string): boolean;
+  getMode(): number;
+  setMode(mode: number): void;
+  isSetupDone(): boolean;
 }
 
 export class MemStorage implements IStorage {
   private slaves: Map<string, Slave>;
+  private wifiMode: number;
+  private setupComplete: boolean;
 
   constructor() {
     this.slaves = new Map();
+    this.wifiMode = 0;
+    this.setupComplete = false;
   }
 
   getAllSlaves(): Slave[] {
     return Array.from(this.slaves.values());
+  }
+
+  getApprovedSlaves(): Slave[] {
+    return Array.from(this.slaves.values()).filter(s => s.approved);
   }
 
   getSlave(slaveId: string): Slave | undefined {
@@ -32,25 +45,36 @@ export class MemStorage implements IStorage {
     }
     const slave: Slave = {
       slaveId: data.slaveId,
-      patientName: data.patientName,
-      bed: data.bed,
-      room: data.room,
+      patientName: data.patientName || "",
+      bed: data.bed || "",
+      room: data.room || "",
       alertActive: false,
       lastAlertTime: null,
       registered: false,
+      approved: false,
+      lastSeen: null,
     };
     this.slaves.set(data.slaveId, slave);
+    return slave;
+  }
+
+  approveSlave(slaveId: string, data: ApproveSlave): Slave | undefined {
+    const slave = this.slaves.get(slaveId);
+    if (!slave) return undefined;
+    slave.patientName = data.patientName;
+    slave.bed = data.bed;
+    slave.room = data.room;
+    slave.approved = true;
+    this.slaves.set(slaveId, slave);
     return slave;
   }
 
   updateSlave(slaveId: string, data: UpdateSlave): Slave | undefined {
     const slave = this.slaves.get(slaveId);
     if (!slave) return undefined;
-
     if (data.patientName !== undefined) slave.patientName = data.patientName;
     if (data.bed !== undefined) slave.bed = data.bed;
     if (data.room !== undefined) slave.room = data.room;
-
     this.slaves.set(slaveId, slave);
     return slave;
   }
@@ -59,21 +83,37 @@ export class MemStorage implements IStorage {
     return this.slaves.delete(slaveId);
   }
 
-  registerSlave(slaveId: string): boolean {
-    const slave = this.slaves.get(slaveId);
-    if (!slave) return false;
-    slave.registered = true;
+  registerSlave(slaveId: string): Slave {
+    let slave = this.slaves.get(slaveId);
+    if (slave) {
+      slave.registered = true;
+      slave.lastSeen = Date.now();
+      this.slaves.set(slaveId, slave);
+      return slave;
+    }
+    slave = {
+      slaveId,
+      patientName: "",
+      bed: "",
+      room: "",
+      alertActive: false,
+      lastAlertTime: null,
+      registered: true,
+      approved: false,
+      lastSeen: Date.now(),
+    };
     this.slaves.set(slaveId, slave);
-    return true;
+    return slave;
   }
 
   triggerAlert(slaveId: string): { success: boolean; reason?: string } {
     const slave = this.slaves.get(slaveId);
     if (!slave) return { success: false, reason: "unknown slave" };
+    if (!slave.approved) return { success: false, reason: "not approved" };
     if (slave.alertActive) return { success: false, reason: "alert already active" };
-
     slave.alertActive = true;
     slave.lastAlertTime = new Date().toISOString();
+    slave.lastSeen = Date.now();
     this.slaves.set(slaveId, slave);
     return { success: true };
   }
@@ -86,28 +126,17 @@ export class MemStorage implements IStorage {
     return true;
   }
 
-  seed() {
-    const seedData: InsertSlave[] = [
-      { slaveId: "s1", patientName: "Maria Garcia", bed: "1A", room: "101" },
-      { slaveId: "s2", patientName: "James Wilson", bed: "2B", room: "102" },
-      { slaveId: "s3", patientName: "Sarah Chen", bed: "3A", room: "201" },
-      { slaveId: "s4", patientName: "Robert Johnson", bed: "4C", room: "202" },
-      { slaveId: "s5", patientName: "Emily Davis", bed: "5B", room: "301" },
-    ];
+  getMode(): number {
+    return this.wifiMode;
+  }
 
-    for (const data of seedData) {
-      if (!this.slaves.has(data.slaveId)) {
-        this.addSlave(data);
-        const slave = this.slaves.get(data.slaveId)!;
-        slave.registered = true;
-        this.slaves.set(data.slaveId, slave);
-      }
-    }
+  setMode(mode: number): void {
+    this.wifiMode = mode;
+    this.setupComplete = true;
+  }
 
-    const s2 = this.slaves.get("s2");
-    if (s2 && !s2.alertActive) {
-      this.triggerAlert("s2");
-    }
+  isSetupDone(): boolean {
+    return this.setupComplete;
   }
 }
 

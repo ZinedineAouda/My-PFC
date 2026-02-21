@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import { storage } from "./storage";
-import { insertSlaveSchema, updateSlaveSchema, alertRequestSchema, registerRequestSchema } from "@shared/schema";
+import { insertSlaveSchema, updateSlaveSchema, approveSlaveSchema, alertRequestSchema, registerRequestSchema, setupSchema, connectWifiSchema } from "@shared/schema";
 
 declare module "express-session" {
   interface SessionData {
@@ -33,8 +33,6 @@ export async function registerRoutes(
     })
   );
 
-  storage.seed();
-
   app.post("/api/admin/login", (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (username === "admin" && password === "admin1234") {
@@ -57,9 +55,50 @@ export async function registerRoutes(
     return res.status(401).json({ authenticated: false });
   });
 
-  app.get("/api/slaves", (_req: Request, res: Response) => {
-    const slaves = storage.getAllSlaves();
-    return res.json(slaves);
+  app.get("/api/status", (_req: Request, res: Response) => {
+    return res.json({
+      mode: storage.getMode(),
+      setup: storage.isSetupDone(),
+      masterIP: "localhost",
+      slaves: storage.getAllSlaves().length,
+    });
+  });
+
+  app.post("/api/setup", (req: Request, res: Response) => {
+    const parsed = setupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid mode" });
+    }
+    storage.setMode(parsed.data.mode);
+    return res.json({ success: true, mode: parsed.data.mode });
+  });
+
+  app.get("/api/scan", (_req: Request, res: Response) => {
+    const fakeNetworks = [
+      { ssid: "Hospital-WiFi", rssi: -45, secure: true },
+      { ssid: "Hospital-Guest", rssi: -55, secure: true },
+      { ssid: "Staff-Network", rssi: -62, secure: true },
+      { ssid: "IoT-Network", rssi: -70, secure: false },
+    ];
+    return res.json(fakeNetworks);
+  });
+
+  app.post("/api/connect-wifi", (req: Request, res: Response) => {
+    const parsed = connectWifiSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: "Missing SSID" });
+    }
+    return res.json({ success: true, ip: "192.168.1.100" });
+  });
+
+  app.get("/api/slaves", (req: Request, res: Response) => {
+    if (req.query.approved === "1") {
+      return res.json(storage.getApprovedSlaves());
+    }
+    if (req.query.all === "1") {
+      return res.json(storage.getAllSlaves());
+    }
+    return res.json(storage.getApprovedSlaves());
   });
 
   app.post("/api/register", (req: Request, res: Response) => {
@@ -68,11 +107,11 @@ export async function registerRoutes(
       return res.status(400).json({ success: false, message: "Invalid request body" });
     }
     const { slaveId } = parsed.data;
-    const registered = storage.registerSlave(slaveId);
-    if (!registered) {
-      return res.status(404).json({ success: false, message: "Unknown slave ID. Register via admin first." });
+    const slave = storage.registerSlave(slaveId);
+    if (slave.approved) {
+      return res.json({ success: true, message: "Registered" });
     }
-    return res.json({ success: true, message: "Registered" });
+    return res.json({ success: true, message: "Pending approval" });
   });
 
   app.post("/api/alert", (req: Request, res: Response) => {
@@ -85,7 +124,19 @@ export async function registerRoutes(
     if (!result.success) {
       return res.json({ success: false, reason: result.reason });
     }
-    return res.json({ success: true, alertId: `alert-${slaveId}-${Date.now()}` });
+    return res.json({ success: true });
+  });
+
+  app.post("/api/approve/:slaveId", requireAdmin, (req: Request, res: Response) => {
+    const parsed = approveSlaveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+    }
+    const slave = storage.approveSlave(req.params.slaveId, parsed.data);
+    if (!slave) {
+      return res.status(404).json({ message: "Slave not found" });
+    }
+    return res.json({ success: true, slave });
   });
 
   app.post("/api/slaves", requireAdmin, (req: Request, res: Response) => {
@@ -106,7 +157,7 @@ export async function registerRoutes(
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
-    const slave = storage.updateSlave(req.params.slaveId as string, parsed.data);
+    const slave = storage.updateSlave(req.params.slaveId, parsed.data);
     if (!slave) {
       return res.status(404).json({ message: "Slave not found" });
     }
@@ -114,7 +165,7 @@ export async function registerRoutes(
   });
 
   app.delete("/api/slaves/:slaveId", requireAdmin, (req: Request, res: Response) => {
-    const deleted = storage.deleteSlave(req.params.slaveId as string);
+    const deleted = storage.deleteSlave(req.params.slaveId);
     if (!deleted) {
       return res.status(404).json({ message: "Slave not found" });
     }
@@ -122,7 +173,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/clearAlert/:slaveId", requireAdmin, (req: Request, res: Response) => {
-    const cleared = storage.clearAlert(req.params.slaveId as string);
+    const cleared = storage.clearAlert(req.params.slaveId);
     if (!cleared) {
       return res.status(404).json({ message: "Slave not found" });
     }

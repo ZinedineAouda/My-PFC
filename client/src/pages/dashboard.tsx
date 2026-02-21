@@ -142,7 +142,12 @@ export default function Dashboard() {
   const prevAlertsRef = useRef<Set<string>>(new Set());
 
   const { data: slaves, isLoading, error } = useQuery<Slave[]>({
-    queryKey: ["/api/slaves"],
+    queryKey: ["/api/slaves", "approved"],
+    queryFn: async () => {
+      const res = await fetch("/api/slaves?approved=1");
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
     refetchInterval: 2000,
   });
 
