@@ -1,33 +1,51 @@
 /*
  * Hospital Alarm System - Slave Device
- * Target: ESP32 V1 (ESP32-WROOM-32 / DevKit V1)
- * 
- * Board: "ESP32 Dev Module" in Arduino IDE
- * Pins:  GPIO0  = BOOT button (built-in, used as call button)
- *        GPIO2  = Onboard LED (active HIGH)
- *        GPIO4  = Buzzer (optional, active HIGH)
- *        GPIO15 = External call button (optional, wire to GND)
+ * Target: ESP8266 ESP-01 / ESP-01S
+ *
+ * Board in Arduino IDE: "Generic ESP8266 Module"
+ *   Flash Size: 1MB (or 512KB for older ESP-01)
+ *   CPU Frequency: 80 MHz
+ *   Upload Speed: 115200
+ *
+ * ESP-01 available pins:
+ *   GPIO0 = Call button (active LOW, has internal pull-up)
+ *           Also used for flash mode - must be HIGH during boot
+ *           Wire button between GPIO0 and GND
+ *   GPIO2 = Onboard LED (active LOW on ESP-01S, active HIGH on some ESP-01)
+ *           Also TX1 - must be HIGH during boot
+ *
+ * Wiring:
+ *   VCC  -> 3.3V (NOT 5V!)
+ *   GND  -> GND
+ *   CH_PD/EN -> 3.3V (pull HIGH to enable chip)
+ *   GPIO0 -> Push button -> GND (patient call button)
+ *   GPIO2 -> LED onboard (status indicator)
+ *
+ * Note: GPIO0 must be HIGH (button not pressed) during power-on
+ *       to boot into normal mode. Press button only after boot.
  *
  * Libraries required:
  *   - ArduinoJson (v7.x)
- *   - ESPAsyncWebServer
- *   - AsyncTCP
+ *   - ESPAsyncWebServer (ESP8266)
+ *   - ESPAsyncTCP
  */
 
-#include <WiFi.h>
-#include <HTTPClient.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
-#include <AsyncTCP.h>
+#include <ESPAsyncTCP.h>
 
-#define BUTTON_PIN    0
-#define EXT_BUTTON_PIN 15
-#define LED_PIN       2
-#define BUZZER_PIN    4
-#define DEBOUNCE_MS   300
-#define REGISTER_INTERVAL_MS 10000
+#define BUTTON_PIN     0
+#define LED_PIN        2
+#define DEBOUNCE_MS    300
+#define REGISTER_INTERVAL_MS  10000
 #define HEARTBEAT_INTERVAL_MS 30000
 #define RECONNECT_INTERVAL_MS 5000
+
+#define LED_ON  LOW
+#define LED_OFF HIGH
 
 char slaveId[32] = "";
 char targetSSID[64] = "";
@@ -47,35 +65,25 @@ unsigned long alertSentTime = 0;
 bool alertPending = false;
 
 AsyncWebServer setupServer(80);
+WiFiClient wifiClient;
 
 void generateSlaveId() {
-  uint64_t mac = ESP.getEfuseMac();
-  uint16_t chip = (uint16_t)(mac & 0xFFFF);
-  snprintf(slaveId, sizeof(slaveId), "slave-%04X", chip);
+  uint32_t chipId = ESP.getChipId();
+  snprintf(slaveId, sizeof(slaveId), "slave-%06X", chipId & 0xFFFFFF);
 }
 
 String getApName() {
-  uint64_t mac = ESP.getEfuseMac();
-  uint16_t chip = (uint16_t)(mac & 0xFFFF);
+  uint32_t chipId = ESP.getChipId();
   char buf[32];
-  snprintf(buf, sizeof(buf), "SlaveSetup-%04X", chip);
+  snprintf(buf, sizeof(buf), "SlaveSetup-%04X", (uint16_t)(chipId & 0xFFFF));
   return String(buf);
 }
 
 void ledBlink(int times, int onMs, int offMs) {
   for (int i = 0; i < times; i++) {
-    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_PIN, LED_ON);
     delay(onMs);
-    digitalWrite(LED_PIN, LOW);
-    if (i < times - 1) delay(offMs);
-  }
-}
-
-void beep(int times, int onMs, int offMs) {
-  for (int i = 0; i < times; i++) {
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(onMs);
-    digitalWrite(BUZZER_PIN, LOW);
+    digitalWrite(LED_PIN, LED_OFF);
     if (i < times - 1) delay(offMs);
   }
 }
@@ -133,23 +141,22 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135d
 <div class="progress"><div class="dot active" id="d1"></div><div class="dot" id="d2"></div><div class="dot" id="d3"></div></div>
 <div class="logo">
 <div class="logo-icon">&#128276;</div>
-<h1>Slave Device Setup</h1>
+<h1>ESP-01 Slave Setup</h1>
 <p>Patient Call Button</p>
 </div>
-
 <div class="step active" id="step1">
 <div style="text-align:center"><span class="chip-id" id="chip-id"></span></div>
 <div class="form-group">
 <label>Device ID (auto-generated from chip)</label>
-<input type="text" id="dev-id" placeholder="e.g. slave-A1B2">
+<input type="text" id="dev-id" placeholder="e.g. slave-A1B2C3">
 </div>
 <div class="form-group">
 <label>Master IP Address</label>
 <input type="text" id="master-ip" placeholder="e.g. 192.168.4.1" value="192.168.4.1">
 </div>
 <h3 style="font-size:14px;margin:16px 0 8px;color:#94a3b8">Select Wi-Fi Network</h3>
-<p style="font-size:12px;color:#64748b;margin-bottom:8px">Choose the same network the master is on, or the master's AP (HospitalAlarm)</p>
-<div id="scan-area"><div class="scanning"><div class="spinner"></div><br>Scanning nearby networks...</div></div>
+<p style="font-size:12px;color:#64748b;margin-bottom:8px">Choose the master's AP (HospitalAlarm) or the hospital network</p>
+<div id="scan-area"><div class="scanning"><div class="spinner"></div><br>Scanning...</div></div>
 <div class="form-group" style="margin-top:12px">
 <label>Wi-Fi Password (leave empty for open networks)</label>
 <input type="password" id="wifi-pass" placeholder="Network password">
@@ -158,26 +165,24 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135d
 <button class="btn btn-secondary" onclick="scanWifi()">Rescan Networks</button>
 <div id="status-area"></div>
 </div>
-
 <div class="step" id="step2">
 <div style="text-align:center;padding:20px 0">
 <div style="font-size:48px;margin-bottom:12px">&#9989;</div>
 <h2 style="font-size:18px;margin-bottom:6px">Device Connected!</h2>
 <p id="conn-info" style="color:#94a3b8;font-size:13px"></p>
 <p id="conn-ip" style="color:#6ee7b7;font-weight:600;font-size:14px;margin-top:4px"></p>
-<div class="status warn" style="margin-top:16px">&#9888; This device needs admin approval before alerts will work. Ask the admin to approve it in the Admin Panel.</div>
-<p style="color:#94a3b8;font-size:12px;margin-top:16px">The call button is now active. Press it to send alerts to the master.</p>
+<div class="status warn" style="margin-top:16px">&#9888; This device needs admin approval before alerts work. Ask admin to approve in the Admin Panel.</div>
+<p style="color:#94a3b8;font-size:12px;margin-top:16px">Press GPIO0 button to send alerts.</p>
 </div>
 </div>
 </div>
 </div>
-
 <script>
 var selectedSSID='';
 function loadId(){fetch('/api/status').then(function(r){return r.json()}).then(function(d){document.getElementById('dev-id').value=d.id;document.getElementById('chip-id').textContent='Chip: '+d.id;}).catch(function(){});}
-function scanWifi(){document.getElementById('scan-area').innerHTML='<div class="scanning"><div class="spinner"></div><br>Scanning nearby networks...</div>';fetch('/api/scan').then(function(r){return r.json()}).then(function(nets){if(nets.length===0){document.getElementById('scan-area').innerHTML='<div class="scanning">No networks found. Try again.</div>';return;}var html='<div class="wifi-list">';for(var i=0;i<nets.length;i++){var n=nets[i];var bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';html+='<div class="wifi-item" onclick="pickWifi(this,\''+n.ssid+'\')"><span class="wifi-name">'+n.ssid+(n.ssid==='HospitalAlarm'?' (Master)':'')+'</span><span class="wifi-signal">'+bars+'</span></div>';}html+='</div>';document.getElementById('scan-area').innerHTML=html;}).catch(function(){document.getElementById('scan-area').innerHTML='<div class="scanning">Scan failed.</div>';});}
+function scanWifi(){document.getElementById('scan-area').innerHTML='<div class="scanning"><div class="spinner"></div><br>Scanning...</div>';fetch('/api/scan').then(function(r){return r.json()}).then(function(nets){if(nets.length===0){document.getElementById('scan-area').innerHTML='<div class="scanning">No networks found. Try again.</div>';return;}var html='<div class="wifi-list">';for(var i=0;i<nets.length;i++){var n=nets[i];var bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';html+='<div class="wifi-item" onclick="pickWifi(this,\''+n.ssid+'\')"><span class="wifi-name">'+n.ssid+(n.ssid==='HospitalAlarm'?' (Master)':'')+'</span><span class="wifi-signal">'+bars+'</span></div>';}html+='</div>';document.getElementById('scan-area').innerHTML=html;}).catch(function(){document.getElementById('scan-area').innerHTML='<div class="scanning">Scan failed.</div>';});}
 function pickWifi(el,ssid){selectedSSID=ssid;document.querySelectorAll('.wifi-item').forEach(function(i){i.classList.remove('selected')});el.classList.add('selected');document.getElementById('connectBtn').disabled=false;}
-function doConnect(){var devId=document.getElementById('dev-id').value.trim();var masterIp=document.getElementById('master-ip').value.trim();var pass=document.getElementById('wifi-pass').value;if(!devId){alert('Enter a Device ID');return;}if(!masterIp){alert('Enter Master IP');return;}if(!selectedSSID){alert('Select a network');return;}document.getElementById('connectBtn').disabled=true;document.getElementById('connectBtn').textContent='Connecting...';document.getElementById('status-area').innerHTML='<div class="status info">Connecting to '+selectedSSID+'...</div>';fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selectedSSID,password:pass,masterIP:'http://'+masterIp,slaveId:devId})}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('status-area').innerHTML='<div class="status ok">Connected! Registering with master...</div>';setTimeout(function(){fetch('/api/status').then(function(r){return r.json()}).then(function(s){document.querySelectorAll('.step').forEach(function(st){st.classList.remove('active')});document.getElementById('step2').classList.add('active');document.getElementById('d1').classList.remove('active');document.getElementById('d1').classList.add('done');document.getElementById('d2').classList.add('active');document.getElementById('d2').classList.add('done');document.getElementById('d3').classList.add('active');document.getElementById('d3').classList.add('done');document.getElementById('conn-info').textContent='Device: '+devId+' | Network: '+selectedSSID;document.getElementById('conn-ip').textContent='IP: '+s.ip+' | Master: '+masterIp;}).catch(function(){document.getElementById('status-area').innerHTML='<div class="status ok">Connected! Setup complete.</div>';});},2000);}else{document.getElementById('status-area').innerHTML='<div class="status err">Failed: '+(d.message||'Unknown error')+'</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect & Register';}}).catch(function(){document.getElementById('status-area').innerHTML='<div class="status err">Connection error</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect & Register';});}
+function doConnect(){var devId=document.getElementById('dev-id').value.trim();var masterIp=document.getElementById('master-ip').value.trim();var pass=document.getElementById('wifi-pass').value;if(!devId){alert('Enter a Device ID');return;}if(!masterIp){alert('Enter Master IP');return;}if(!selectedSSID){alert('Select a network');return;}document.getElementById('connectBtn').disabled=true;document.getElementById('connectBtn').textContent='Connecting...';document.getElementById('status-area').innerHTML='<div class="status info">Connecting to '+selectedSSID+'...</div>';fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selectedSSID,password:pass,masterIP:'http://'+masterIp,slaveId:devId})}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('status-area').innerHTML='<div class="status ok">Connected! Registering...</div>';setTimeout(function(){fetch('/api/status').then(function(r){return r.json()}).then(function(s){document.querySelectorAll('.step').forEach(function(st){st.classList.remove('active')});document.getElementById('step2').classList.add('active');document.getElementById('d1').classList.remove('active');document.getElementById('d1').classList.add('done');document.getElementById('d2').classList.add('active');document.getElementById('d2').classList.add('done');document.getElementById('d3').classList.add('active');document.getElementById('d3').classList.add('done');document.getElementById('conn-info').textContent='Device: '+devId+' | Network: '+selectedSSID;document.getElementById('conn-ip').textContent='IP: '+s.ip+' | Master: '+masterIp;}).catch(function(){document.getElementById('status-area').innerHTML='<div class="status ok">Connected!</div>';});},2000);}else{document.getElementById('status-area').innerHTML='<div class="status err">Failed: '+(d.message||'Unknown error')+'</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect & Register';}}).catch(function(){document.getElementById('status-area').innerHTML='<div class="status err">Connection error</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect & Register';});}
 loadId();scanWifi();
 </script>
 </body>
@@ -190,7 +195,7 @@ const char SLAVE_STATUS_HTML[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Slave Device Status</title>
+<title>Slave Status</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135deg,#0f172a,#1e293b);color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -210,7 +215,6 @@ h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,#6ee7b7,#34d
 .status-badge.online{background:rgba(34,197,94,.15);color:#4ade80}
 .status-badge.offline{background:rgba(239,68,68,.15);color:#f87171}
 .status-badge.pending{background:rgba(251,191,36,.15);color:#fbbf24}
-.status-badge.alerting{background:rgba(239,68,68,.2);color:#f87171;animation:pulse 2s infinite}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
 .dot.on{background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.5)}
 .dot.off{background:#ef4444}
@@ -220,22 +224,24 @@ h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,#6ee7b7,#34d
 .btn-alert:active{transform:scale(.97)}
 .btn-alert:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .footer{text-align:center;margin-top:16px;font-size:11px;color:#64748b}
+.mem{text-align:center;margin-top:8px;font-size:11px;color:#475569}
 </style>
 </head>
 <body>
 <div class="card">
 <div class="header">
 <div class="icon" id="main-icon">&#128276;</div>
-<h1>Slave Device</h1>
+<h1>ESP-01 Slave</h1>
 </div>
 <div class="info-grid" id="info"></div>
 <button class="btn-alert" id="alertBtn" onclick="sendAlert()">&#128680; Send Alert</button>
 <div id="alert-status"></div>
+<div class="mem" id="mem"></div>
 <div class="footer">Auto-refreshes every 5s</div>
 </div>
 <script>
-function load(){fetch('/api/status').then(function(r){return r.json()}).then(function(d){var icon=document.getElementById('main-icon');if(d.alertPending){icon.className='icon alert';icon.innerHTML='&#128680;';}else if(d.connected){icon.className='icon ok';icon.innerHTML='&#128276;';}else{icon.className='icon off';icon.innerHTML='&#128263;';}var connClass=d.connected?'online':'offline';var connText=d.connected?'Connected':'Disconnected';var regClass=d.registered?(d.approved?'online':'pending'):'offline';var regText=d.registered?(d.approved?'Approved':'Pending Approval'):'Not Registered';document.getElementById('info').innerHTML='<div class="info-row"><span class="info-label">Device ID</span><span class="info-value">'+d.id+'</span></div>'+'<div class="info-row"><span class="info-label">Network</span><span class="info-value">'+(d.ssid||'None')+'</span></div>'+'<div class="info-row"><span class="info-label">IP Address</span><span class="info-value">'+(d.ip||'-')+'</span></div>'+'<div class="info-row"><span class="info-label">Master</span><span class="info-value">'+d.master+'</span></div>'+'<div class="info-row"><span class="info-label">Wi-Fi</span><span class="status-badge '+connClass+'"><span class="dot '+(d.connected?'on':'off')+'"></span>'+connText+'</span></div>'+'<div class="info-row"><span class="info-label">Registration</span><span class="status-badge '+regClass+'"><span class="dot '+(d.registered?(d.approved?'on':'warn'):'off')+'"></span>'+regText+'</span></div>';document.getElementById('alertBtn').disabled=!d.connected;}).catch(function(){});}
-function sendAlert(){document.getElementById('alertBtn').disabled=true;document.getElementById('alertBtn').textContent='Sending...';fetch('/api/trigger-alert',{method:'POST'}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('alert-status').innerHTML='<div style="padding:10px;border-radius:8px;margin-top:10px;background:rgba(34,197,94,.1);color:#4ade80;text-align:center;font-size:13px">Alert sent to master!</div>';}else{document.getElementById('alert-status').innerHTML='<div style="padding:10px;border-radius:8px;margin-top:10px;background:rgba(239,68,68,.1);color:#f87171;text-align:center;font-size:13px">Failed: '+(d.message||'Error')+'</div>';}document.getElementById('alertBtn').textContent='&#128680; Send Alert';document.getElementById('alertBtn').disabled=false;setTimeout(function(){document.getElementById('alert-status').innerHTML='';},4000);}).catch(function(){document.getElementById('alertBtn').textContent='&#128680; Send Alert';document.getElementById('alertBtn').disabled=false;});}
+function load(){fetch('/api/status').then(function(r){return r.json()}).then(function(d){var icon=document.getElementById('main-icon');if(d.alertPending){icon.className='icon alert';icon.innerHTML='&#128680;';}else if(d.connected){icon.className='icon ok';icon.innerHTML='&#128276;';}else{icon.className='icon off';icon.innerHTML='&#128263;';}var connClass=d.connected?'online':'offline';var connText=d.connected?'Connected':'Disconnected';var regClass=d.registered?(d.approved?'online':'pending'):'offline';var regText=d.registered?(d.approved?'Approved':'Pending Approval'):'Not Registered';document.getElementById('info').innerHTML='<div class="info-row"><span class="info-label">Device ID</span><span class="info-value">'+d.id+'</span></div>'+'<div class="info-row"><span class="info-label">Network</span><span class="info-value">'+(d.ssid||'None')+'</span></div>'+'<div class="info-row"><span class="info-label">IP</span><span class="info-value">'+(d.ip||'-')+'</span></div>'+'<div class="info-row"><span class="info-label">Master</span><span class="info-value">'+d.master+'</span></div>'+'<div class="info-row"><span class="info-label">Wi-Fi</span><span class="status-badge '+connClass+'"><span class="dot '+(d.connected?'on':'off')+'"></span>'+connText+'</span></div>'+'<div class="info-row"><span class="info-label">Status</span><span class="status-badge '+regClass+'"><span class="dot '+(d.registered?(d.approved?'on':'warn'):'off')+'"></span>'+regText+'</span></div>';document.getElementById('alertBtn').disabled=!d.connected;if(d.freeHeap)document.getElementById('mem').textContent='Free RAM: '+d.freeHeap+' bytes';}).catch(function(){});}
+function sendAlert(){document.getElementById('alertBtn').disabled=true;document.getElementById('alertBtn').textContent='Sending...';fetch('/api/trigger-alert',{method:'POST'}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('alert-status').innerHTML='<div style="padding:10px;border-radius:8px;margin-top:10px;background:rgba(34,197,94,.1);color:#4ade80;text-align:center;font-size:13px">Alert sent!</div>';}else{document.getElementById('alert-status').innerHTML='<div style="padding:10px;border-radius:8px;margin-top:10px;background:rgba(239,68,68,.1);color:#f87171;text-align:center;font-size:13px">Failed: '+(d.message||'Error')+'</div>';}document.getElementById('alertBtn').textContent='&#128680; Send Alert';document.getElementById('alertBtn').disabled=false;setTimeout(function(){document.getElementById('alert-status').innerHTML='';},4000);}).catch(function(){document.getElementById('alertBtn').textContent='&#128680; Send Alert';document.getElementById('alertBtn').disabled=false;});}
 load();setInterval(load,5000);
 </script>
 </div>
@@ -265,11 +271,10 @@ void setupSlaveRoutes() {
     }
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
-    for (int i = 0; i < n && i < 20; i++) {
+    for (int i = 0; i < n && i < 15; i++) {
       JsonObject obj = arr.add<JsonObject>();
       obj["ssid"] = WiFi.SSID(i);
       obj["rssi"] = WiFi.RSSI(i);
-      obj["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
     }
     WiFi.scanDelete();
     WiFi.scanNetworks(true);
@@ -290,6 +295,7 @@ void setupSlaveRoutes() {
     doc["setup"] = setupDone;
     doc["alertPending"] = alertPending;
     doc["uptime"] = millis() / 1000;
+    doc["freeHeap"] = ESP.getFreeHeap();
     String output;
     serializeJson(doc, output);
     request->send(200, "application/json", output);
@@ -335,7 +341,7 @@ void setupSlaveRoutes() {
         attempts++;
         digitalWrite(LED_PIN, !digitalRead(LED_PIN));
       }
-      digitalWrite(LED_PIN, LOW);
+      digitalWrite(LED_PIN, LED_OFF);
 
       if (WiFi.status() == WL_CONNECTED) {
         wifiConnected = true;
@@ -349,7 +355,7 @@ void setupSlaveRoutes() {
       } else {
         WiFi.disconnect();
         WiFi.mode(WIFI_AP);
-        request->send(200, "application/json", "{\"success\":false,\"message\":\"Could not connect to network\"}");
+        request->send(200, "application/json", "{\"success\":false,\"message\":\"Could not connect\"}");
       }
     }
   );
@@ -361,7 +367,7 @@ bool registerWithMaster() {
 
   HTTPClient http;
   String url = String(masterURL) + "/api/register";
-  http.begin(url);
+  http.begin(wifiClient, url);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(5000);
 
@@ -376,20 +382,19 @@ bool registerWithMaster() {
   int httpCode = http.POST(body);
   if (httpCode == 200) {
     String response = http.getString();
-    Serial.print("Response: ");
+    Serial.print("Resp: ");
     Serial.println(response);
     JsonDocument respDoc;
     deserializeJson(respDoc, response);
     bool success = respDoc["success"] | false;
     if (success) {
-      Serial.println("Registered with master!");
+      Serial.println("Registered!");
       ledBlink(3, 100, 100);
-      beep(1, 100, 0);
       http.end();
       return true;
     }
   } else {
-    Serial.printf("Register failed, HTTP: %d\n", httpCode);
+    Serial.printf("Reg fail HTTP: %d\n", httpCode);
   }
   http.end();
   return false;
@@ -403,7 +408,7 @@ void sendAlert() {
 
   HTTPClient http;
   String url = String(masterURL) + "/api/alert";
-  http.begin(url);
+  http.begin(wifiClient, url);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(5000);
 
@@ -424,28 +429,21 @@ void sendAlert() {
       Serial.println("Alert sent!");
       alertPending = true;
       alertSentTime = millis();
-      digitalWrite(LED_PIN, HIGH);
-      beep(2, 150, 100);
+      digitalWrite(LED_PIN, LED_ON);
     } else {
       String reason = respDoc["reason"] | "unknown";
-      Serial.print("Alert rejected: ");
+      Serial.print("Rejected: ");
       Serial.println(reason);
-      if (reason == "alert already active") {
-        ledBlink(2, 300, 200);
-      } else if (reason == "not approved") {
-        ledBlink(4, 100, 100);
-      } else {
-        ledBlink(2, 200, 200);
-      }
+      ledBlink(2, 200, 200);
     }
   } else {
-    Serial.printf("Alert HTTP error: %d\n", httpCode);
+    Serial.printf("Alert HTTP err: %d\n", httpCode);
     ledBlink(5, 50, 50);
   }
   http.end();
 }
 
-void IRAM_ATTR buttonISR() {
+void ICACHE_RAM_ATTR buttonISR() {
   unsigned long now = millis();
   if (now - lastButtonPress > DEBOUNCE_MS) {
     buttonPressed = true;
@@ -455,22 +453,20 @@ void IRAM_ATTR buttonISR() {
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-  Serial.println("\n=== Hospital Alarm - Slave Device ===");
+  delay(500);
+  Serial.println("\n=== Hospital Alarm - ESP-01 Slave ===");
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(EXT_BUTTON_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
-  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(LED_PIN, LED_OFF);
 
   generateSlaveId();
-  Serial.print("Device ID: ");
+  Serial.print("ID: ");
   Serial.println(slaveId);
+  Serial.print("Free heap: ");
+  Serial.println(ESP.getFreeHeap());
 
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
-  attachInterrupt(digitalPinToInterrupt(EXT_BUTTON_PIN), buttonISR, FALLING);
 
   String apName = getApName();
   WiFi.mode(WIFI_AP);
@@ -479,9 +475,9 @@ void setup() {
   WiFi.softAP(apName.c_str());
   delay(500);
 
-  Serial.print("Setup AP: ");
+  Serial.print("AP: ");
   Serial.println(apName);
-  Serial.println("Open http://192.168.4.1 to configure");
+  Serial.println("Open http://192.168.4.1");
 
   WiFi.scanNetworks(true);
 
@@ -492,16 +488,15 @@ void setup() {
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");
   setupServer.begin();
 
-  Serial.println("Setup server started");
+  Serial.println("Ready");
   ledBlink(2, 200, 200);
 }
 
 void loop() {
-  // Wi-Fi reconnection
   if (setupDone && WiFi.status() != WL_CONNECTED) {
     wifiConnected = false;
     if (millis() - lastReconnect > RECONNECT_INTERVAL_MS) {
-      Serial.println("Reconnecting to Wi-Fi...");
+      Serial.println("Reconnecting...");
       if (strlen(targetPass) > 0) WiFi.begin(targetSSID, targetPass);
       else WiFi.begin(targetSSID);
       lastReconnect = millis();
@@ -511,7 +506,7 @@ void loop() {
         attempts++;
         digitalWrite(LED_PIN, !digitalRead(LED_PIN));
       }
-      digitalWrite(LED_PIN, LOW);
+      digitalWrite(LED_PIN, LED_OFF);
       if (WiFi.status() == WL_CONNECTED) {
         wifiConnected = true;
         Serial.println("Reconnected!");
@@ -520,7 +515,6 @@ void loop() {
     }
   }
 
-  // Registration retry
   if (setupDone && !isRegistered && WiFi.status() == WL_CONNECTED) {
     if (millis() - lastRegisterAttempt > REGISTER_INTERVAL_MS) {
       isRegistered = registerWithMaster();
@@ -528,7 +522,6 @@ void loop() {
     }
   }
 
-  // Heartbeat re-registration (keep-alive)
   if (setupDone && isRegistered && WiFi.status() == WL_CONNECTED) {
     if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL_MS) {
       registerWithMaster();
@@ -536,29 +529,28 @@ void loop() {
     }
   }
 
-  // Alert LED timeout (turn off LED after 30s)
   if (alertPending && millis() - alertSentTime > 30000) {
     alertPending = false;
-    digitalWrite(LED_PIN, LOW);
+    digitalWrite(LED_PIN, LED_OFF);
   }
 
-  // Button press handler
   if (buttonPressed) {
     buttonPressed = false;
-    Serial.println("Button pressed!");
+    Serial.println("Button!");
     if (setupDone && WiFi.status() == WL_CONNECTED) {
       if (!isRegistered) {
         isRegistered = registerWithMaster();
       }
       sendAlert();
     } else if (!setupDone) {
-      Serial.println("Setup not complete");
+      Serial.println("No setup");
       ledBlink(3, 100, 100);
     } else {
-      Serial.println("Wi-Fi not connected");
+      Serial.println("No WiFi");
       ledBlink(5, 50, 50);
     }
   }
 
+  yield();
   delay(10);
 }

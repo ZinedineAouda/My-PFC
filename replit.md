@@ -8,7 +8,7 @@ A web-based control panel for a hospital patient alarm system designed for ESP32
 - **Backend:** Express.js with session-based authentication
 - **Storage:** In-memory (intentional - data resets on restart, matches ESP32 deployment target)
 - **Routing:** wouter for client-side routing
-- **ESP32 Code:** Arduino .ino files in esp32/master/ and esp32/slave/
+- **ESP32 Code:** Arduino .ino files in esp32/master/ (ESP32-S3) and esp32/slave/ (ESP8266 ESP-01)
 
 ## Pages
 - `/` - Public dashboard showing approved patient devices with real-time alert indicators (polls every 2 seconds)
@@ -47,7 +47,7 @@ A web-based control panel for a hospital patient alarm system designed for ESP32
 - `client/src/pages/dashboard.tsx` - Public monitoring dashboard
 - `client/src/pages/admin.tsx` - Admin panel
 - `esp32/master/master.ino` - ESP32-S3 master firmware (AP + web server + API)
-- `esp32/slave/slave.ino` - ESP32 slave firmware (button + setup web page)
+- `esp32/slave/slave.ino` - ESP8266 ESP-01 slave firmware (button + setup web page)
 - `esp32/README.md` - Hardware setup and usage guide
 
 ## Recent Changes
