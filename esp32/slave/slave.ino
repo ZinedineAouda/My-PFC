@@ -509,10 +509,15 @@ void loop() {
     Serial.println();
     digitalWrite(LED_PIN, LED_OFF);
     if (WiFi.status() == WL_CONNECTED) {
+      WiFi.softAPdisconnect(true);
+      delay(100);
+      WiFi.mode(WIFI_STA);
+      delay(100);
       wifiConnected = true;
       setupDone = true;
       Serial.print("Connected! IP: ");
       Serial.println(WiFi.localIP());
+      Serial.println("Setup AP disabled");
       ledBlink(3, 100, 100);
     } else {
       Serial.println("Connection failed");
