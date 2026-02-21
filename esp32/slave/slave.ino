@@ -57,6 +57,7 @@ bool isRegistered = false;
 bool setupDone = false;
 bool isApproved = false;
 volatile bool buttonPressed = false;
+bool connectPending = false;
 unsigned long lastButtonPress = 0;
 unsigned long lastRegisterAttempt = 0;
 unsigned long lastHeartbeat = 0;
@@ -182,7 +183,7 @@ var selectedSSID='';
 function loadId(){fetch('/api/status').then(function(r){return r.json()}).then(function(d){document.getElementById('dev-id').value=d.id;document.getElementById('chip-id').textContent='Chip: '+d.id;}).catch(function(){});}
 function scanWifi(){document.getElementById('scan-area').innerHTML='<div class="scanning"><div class="spinner"></div><br>Scanning...</div>';fetch('/api/scan').then(function(r){return r.json()}).then(function(nets){if(nets.length===0){document.getElementById('scan-area').innerHTML='<div class="scanning">No networks found. Try again.</div>';return;}var html='<div class="wifi-list">';for(var i=0;i<nets.length;i++){var n=nets[i];var bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';html+='<div class="wifi-item" onclick="pickWifi(this,\''+n.ssid+'\')"><span class="wifi-name">'+n.ssid+(n.ssid==='HospitalAlarm'?' (Master)':'')+'</span><span class="wifi-signal">'+bars+'</span></div>';}html+='</div>';document.getElementById('scan-area').innerHTML=html;}).catch(function(){document.getElementById('scan-area').innerHTML='<div class="scanning">Scan failed.</div>';});}
 function pickWifi(el,ssid){selectedSSID=ssid;document.querySelectorAll('.wifi-item').forEach(function(i){i.classList.remove('selected')});el.classList.add('selected');document.getElementById('connectBtn').disabled=false;}
-function doConnect(){var devId=document.getElementById('dev-id').value.trim();var masterIp=document.getElementById('master-ip').value.trim();var pass=document.getElementById('wifi-pass').value;if(!devId){alert('Enter a Device ID');return;}if(!masterIp){alert('Enter Master IP');return;}if(!selectedSSID){alert('Select a network');return;}document.getElementById('connectBtn').disabled=true;document.getElementById('connectBtn').textContent='Connecting...';document.getElementById('status-area').innerHTML='<div class="status info">Connecting to '+selectedSSID+'...</div>';fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selectedSSID,password:pass,masterIP:'http://'+masterIp,slaveId:devId})}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('status-area').innerHTML='<div class="status ok">Connected! Registering...</div>';setTimeout(function(){fetch('/api/status').then(function(r){return r.json()}).then(function(s){document.querySelectorAll('.step').forEach(function(st){st.classList.remove('active')});document.getElementById('step2').classList.add('active');document.getElementById('d1').classList.remove('active');document.getElementById('d1').classList.add('done');document.getElementById('d2').classList.add('active');document.getElementById('d2').classList.add('done');document.getElementById('d3').classList.add('active');document.getElementById('d3').classList.add('done');document.getElementById('conn-info').textContent='Device: '+devId+' | Network: '+selectedSSID;document.getElementById('conn-ip').textContent='IP: '+s.ip+' | Master: '+masterIp;}).catch(function(){document.getElementById('status-area').innerHTML='<div class="status ok">Connected!</div>';});},2000);}else{document.getElementById('status-area').innerHTML='<div class="status err">Failed: '+(d.message||'Unknown error')+'</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect & Register';}}).catch(function(){document.getElementById('status-area').innerHTML='<div class="status err">Connection error</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect & Register';});}
+function doConnect(){var devId=document.getElementById('dev-id').value.trim();var masterIp=document.getElementById('master-ip').value.trim();var pass=document.getElementById('wifi-pass').value;if(!devId){alert('Enter a Device ID');return;}if(!masterIp){alert('Enter Master IP');return;}if(!selectedSSID){alert('Select a network');return;}document.getElementById('connectBtn').disabled=true;document.getElementById('connectBtn').textContent='Connecting...';document.getElementById('status-area').innerHTML='<div class="status info">Connecting to '+selectedSSID+'...</div>';fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selectedSSID,password:pass,masterIP:'http://'+masterIp,slaveId:devId})}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('status-area').innerHTML='<div class="status info"><div class="spinner" style="display:inline-block;width:16px;height:16px;border:2px solid rgba(148,163,184,.3);border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:8px"></div>Connecting to '+selectedSSID+'... Please wait</div>';var pollCount=0;var pollTimer=setInterval(function(){pollCount++;fetch('/api/status').then(function(r){return r.json()}).then(function(s){if(s.connected){clearInterval(pollTimer);document.getElementById('status-area').innerHTML='<div class="status ok">Connected!</div>';setTimeout(function(){document.querySelectorAll('.step').forEach(function(st){st.classList.remove('active')});document.getElementById('step2').classList.add('active');document.getElementById('d1').classList.remove('active');document.getElementById('d1').classList.add('done');document.getElementById('d2').classList.add('active');document.getElementById('d2').classList.add('done');document.getElementById('d3').classList.add('active');document.getElementById('d3').classList.add('done');document.getElementById('conn-info').textContent='Device: '+devId+' | Network: '+selectedSSID;document.getElementById('conn-ip').textContent='IP: '+s.ip+' | Master: '+masterIp;},1000);}else if(pollCount>=15){clearInterval(pollTimer);document.getElementById('status-area').innerHTML='<div class="status err">Connection failed. Check SSID and password.</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect & Register';}}).catch(function(){});},2000);}else{document.getElementById('status-area').innerHTML='<div class="status err">Failed: '+(d.message||'Unknown error')+'</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect & Register';}}).catch(function(){document.getElementById('status-area').innerHTML='<div class="status err">Request error - try again</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect & Register';});}
 loadId();scanWifi();
 </script>
 </body>
@@ -349,38 +350,9 @@ void setupSlaveRoutes() {
         slaveId[sizeof(slaveId) - 1] = '\0';
       }
 
-      Serial.printf("Connecting to: %s\n", targetSSID);
-      WiFi.mode(WIFI_AP_STA);
-      delay(100);
-      if (strlen(targetPass) > 0) {
-        WiFi.begin(targetSSID, targetPass);
-      } else {
-        WiFi.begin(targetSSID);
-      }
-
-      int attempts = 0;
-      while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-        delay(500);
-        attempts++;
-        Serial.print(".");
-        digitalWrite(LED_PIN, !digitalRead(LED_PIN));
-      }
-      Serial.println();
-      digitalWrite(LED_PIN, LED_OFF);
-
-      if (WiFi.status() == WL_CONNECTED) {
-        wifiConnected = true;
-        setupDone = true;
-        Serial.print("Connected! IP: ");
-        Serial.println(WiFi.localIP());
-        String resp = "{\"success\":true,\"ip\":\"" + WiFi.localIP().toString() + "\"}";
-        request->send(200, "application/json", resp);
-      } else {
-        Serial.println("Connection failed");
-        WiFi.disconnect();
-        WiFi.mode(WIFI_AP);
-        request->send(200, "application/json", "{\"success\":false,\"message\":\"Could not connect\"}");
-      }
+      connectPending = true;
+      Serial.printf("Connect queued for: %s\n", targetSSID);
+      request->send(200, "application/json", "{\"success\":true,\"message\":\"Connecting...\"}");
     }
   );
 }
@@ -516,6 +488,40 @@ void setup() {
 }
 
 void loop() {
+  if (connectPending) {
+    connectPending = false;
+    Serial.printf("Connecting to: %s\n", targetSSID);
+    WiFi.mode(WIFI_AP_STA);
+    delay(100);
+    if (strlen(targetPass) > 0) {
+      WiFi.begin(targetSSID, targetPass);
+    } else {
+      WiFi.begin(targetSSID);
+    }
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+      delay(250);
+      yield();
+      attempts++;
+      Serial.print(".");
+      digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+    }
+    Serial.println();
+    digitalWrite(LED_PIN, LED_OFF);
+    if (WiFi.status() == WL_CONNECTED) {
+      wifiConnected = true;
+      setupDone = true;
+      Serial.print("Connected! IP: ");
+      Serial.println(WiFi.localIP());
+      ledBlink(3, 100, 100);
+    } else {
+      Serial.println("Connection failed");
+      WiFi.disconnect();
+      WiFi.mode(WIFI_AP);
+      ledBlink(5, 50, 50);
+    }
+  }
+
   if (setupDone && WiFi.status() != WL_CONNECTED) {
     wifiConnected = false;
     if (millis() - lastReconnect > RECONNECT_INTERVAL_MS) {
@@ -525,7 +531,8 @@ void loop() {
       lastReconnect = millis();
       int attempts = 0;
       while (WiFi.status() != WL_CONNECTED && attempts < 10) {
-        delay(500);
+        delay(250);
+        yield();
         attempts++;
         digitalWrite(LED_PIN, !digitalRead(LED_PIN));
       }
