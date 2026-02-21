@@ -2,6 +2,7 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <WiFiUdp.h>
 
 char apSSID[64] = "HospitalAlarm";
 char apPass[64] = "";
@@ -33,6 +34,10 @@ char staPass[64] = "";
 String masterIP = "192.168.4.1";
 
 AsyncWebServer server(80);
+WiFiUDP beacon;
+#define BEACON_PORT 5555
+#define BEACON_INTERVAL 3000
+unsigned long lastBeacon = 0;
 
 bool checkAdminAuth(AsyncWebServerRequest *request) {
   if (!request->hasHeader("Authorization")) return false;
@@ -769,10 +774,25 @@ void setup() {
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   server.begin();
 
+  beacon.begin(BEACON_PORT);
   Serial.println("Web server started. Open http://192.168.4.1");
 }
 
 void loop() {
+  if (setupDone && millis() - lastBeacon > BEACON_INTERVAL) {
+    String msg = "HOSPITAL_ALARM:" + masterIP;
+    IPAddress broadcastIP;
+    if (wifiMode == 1) {
+      broadcastIP = IPAddress(192,168,4,255);
+    } else {
+      broadcastIP = IPAddress(255,255,255,255);
+    }
+    beacon.beginPacket(broadcastIP, BEACON_PORT);
+    beacon.write((uint8_t*)msg.c_str(), msg.length());
+    beacon.endPacket();
+    lastBeacon = millis();
+  }
+
   bool anyAlert = false;
   for (int i = 0; i < MAX_SLAVES; i++) {
     if (slaves[i].used && slaves[i].alertActive) {

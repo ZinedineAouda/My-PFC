@@ -36,6 +36,7 @@
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPAsyncTCP.h>
+#include <WiFiUdp.h>
 
 #define BUTTON_PIN     0
 #define LED_PIN        2
@@ -67,6 +68,9 @@ bool alertPending = false;
 
 AsyncWebServer setupServer(80);
 WiFiClient wifiClient;
+WiFiUDP udpListener;
+#define BEACON_PORT 5555
+bool masterDiscovered = false;
 
 void generateSlaveId() {
   uint32_t chipId = ESP.getChipId();
@@ -518,6 +522,8 @@ void loop() {
       Serial.print("Connected! IP: ");
       Serial.println(WiFi.localIP());
       Serial.println("Setup AP disabled");
+      udpListener.begin(BEACON_PORT);
+      Serial.println("Listening for master beacon...");
       ledBlink(3, 100, 100);
     } else {
       Serial.println("Connection failed");
@@ -546,6 +552,25 @@ void loop() {
         wifiConnected = true;
         Serial.println("Reconnected!");
         ledBlink(2, 100, 100);
+      }
+    }
+  }
+
+  if (setupDone && WiFi.status() == WL_CONNECTED && !masterDiscovered) {
+    int pktSize = udpListener.parsePacket();
+    if (pktSize > 0) {
+      char buf[128];
+      int len = udpListener.read(buf, sizeof(buf) - 1);
+      buf[len] = '\0';
+      String pkt = String(buf);
+      if (pkt.startsWith("HOSPITAL_ALARM:")) {
+        String ip = pkt.substring(15);
+        String newURL = "http://" + ip;
+        strncpy(masterURL, newURL.c_str(), sizeof(masterURL) - 1);
+        masterURL[sizeof(masterURL) - 1] = '\0';
+        masterDiscovered = true;
+        Serial.print("Master discovered at: ");
+        Serial.println(ip);
       }
     }
   }
