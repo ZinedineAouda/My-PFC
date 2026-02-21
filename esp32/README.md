@@ -5,10 +5,10 @@ A hospital patient alarm system with a Master ESP32-S3 (web server + control pan
 
 ## Required Hardware
 - 1x ESP32-S3 Dev Module (Master)
-- 1+ ESP32 Dev Module (Slaves - one per bed)
-- Push buttons (one per slave)
-- LEDs + 220 ohm resistors (optional, one per slave)
-- Buzzer (optional, for master on GPIO 4)
+- 1+ ESP32 V1 Dev Module / ESP32-WROOM-32 (Slaves - one per bed)
+- Push buttons (one per slave, or use built-in BOOT button for testing)
+- LEDs + 220 ohm resistors (optional, one per slave - or use built-in LED on GPIO2)
+- Buzzer (optional, for master on GPIO 4, slave on GPIO 4)
 
 ## Required Arduino Libraries
 Install via Arduino IDE Library Manager:
@@ -25,7 +25,7 @@ Install via Arduino IDE Library Manager:
 
 ### 2. Flash Each Slave
 - Open `slave/slave.ino` in Arduino IDE
-- Board: **ESP32 Dev Module** (or ESP32-S3)
+- Board: **ESP32 Dev Module** (ESP32 V1 / WROOM-32)
 - Upload to each slave device
 
 ### 3. Setup Master
@@ -62,11 +62,18 @@ Install via Arduino IDE Library Manager:
 
 ## Wiring
 
-**Slave Button:** GPIO 0 to Button, other side to GND (uses internal pull-up)
+### Slave (ESP32 V1)
+| Pin | Function | Notes |
+|-----|----------|-------|
+| GPIO 0 | BOOT Button | Built-in on DevKit, used as call button for testing |
+| GPIO 15 | External Call Button | Wire button between GPIO15 and GND (uses internal pull-up) |
+| GPIO 2 | Onboard LED | Built-in on DevKit, shows status |
+| GPIO 4 | Buzzer (optional) | Wire buzzer(+) to GPIO4, buzzer(-) to GND |
 
-**Slave LED (optional):** GPIO 2 to 220 ohm resistor to LED(+), LED(-) to GND
-
-**Master Buzzer (optional):** GPIO 4 to Buzzer(+), Buzzer(-) to GND
+### Master (ESP32-S3)
+| Pin | Function | Notes |
+|-----|----------|-------|
+| GPIO 4 | Buzzer (optional) | Wire buzzer(+) to GPIO4, buzzer(-) to GND |
 
 ## How Alerts Work
 1. Patient presses bedside button

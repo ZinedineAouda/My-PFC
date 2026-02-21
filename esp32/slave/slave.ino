@@ -1,3 +1,19 @@
+/*
+ * Hospital Alarm System - Slave Device
+ * Target: ESP32 V1 (ESP32-WROOM-32 / DevKit V1)
+ * 
+ * Board: "ESP32 Dev Module" in Arduino IDE
+ * Pins:  GPIO0  = BOOT button (built-in, used as call button)
+ *        GPIO2  = Onboard LED (active HIGH)
+ *        GPIO4  = Buzzer (optional, active HIGH)
+ *        GPIO15 = External call button (optional, wire to GND)
+ *
+ * Libraries required:
+ *   - ArduinoJson (v7.x)
+ *   - ESPAsyncWebServer
+ *   - AsyncTCP
+ */
+
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -5,6 +21,7 @@
 #include <AsyncTCP.h>
 
 #define BUTTON_PIN    0
+#define EXT_BUTTON_PIN 15
 #define LED_PIN       2
 #define BUZZER_PIN    4
 #define DEBOUNCE_MS   300
@@ -442,6 +459,7 @@ void setup() {
   Serial.println("\n=== Hospital Alarm - Slave Device ===");
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(EXT_BUTTON_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
@@ -452,12 +470,13 @@ void setup() {
   Serial.println(slaveId);
 
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(EXT_BUTTON_PIN), buttonISR, FALLING);
 
   String apName = getApName();
   WiFi.mode(WIFI_AP);
   WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
   delay(100);
-  WiFi.softAP(apName.c_str(), NULL, 6, 0, 2);
+  WiFi.softAP(apName.c_str());
   delay(500);
 
   Serial.print("Setup AP: ");
