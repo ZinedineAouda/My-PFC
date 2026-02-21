@@ -132,7 +132,7 @@ export async function registerRoutes(
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
-    const slave = storage.approveSlave(req.params.slaveId, parsed.data);
+    const slave = storage.approveSlave(req.params.slaveId as string, parsed.data);
     if (!slave) {
       return res.status(404).json({ message: "Slave not found" });
     }
@@ -157,7 +157,7 @@ export async function registerRoutes(
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
-    const slave = storage.updateSlave(req.params.slaveId, parsed.data);
+    const slave = storage.updateSlave(req.params.slaveId as string, parsed.data);
     if (!slave) {
       return res.status(404).json({ message: "Slave not found" });
     }
@@ -165,7 +165,7 @@ export async function registerRoutes(
   });
 
   app.delete("/api/slaves/:slaveId", requireAdmin, (req: Request, res: Response) => {
-    const deleted = storage.deleteSlave(req.params.slaveId);
+    const deleted = storage.deleteSlave(req.params.slaveId as string);
     if (!deleted) {
       return res.status(404).json({ message: "Slave not found" });
     }
@@ -173,7 +173,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/clearAlert/:slaveId", requireAdmin, (req: Request, res: Response) => {
-    const cleared = storage.clearAlert(req.params.slaveId);
+    const cleared = storage.clearAlert(req.params.slaveId as string);
     if (!cleared) {
       return res.status(404).json({ message: "Slave not found" });
     }

@@ -195,12 +195,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135d
 </div>
 
 <script>
-let selectedMode=0;
-let selectedSSID='';
+var selectedMode=0;
+var selectedSSID='';
 
 function selectMode(m){
   selectedMode=m;
-  document.querySelectorAll('.mode-card').forEach(c=>c.classList.remove('selected'));
+  document.querySelectorAll('.mode-card').forEach(function(c){c.classList.remove('selected')});
   document.getElementById('mode'+m).classList.add('selected');
   document.getElementById('nextBtn').disabled=false;
 }
@@ -218,73 +218,67 @@ function goStep2(){
   scanWifi();
 }
 
-async function scanWifi(){
+function scanWifi(){
   document.getElementById('scan-area').innerHTML='<div class="scanning"><div class="spinner"></div><br>Scanning nearby networks...</div>';
-  try{
-    const r=await fetch('/api/scan');
-    const nets=await r.json();
+  fetch('/api/scan').then(function(r){return r.json()}).then(function(nets){
     if(nets.length===0){
       document.getElementById('scan-area').innerHTML='<div class="scanning">No networks found. Try again.</div>';
       return;
     }
-    let html='<div class="wifi-list">';
-    nets.forEach(n=>{
-      const bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';
-      html+=`<div class="wifi-item" onclick="pickWifi(this,'${n.ssid}')"><span class="wifi-name">${n.ssid}</span><span class="wifi-signal">${bars}</span></div>`;
+    var html='<div class="wifi-list">';
+    nets.forEach(function(n){
+      var bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';
+      html+='<div class="wifi-item" onclick="pickWifi(this,\''+n.ssid+'\')"><span class="wifi-name">'+n.ssid+'</span><span class="wifi-signal">'+bars+'</span></div>';
     });
     html+='</div>';
     document.getElementById('scan-area').innerHTML=html;
-  }catch(e){
+  }).catch(function(){
     document.getElementById('scan-area').innerHTML='<div class="scanning">Scan failed. Try again.</div>';
-  }
+  });
 }
 
 function pickWifi(el,ssid){
   selectedSSID=ssid;
-  document.querySelectorAll('.wifi-item').forEach(i=>i.classList.remove('selected'));
+  document.querySelectorAll('.wifi-item').forEach(function(i){i.classList.remove('selected')});
   el.classList.add('selected');
   document.getElementById('connectBtn').disabled=false;
 }
 
-async function connectWifi(){
-  const pass=document.getElementById('wifi-pass').value;
+function connectWifi(){
+  var pass=document.getElementById('wifi-pass').value;
   document.getElementById('connectBtn').disabled=true;
   document.getElementById('connectBtn').textContent='Connecting...';
   document.getElementById('wifi-status').innerHTML='<div class="status-msg info">Connecting to '+selectedSSID+'...</div>';
-  try{
-    const r=await fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selectedSSID,password:pass})});
-    const d=await r.json();
+  fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selectedSSID,password:pass})}).then(function(r){return r.json()}).then(function(d){
     if(d.success){
       document.getElementById('wifi-status').innerHTML='<div class="status-msg success">Connected! IP: '+d.ip+'</div>';
-      setTimeout(()=>applyMode(d.ip),1500);
+      setTimeout(function(){applyMode(d.ip)},1500);
     }else{
       document.getElementById('wifi-status').innerHTML='<div class="status-msg error">Failed: '+d.message+'</div>';
       document.getElementById('connectBtn').disabled=false;
       document.getElementById('connectBtn').textContent='Connect';
     }
-  }catch(e){
+  }).catch(function(){
     document.getElementById('wifi-status').innerHTML='<div class="status-msg error">Connection error</div>';
     document.getElementById('connectBtn').disabled=false;
     document.getElementById('connectBtn').textContent='Connect';
-  }
+  });
 }
 
-async function applyMode(staIP){
-  try{
-    const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:selectedMode})});
-    const d=await r.json();
-    document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+function applyMode(staIP){
+  fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:selectedMode})}).then(function(r){return r.json()}).then(function(d){
+    document.querySelectorAll('.step').forEach(function(s){s.classList.remove('active')});
     document.getElementById('step3').classList.add('active');
     document.getElementById('d2').classList.remove('active');
     document.getElementById('d2').classList.add('done');
     document.getElementById('d3').classList.add('active');
-    const modes=['','AP Mode (Own Network)','STA Mode (Hospital Network)','AP + STA Mode (Hybrid)'];
+    var modes=['','AP Mode (Own Network)','STA Mode (Hospital Network)','AP + STA Mode (Hybrid)'];
     document.getElementById('setup-info').textContent='Mode: '+modes[selectedMode];
-    let ipText='AP: 192.168.4.1';
+    var ipText='AP: 192.168.4.1';
     if(staIP)ipText+=' | Network: '+staIP;
     else if(selectedMode>1&&d.staIP)ipText+=' | Network: '+d.staIP;
     document.getElementById('setup-ip').textContent=ipText;
-  }catch(e){}
+  }).catch(function(){});
 }
 
 function finishSetup(){
@@ -365,43 +359,40 @@ main{max-width:1200px;margin:0 auto;padding:24px}
 <div class="toast-container" id="toasts"></div>
 <main><div class="grid" id="grid"></div></main>
 <script>
-let prevAlerts=new Set();
+var prevAlerts={};
 function showToast(msg){
-  const c=document.getElementById('toasts');
-  const t=document.createElement('div');
+  var c=document.getElementById('toasts');
+  var t=document.createElement('div');
   t.className='toast';t.textContent=msg;
   c.appendChild(t);
-  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(120%)';t.style.transition='all .3s';setTimeout(()=>t.remove(),300)},5000);
+  setTimeout(function(){t.style.opacity='0';t.style.transform='translateX(120%)';t.style.transition='all .3s';setTimeout(function(){t.remove()},300)},5000);
 }
 function ago(ms){
   if(!ms)return'Never';
-  const s=Math.floor((Date.now()-ms)/1000);
+  var s=Math.floor((Date.now()-ms)/1000);
   if(s<60)return s+'s ago';
   if(s<3600)return Math.floor(s/60)+'m ago';
   return Math.floor(s/3600)+'h ago';
 }
-async function refresh(){
-  try{
-    const r=await fetch('/api/slaves?approved=1');
-    const slaves=await r.json();
-    const grid=document.getElementById('grid');
-    const stats=document.getElementById('stats');
-    const alerts=slaves.filter(s=>s.alertActive).length;
-    const conn=slaves.filter(s=>s.registered).length;
+function refresh(){
+  fetch('/api/slaves?approved=1').then(function(r){return r.json()}).then(function(slaves){
+    var grid=document.getElementById('grid');
+    var stats=document.getElementById('stats');
+    var alerts=slaves.filter(function(s){return s.alertActive}).length;
+    var conn=slaves.filter(function(s){return s.registered}).length;
     stats.innerHTML=
       '<span class="stat">'+slaves.length+' Patient'+(slaves.length!==1?'s':'')+'</span>'+
       '<span class="stat">'+conn+' Online</span>'+
       (alerts>0?'<span class="stat alert">&#9888; '+alerts+' Alert'+(alerts!==1?'s':'')+'</span>':'')+
       '<a href="/admin" class="nav-link">Admin Panel</a>';
-    const cur=new Set(slaves.filter(s=>s.alertActive).map(s=>s.slaveId));
-    cur.forEach(id=>{
-      if(!prevAlerts.has(id)){
-        const sl=slaves.find(s=>s.slaveId===id);
-        if(sl)showToast('ALERT: '+sl.patientName+' - Bed '+sl.bed+', Room '+sl.room);
+    slaves.forEach(function(s){
+      if(s.alertActive&&!prevAlerts[s.slaveId]){
+        showToast('ALERT: '+s.patientName+' - Bed '+s.bed+', Room '+s.room);
       }
     });
-    prevAlerts=cur;
-    slaves.sort((a,b)=>{
+    prevAlerts={};
+    slaves.forEach(function(s){if(s.alertActive)prevAlerts[s.slaveId]=true;});
+    slaves.sort(function(a,b){
       if(a.alertActive&&!b.alertActive)return -1;
       if(!a.alertActive&&b.alertActive)return 1;
       return a.slaveId.localeCompare(b.slaveId);
@@ -410,30 +401,30 @@ async function refresh(){
       grid.innerHTML='<div class="empty"><div class="empty-icon">&#128203;</div><h2>No Patients Yet</h2><p>Waiting for devices to connect. Approve them in the Admin Panel.</p></div>';
       return;
     }
-    grid.innerHTML=slaves.map((s,i)=>`
-      <div class="card ${s.alertActive?'alerting':''}" style="animation-delay:${i*0.05}s">
-        ${s.alertActive?'<div class="alert-bar"></div>':''}
-        <div class="card-top">
-          <div>
-            <div class="patient-name">${s.patientName||'Unnamed'}</div>
-            <div class="patient-id">${s.slaveId}</div>
-          </div>
-          <div class="status-icon ${s.alertActive?'alert':s.registered?'connected':'offline'}">
-            ${s.alertActive?'&#128680;':s.registered?'&#9829;':'&#128263;'}
-          </div>
-        </div>
-        ${s.alertActive?'<div class="alert-badge">&#9888; Alert Active</div>':''}
-        <div class="info-grid">
-          <div class="info-cell"><div class="label">Bed</div><div class="value">${s.bed||'-'}</div></div>
-          <div class="info-cell"><div class="label">Room</div><div class="value">${s.room||'-'}</div></div>
-        </div>
-        <div class="card-footer">
-          <div class="conn-dot ${s.registered?'on':'off'}"></div>
-          ${s.registered?'Connected':'Offline'}
-        </div>
-      </div>
-    `).join('');
-  }catch(e){console.error(e);}
+    var html='';
+    for(var i=0;i<slaves.length;i++){
+      var s=slaves[i];
+      html+='<div class="card '+(s.alertActive?'alerting':'')+'">';
+      if(s.alertActive)html+='<div class="alert-bar"></div>';
+      html+='<div class="card-top"><div>';
+      html+='<div class="patient-name">'+(s.patientName||'Unnamed')+'</div>';
+      html+='<div class="patient-id">'+s.slaveId+'</div>';
+      html+='</div>';
+      html+='<div class="status-icon '+(s.alertActive?'alert':s.registered?'connected':'offline')+'">';
+      html+=(s.alertActive?'&#128680;':s.registered?'&#9829;':'&#128263;');
+      html+='</div></div>';
+      if(s.alertActive)html+='<div class="alert-badge">&#9888; Alert Active</div>';
+      html+='<div class="info-grid">';
+      html+='<div class="info-cell"><div class="label">Bed</div><div class="value">'+(s.bed||'-')+'</div></div>';
+      html+='<div class="info-cell"><div class="label">Room</div><div class="value">'+(s.room||'-')+'</div></div>';
+      html+='</div>';
+      html+='<div class="card-footer">';
+      html+='<div class="conn-dot '+(s.registered?'on':'off')+'"></div>';
+      html+=(s.registered?'Connected':'Offline');
+      html+='</div></div>';
+    }
+    grid.innerHTML=html;
+  }).catch(function(e){console.error(e);});
 }
 refresh();
 setInterval(refresh,2000);
@@ -504,6 +495,12 @@ main{max-width:1200px;margin:0 auto;padding:24px}
 .empty p{color:#94a3b8;margin-top:8px;font-size:14px}
 .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px}
 .mode-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#eff6ff;color:#2563eb;border-radius:8px;font-size:13px;font-weight:600;border:1px solid rgba(37,99,235,.15)}
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:linear-gradient(135deg,#0f172a,#1e293b)}
+.login-card{background:#fff;border-radius:16px;padding:32px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.login-card h2{text-align:center;margin-bottom:4px;font-size:22px;color:#0f172a}
+.login-card p{text-align:center;color:#94a3b8;font-size:13px;margin-bottom:24px}
+.login-icon{width:56px;height:56px;background:#eff6ff;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:28px;color:#2563eb}
+.error-msg{background:#fef2f2;color:#dc2626;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px;display:none}
 @media(max-width:640px){
   .device-card{flex-direction:column;align-items:flex-start}
   .actions{width:100%;justify-content:flex-end}
@@ -511,6 +508,19 @@ main{max-width:1200px;margin:0 auto;padding:24px}
 </style>
 </head>
 <body>
+<div id="login-page" class="login-wrap">
+  <div class="login-card">
+    <div class="login-icon">&#128274;</div>
+    <h2>Admin Login</h2>
+    <p>Hospital Alarm System</p>
+    <div class="error-msg" id="login-error"></div>
+    <div class="form-group"><label>Username</label><input type="text" id="username" placeholder="Enter username"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="password" placeholder="Enter password"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Sign In &#8594;</button>
+  </div>
+</div>
+
+<div id="admin-page" style="display:none">
 <header>
 <div class="header-inner">
 <div class="logo">
@@ -520,6 +530,7 @@ main{max-width:1200px;margin:0 auto;padding:24px}
 <div class="nav-links">
 <a href="/" class="nav-link">&#9829; Dashboard</a>
 <a href="/setup" class="nav-link">&#9881; Setup</a>
+<a href="#" class="nav-link" onclick="doLogout()">Logout</a>
 </div>
 </div>
 </header>
@@ -536,6 +547,7 @@ main{max-width:1200px;margin:0 auto;padding:24px}
 <div id="approved-area"></div>
 </div>
 </main>
+</div>
 
 <div class="modal-overlay" id="modal">
 <div class="modal">
@@ -552,63 +564,91 @@ main{max-width:1200px;margin:0 auto;padding:24px}
 </div>
 
 <script>
-let editingId=null;
-let isApproving=false;
+var editingId=null;
+var isApproving=false;
+var authToken='';
 function $(id){return document.getElementById(id)}
-const authToken=btoa('admin:admin1234');
+
+function doLogin(){
+  var u=$('username').value;
+  var p=$('password').value;
+  fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})}).then(function(r){
+    if(!r.ok){
+      $('login-error').style.display='block';
+      $('login-error').textContent='Invalid credentials';
+      return;
+    }
+    authToken=btoa(u+':'+p);
+    $('login-page').style.display='none';
+    $('admin-page').style.display='block';
+    loadDevices();
+  }).catch(function(){
+    $('login-error').style.display='block';
+    $('login-error').textContent='Connection error';
+  });
+}
+
+function doLogout(){
+  authToken='';
+  $('admin-page').style.display='none';
+  $('login-page').style.display='flex';
+  $('username').value='';$('password').value='';
+}
+
 function authHeaders(){return{'Content-Type':'application/json','Authorization':'Basic '+authToken}}
 
-async function loadDevices(){
-  try{
-    const r=await fetch('/api/slaves?all=1');
-    const devs=await r.json();
-    const pending=devs.filter(d=>!d.approved);
-    const approved=devs.filter(d=>d.approved);
+function loadDevices(){
+  fetch('/api/slaves?all=1').then(function(r){return r.json()}).then(function(devs){
+    var pending=devs.filter(function(d){return !d.approved});
+    var approved=devs.filter(function(d){return d.approved});
     $('pending-count').textContent=pending.length;
     $('approved-count').textContent=approved.length;
     if(pending.length===0){
       $('pending-area').innerHTML='<div class="empty"><p>No pending devices. Waiting for slave devices to connect...</p></div>';
     }else{
-      $('pending-area').innerHTML=pending.map(d=>`
-        <div class="device-card pending">
-          <div class="device-info">
-            <div class="device-id">${d.slaveId}</div>
-            <div class="device-meta">Detected - Awaiting approval</div>
-          </div>
-          <div class="actions">
-            <span class="badge badge-pending">Pending</span>
-            <button class="btn btn-success btn-sm" onclick="openApproveModal('${d.slaveId}')">Approve</button>
-            <button class="btn btn-ghost btn-sm" onclick="rejectDevice('${d.slaveId}')">Reject</button>
-          </div>
-        </div>
-      `).join('');
+      var html='';
+      for(var i=0;i<pending.length;i++){
+        var d=pending[i];
+        html+='<div class="device-card pending">';
+        html+='<div class="device-info">';
+        html+='<div class="device-id">'+d.slaveId+'</div>';
+        html+='<div class="device-meta">Detected - Awaiting approval</div>';
+        html+='</div>';
+        html+='<div class="actions">';
+        html+='<span class="badge badge-pending">Pending</span>';
+        html+='<button class="btn btn-success btn-sm" onclick="openApproveModal(\''+d.slaveId+'\')">Approve</button>';
+        html+='<button class="btn btn-ghost btn-sm" onclick="rejectDevice(\''+d.slaveId+'\')">Reject</button>';
+        html+='</div></div>';
+      }
+      $('pending-area').innerHTML=html;
     }
     if(approved.length===0){
       $('approved-area').innerHTML='<div class="empty"><p>No approved devices yet.</p></div>';
     }else{
-      $('approved-area').innerHTML=approved.map(d=>{
-        const status=d.alertActive?'badge-alert':d.registered?'badge-ok':'badge-off';
-        const statusText=d.alertActive?'Alert':d.registered?'Online':'Offline';
-        return `
-        <div class="device-card ${d.alertActive?'alerting':'approved'}">
-          <div class="device-info">
-            <div class="device-id">${d.slaveId}</div>
-            <div class="device-patient">${d.patientName||'No name'} - Bed ${d.bed||'-'}, Room ${d.room||'-'}</div>
-          </div>
-          <div class="actions">
-            <span class="badge ${status}">${statusText}</span>
-            ${d.alertActive?'<button class="btn btn-danger btn-sm" onclick="clearAlert(\''+d.slaveId+'\')">Clear Alert</button>':''}
-            <button class="btn btn-ghost btn-sm" onclick="openEditModal('${d.slaveId}','${(d.patientName||'').replace(/'/g,"\\'")}','${d.bed||''}','${d.room||''}')">Edit</button>
-            <button class="btn btn-ghost btn-sm" onclick="deleteDevice('${d.slaveId}')">Delete</button>
-          </div>
-        </div>`;
-      }).join('');
+      var html2='';
+      for(var j=0;j<approved.length;j++){
+        var d2=approved[j];
+        var status=d2.alertActive?'badge-alert':d2.registered?'badge-ok':'badge-off';
+        var statusText=d2.alertActive?'Alert':d2.registered?'Online':'Offline';
+        html2+='<div class="device-card '+(d2.alertActive?'alerting':'approved')+'">';
+        html2+='<div class="device-info">';
+        html2+='<div class="device-id">'+d2.slaveId+'</div>';
+        html2+='<div class="device-patient">'+(d2.patientName||'No name')+' - Bed '+(d2.bed||'-')+', Room '+(d2.room||'-')+'</div>';
+        html2+='</div>';
+        html2+='<div class="actions">';
+        html2+='<span class="badge '+status+'">'+statusText+'</span>';
+        if(d2.alertActive)html2+='<button class="btn btn-danger btn-sm" onclick="clearAlert(\''+d2.slaveId+'\')">Clear Alert</button>';
+        html2+='<button class="btn btn-ghost btn-sm" onclick="openEditModal(\''+d2.slaveId+'\',\''+((d2.patientName||'').replace(/'/g,"\\'"))+'\',\''+(d2.bed||'')+'\',\''+(d2.room||'')+'\')">Edit</button>';
+        html2+='<button class="btn btn-ghost btn-sm" onclick="deleteDevice(\''+d2.slaveId+'\')">Delete</button>';
+        html2+='</div></div>';
+      }
+      $('approved-area').innerHTML=html2;
     }
-    const mr=await fetch('/api/status');
-    const ms=await mr.json();
-    const modes={'1':'AP Mode','2':'STA Mode','3':'AP+STA Mode'};
-    $('mode-info').innerHTML='<span class="mode-badge">&#128225; '+(modes[ms.mode]||'Not configured')+'</span>';
-  }catch(e){console.error(e);}
+    fetch('/api/status').then(function(r){return r.json()}).then(function(ms){
+      var modes={'1':'AP Mode','2':'STA Mode','3':'AP+STA Mode'};
+      $('mode-info').innerHTML='<span class="mode-badge">&#128225; '+(modes[ms.mode]||'Not configured')+'</span>';
+    }).catch(function(){});
+  }).catch(function(e){console.error(e);});
 }
 
 function openApproveModal(id){
@@ -629,39 +669,34 @@ function openEditModal(id,name,bed,room){
 
 function closeModal(){$('modal').classList.remove('show');}
 
-async function submitModal(){
-  const name=$('m-name').value.trim();
-  const bed=$('m-bed').value.trim();
-  const room=$('m-room').value.trim();
+function submitModal(){
+  var name=$('m-name').value.trim();
+  var bed=$('m-bed').value.trim();
+  var room=$('m-room').value.trim();
   if(!name||!bed||!room){alert('Please fill all fields');return;}
   if(isApproving){
-    await fetch('/api/approve/'+editingId,{method:'POST',headers:authHeaders(),body:JSON.stringify({patientName:name,bed:bed,room:room})});
+    fetch('/api/approve/'+editingId,{method:'POST',headers:authHeaders(),body:JSON.stringify({patientName:name,bed:bed,room:room})}).then(function(){closeModal();loadDevices();});
   }else{
-    await fetch('/api/slaves/'+editingId,{method:'PUT',headers:authHeaders(),body:JSON.stringify({patientName:name,bed:bed,room:room})});
+    fetch('/api/slaves/'+editingId,{method:'PUT',headers:authHeaders(),body:JSON.stringify({patientName:name,bed:bed,room:room})}).then(function(){closeModal();loadDevices();});
   }
-  closeModal();
-  loadDevices();
 }
 
-async function clearAlert(id){
-  await fetch('/api/clearAlert/'+id,{method:'POST',headers:authHeaders()});
-  loadDevices();
+function clearAlert(id){
+  fetch('/api/clearAlert/'+id,{method:'POST',headers:authHeaders()}).then(function(){loadDevices();});
 }
 
-async function deleteDevice(id){
+function deleteDevice(id){
   if(!confirm('Delete device '+id+'?'))return;
-  await fetch('/api/slaves/'+id,{method:'DELETE',headers:authHeaders()});
-  loadDevices();
+  fetch('/api/slaves/'+id,{method:'DELETE',headers:authHeaders()}).then(function(){loadDevices();});
 }
 
-async function rejectDevice(id){
+function rejectDevice(id){
   if(!confirm('Reject and remove device '+id+'?'))return;
-  await fetch('/api/slaves/'+id,{method:'DELETE',headers:authHeaders()});
-  loadDevices();
+  fetch('/api/slaves/'+id,{method:'DELETE',headers:authHeaders()}).then(function(){loadDevices();});
 }
 
-loadDevices();
-setInterval(loadDevices,3000);
+$('password').addEventListener('keypress',function(e){if(e.key==='Enter')doLogin()});
+setInterval(function(){if($('admin-page').style.display!=='none')loadDevices()},3000);
 </script>
 </body>
 </html>
@@ -720,8 +755,7 @@ void setupRoutes() {
     bool showAll = request->hasParam("all");
     String json;
     if (showAll) json = getSlavesJson(false);
-    else if (onlyApproved) json = getSlavesJson(true);
-    else json = getSlavesJson(true);
+    else json = getSlavesJson(onlyApproved || !showAll);
     request->send(200, "application/json", json);
   });
 
@@ -849,8 +883,7 @@ void setupRoutes() {
       digitalWrite(BUZZER_PIN, HIGH);
       delay(200);
       digitalWrite(BUZZER_PIN, LOW);
-      String resp = "{\"success\":true}";
-      request->send(200, "application/json", resp);
+      request->send(200, "application/json", "{\"success\":true}");
       Serial.printf("ALERT from %s!\n", slaveId);
     }
   );
