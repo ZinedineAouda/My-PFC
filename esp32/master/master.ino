@@ -503,11 +503,12 @@ void setup() {
 
   seedData();
 
-  WiFi.softAP(AP_SSID, AP_PASSWORD);
+  WiFi.softAP(AP_SSID);
   Serial.print("AP IP address: ");
   Serial.println(WiFi.softAPIP());
   Serial.print("SSID: ");
   Serial.println(AP_SSID);
+  Serial.println("AP Mode: Open (no password)");
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send_P(200, "text/html", DASHBOARD_HTML);

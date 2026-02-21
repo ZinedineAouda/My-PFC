@@ -28,7 +28,7 @@ void connectWiFi() {
   Serial.print("Connecting to Wi-Fi: ");
   Serial.println(WIFI_SSID);
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(WIFI_SSID);
 
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
