@@ -1,7 +1,16 @@
 # ESP32 Hospital Patient Alarm System
 
 ## Overview
-A hospital patient alarm system with a Master ESP32-S3 (web server + control panel) and multiple Slave ESP8266 ESP-01 devices (patient call buttons). Supports 3 network modes.
+A hospital patient alarm system with a Master ESP32-S3 and multiple Slave ESP8266 ESP-01 devices (patient call buttons). Available in **two versions**:
+
+### Version 1: Offline (Local Network)
+Everything runs locally. The Master ESP32-S3 hosts the web dashboard, admin panel, and API on its own. No internet required.
+- Files: `offline/master/master.ino` + `offline/slave/slave.ino`
+
+### Version 2: Online (Cloud Dashboard)
+The Master ESP32-S3 collects data locally from slaves, then forwards it to a hosted web server (e.g. Replit). The dashboard and admin panel run online, accessible from anywhere.
+- Files: `online/master/master.ino` + `online/slave/slave.ino`
+- The slave code is identical in both versions.
 
 ## Required Hardware
 - 1x ESP32-S3 Dev Module (Master)
@@ -24,29 +33,30 @@ Install via Arduino IDE Library Manager:
 2. **ESPAsyncTCP** by me-no-dev
 3. **ArduinoJson** by Benoit Blanchon (v7+)
 
-## Quick Start
+---
 
-### 1. Flash the Master
-- Open `master/master.ino` in Arduino IDE
+## Version 1: Offline Setup
+
+### 1. Flash the Master (Offline)
+- Open `offline/master/master.ino` in Arduino IDE
 - Board: **ESP32-S3 Dev Module**
 - Upload
 
-### 2. Flash Each Slave (ESP-01)
-- Open `slave/slave.ino` in Arduino IDE
+### 2. Flash Each Slave
+- Open `offline/slave/slave.ino` (or `online/slave/slave.ino` — same file)
 - Board: **Generic ESP8266 Module**
 - Flash Size: **1MB** (or 512KB for older ESP-01)
 - Upload Speed: **115200**
 - You need a USB-to-serial adapter (FTDI/CH340) to flash the ESP-01
 - To enter flash mode: hold GPIO0 LOW while powering on, then release
-- Upload to each slave device
 
-### 3. Setup Master
+### 3. Setup Master (Offline)
 1. Connect your phone/laptop to Wi-Fi **"HospitalAlarm"** (open, no password)
 2. Open **http://192.168.4.1** in your browser
 3. Choose a network mode:
    - **AP Mode** - Master creates its own network (best for small areas)
    - **STA Mode** - Master joins hospital Wi-Fi (best for large areas)
-   - **AP+STA Mode** - Both combined (hybrid, nearby + distant devices)
+   - **AP+STA Mode** - Both combined (hybrid)
 4. For STA/AP+STA: select hospital Wi-Fi from scan list and enter password
 
 ### 4. Setup Each Slave
@@ -54,23 +64,86 @@ Install via Arduino IDE Library Manager:
 2. Connect your phone to that network
 3. Open **http://192.168.4.1**
 4. Enter a Device ID (e.g. "bed-101")
-5. Enter the Master IP address (192.168.4.1 for AP mode, or the hospital network IP shown after master setup)
-6. Select the Wi-Fi network to connect to and enter password if needed
+5. Enter the Master IP address (192.168.4.1 for AP mode, or the hospital network IP)
+6. Select the Wi-Fi network to connect to and enter password
 7. Click "Connect & Register"
 
-### 5. Approve Devices
-1. Open the Master's **Admin Panel** (http://192.168.4.1/admin or master's hospital IP/admin)
+### 5. Approve Devices & Use Dashboard (Offline)
+1. Open the Master's **Admin Panel** (http://192.168.4.1/admin or master's network IP/admin)
 2. New slave devices appear under "Pending Approval"
 3. Click "Approve", enter patient name, bed number, and room
-4. The device now appears on the Dashboard
+4. The device now appears on the Dashboard at http://192.168.4.1/
+
+---
+
+## Version 2: Online Setup
+
+### 1. Deploy the Web Server
+1. Deploy/publish the Replit project (the web app in this repo)
+2. Note the URL (e.g. `https://your-app.replit.app`)
+3. Set the `DEVICE_API_KEY` environment variable in your Replit project (any random string)
+
+### 2. Flash the Master (Online)
+- Open `online/master/master.ino` in Arduino IDE
+- **Before uploading**, edit these two lines at the top:
+  ```cpp
+  char serverURL[128] = "https://YOUR-APP.replit.app";  // Your Replit URL
+  char deviceKey[64] = "YOUR_DEVICE_API_KEY";           // Must match server's DEVICE_API_KEY
+  ```
+- Board: **ESP32-S3 Dev Module**
+- Upload
+
+### 3. Flash Each Slave
+- Same as offline — Open `online/slave/slave.ino`
+- Board: **Generic ESP8266 Module**, Flash Size: **1MB**
+- Upload
+
+### 4. Setup Master (Online)
+1. Connect your phone to Wi-Fi **"HospitalAlarm"**
+2. Open **http://192.168.4.1**
+3. **Step 1 — Server Config**: Enter your hosted server URL and device API key, click "Test Connection"
+4. **Step 2 — Network Mode**: Choose STA or AP+STA (internet required for online mode)
+   - **STA Mode** (recommended) — All devices join hospital Wi-Fi
+   - **AP+STA Mode** — Master creates AP for slaves AND joins hospital Wi-Fi
+5. Select hospital Wi-Fi and enter password
+6. Setup complete! Data will forward to the hosted dashboard
+
+### 5. Setup Slaves
+Same as offline version — each slave creates "SlaveSetup-XXXX" Wi-Fi, configure via web page.
+
+### 6. Approve Devices & Monitor (Online)
+1. Open your hosted dashboard URL (e.g. `https://your-app.replit.app`)
+2. Go to `/admin`, login with admin/admin1234
+3. Approve pending devices with patient name, bed, room
+4. Monitor all patients on the main dashboard from anywhere!
+
+### How Online Mode Works
+```
+[Slave 1] ---button press---> [Master ESP32] ---HTTP POST---> [Hosted Server]
+[Slave 2] ---button press---> [Master ESP32] ---HTTP POST---> [Hosted Server]
+                                     |                              |
+                              Local buzzer                   Online Dashboard
+                              Status page                    Admin Panel
+                              UDP beacon                     (accessible anywhere)
+```
+
+- Slaves send alerts to Master via local network (same as offline)
+- Master immediately forwards register/alert/clear events to the hosted server
+- Master sends periodic heartbeats (every 30s) to keep slave status updated online
+- The hosted dashboard and admin panel show real-time data
+- Master still beeps the buzzer locally for alerts
+
+---
 
 ## Network Modes
 
-| Mode | How it works | Best for |
-|------|-------------|----------|
-| AP | Master creates "HospitalAlarm" Wi-Fi, all devices connect to it | Small ward, no existing Wi-Fi |
-| STA | Master and slaves both join hospital Wi-Fi | Large hospital with existing network |
-| AP+STA | Master runs both its own AP and joins hospital Wi-Fi | Mixed setup, some devices nearby, some far |
+| Mode | How it works | Available in |
+|------|-------------|--------------|
+| AP | Master creates "HospitalAlarm" Wi-Fi, all devices connect to it | Offline only |
+| STA | Master and slaves both join hospital Wi-Fi | Both versions |
+| AP+STA | Master runs both its own AP and joins hospital Wi-Fi | Both versions |
+
+**Note:** Online mode requires internet, so AP-only mode is not available for online version.
 
 ## Wiring
 
@@ -97,22 +170,26 @@ Install via Arduino IDE Library Manager:
 ## How Alerts Work
 1. Patient presses bedside button
 2. Slave sends alert to master via HTTP
-3. Dashboard shows red alert with animation and sound notification
-4. Alert stays active until cleared by admin
-5. One-shot: pressing again while active does nothing
+3. Master buzzes locally AND (online mode) forwards to hosted server
+4. Dashboard shows red alert with animation
+5. Alert stays active until cleared by admin
+6. One-shot: pressing again while active does nothing
 
-## API Endpoints
+## API Endpoints (Web Server)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /api/slaves | List devices (add ?approved=1 or ?all=1) |
-| GET | /api/scan | Scan nearby Wi-Fi networks |
-| GET | /api/status | System status and mode info |
-| POST | /api/setup | Set network mode (body: {mode: 1/2/3}) |
-| POST | /api/connect-wifi | Connect to Wi-Fi (body: {ssid, password}) |
-| POST | /api/register | Slave auto-registration (body: {slaveId}) |
-| POST | /api/alert | Trigger alert (body: {slaveId}) |
-| POST | /api/approve/:id | Approve device (admin, body: {patientName, bed, room}) |
-| PUT | /api/slaves/:id | Update device info (admin) |
-| DELETE | /api/slaves/:id | Remove device (admin) |
-| POST | /api/clearAlert/:id | Clear alert (admin) |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | /api/slaves | None | List devices (?approved=1 or ?all=1) |
+| GET | /api/scan | None | Scan nearby Wi-Fi (offline only) |
+| GET | /api/status | None | System status and mode info |
+| POST | /api/setup | None | Set network mode (body: {mode: 1/2/3}) |
+| POST | /api/connect-wifi | None | Connect to Wi-Fi (body: {ssid, password}) |
+| POST | /api/register | Device Key | Slave registration (body: {slaveId}) |
+| POST | /api/alert | Device Key | Trigger alert (body: {slaveId}) |
+| POST | /api/heartbeat | Device Key | Update slave lastSeen (body: {slaveId}) |
+| POST | /api/approve/:id | Admin | Approve device (body: {patientName, bed, room}) |
+| PUT | /api/slaves/:id | Admin | Update device info |
+| DELETE | /api/slaves/:id | Admin | Remove device |
+| POST | /api/clearAlert/:id | Admin/Device | Clear alert |
+
+**Device Key Auth:** Set `DEVICE_API_KEY` env var on server. ESP32 sends `X-Device-Key` header. If not set, device endpoints are open (for offline/testing).

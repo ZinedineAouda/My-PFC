@@ -37,3 +37,8 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+DEVICE_API_KEY = "3a81f01fd890bc4ebdcb98f03faa2cb7"

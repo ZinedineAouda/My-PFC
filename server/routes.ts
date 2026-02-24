@@ -17,6 +17,33 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   return res.status(401).json({ message: "Unauthorized" });
 }
 
+function requireDeviceKey(req: Request, res: Response, next: NextFunction) {
+  const key = req.headers["x-device-key"] as string;
+  const expected = process.env.DEVICE_API_KEY;
+  if (!expected) {
+    return next();
+  }
+  if (!key || key !== expected) {
+    return res.status(401).json({ success: false, message: "Invalid device key" });
+  }
+  return next();
+}
+
+function requireAdminOrDevice(req: Request, res: Response, next: NextFunction) {
+  if (req.session?.isAdmin) {
+    return next();
+  }
+  const key = req.headers["x-device-key"] as string;
+  const expected = process.env.DEVICE_API_KEY;
+  if (expected && key === expected) {
+    return next();
+  }
+  if (!expected) {
+    return next();
+  }
+  return res.status(401).json({ message: "Unauthorized" });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -101,7 +128,7 @@ export async function registerRoutes(
     return res.json(storage.getApprovedSlaves());
   });
 
-  app.post("/api/register", (req: Request, res: Response) => {
+  app.post("/api/register", requireDeviceKey, (req: Request, res: Response) => {
     const parsed = registerRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid request body" });
@@ -114,7 +141,7 @@ export async function registerRoutes(
     return res.json({ success: true, message: "Pending approval" });
   });
 
-  app.post("/api/alert", (req: Request, res: Response) => {
+  app.post("/api/alert", requireDeviceKey, (req: Request, res: Response) => {
     const parsed = alertRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid request body" });
@@ -125,6 +152,16 @@ export async function registerRoutes(
       return res.json({ success: false, reason: result.reason });
     }
     return res.json({ success: true });
+  });
+
+  app.post("/api/heartbeat", requireDeviceKey, (req: Request, res: Response) => {
+    const parsed = registerRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: "Invalid request body" });
+    }
+    const { slaveId } = parsed.data;
+    const slave = storage.registerSlave(slaveId);
+    return res.json({ success: true, approved: slave.approved, alertActive: slave.alertActive });
   });
 
   app.post("/api/approve/:slaveId", requireAdmin, (req: Request, res: Response) => {
@@ -172,7 +209,7 @@ export async function registerRoutes(
     return res.json({ success: true, message: "Deleted" });
   });
 
-  app.post("/api/clearAlert/:slaveId", requireAdmin, (req: Request, res: Response) => {
+  app.post("/api/clearAlert/:slaveId", requireAdminOrDevice, (req: Request, res: Response) => {
     const cleared = storage.clearAlert(req.params.slaveId as string);
     if (!cleared) {
       return res.status(404).json({ message: "Slave not found" });
