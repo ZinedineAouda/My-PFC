@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+esp32
+attached_assets
+*.md
+!README.md
+.replit
+replit.nix
+.config
+.local
