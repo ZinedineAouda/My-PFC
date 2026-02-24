@@ -1,146 +1,176 @@
-# Deployment Guide
+# Deployment Guide — Split Setup
 
-Deploy the Hospital Patient Alarm System web server to Railway or Vercel for the **online mode** (ESP32 forwards data to your hosted server).
-
-## Environment Variables
-
-Set these on whichever platform you use:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SESSION_SECRET` | Yes | Random string for session encryption (e.g. `openssl rand -hex 32`) |
-| `DEVICE_API_KEY` | Yes | API key your ESP32 will use to authenticate (any random string) |
-| `PORT` | No | Server port (Railway sets this automatically, default 5000) |
+Deploy the Hospital Patient Alarm System as a **split deployment**:
+- **Railway** — Backend API (receives ESP32 data, handles authentication)
+- **Vercel** — Frontend dashboard and admin panel (static React app)
 
 ---
 
-## Option 1: Railway (Recommended)
+## Step 1: Push Code to GitHub
 
-Railway runs your app as a persistent server — perfect for this app since it uses in-memory storage and sessions.
-
-### Steps
-
-1. **Push code to GitHub**
-   - Create a GitHub repo and push this project's code
-   - Make sure to include all files except `esp32/` (optional, not needed for the web server)
-
-2. **Create a Railway project**
-   - Go to [railway.app](https://railway.app) and sign in
-   - Click "New Project" → "Deploy from GitHub repo"
-   - Select your repository
-
-3. **Set environment variables**
-   - Go to your service → Variables tab
-   - Add `SESSION_SECRET` (any random string)
-   - Add `DEVICE_API_KEY` (the key you'll put in your ESP32 firmware)
-
-4. **Deploy**
-   - Railway will automatically detect the `Dockerfile` and build
-   - It will also detect `railway.toml` for health check settings
-   - Your app will be available at a `*.up.railway.app` URL
-
-5. **Get your URL**
-   - Go to Settings → Networking → Generate Domain
-   - Copy the URL (e.g. `https://your-app.up.railway.app`)
-
-6. **Update ESP32 firmware**
-   - Open `esp32/online/master/master.ino`
-   - Set `serverURL` to your Railway URL
-   - Set `deviceKey` to match your `DEVICE_API_KEY`
-   - Flash to your ESP32
-
-### Railway Notes
-- Free tier available with limited hours
-- App stays running 24/7 on paid plans
-- Data persists as long as the server is running (resets on redeploy)
+Create a GitHub repository and push all the project code. Both Railway and Vercel will deploy from this same repo.
 
 ---
 
-## Option 2: Vercel
+## Step 2: Deploy Backend on Railway
 
-Vercel deploys the frontend as static files and the API as serverless functions.
+Railway runs your API server 24/7 — it receives data from ESP32 devices and serves the REST API.
 
-### Important Limitation
-Vercel is serverless — each API request may run on a different instance. This means:
-- In-memory storage resets on cold starts (after ~5-15 minutes of inactivity)
-- Sessions may not persist between requests
-- **For a production hospital system, Railway is recommended over Vercel**
+### Setup
 
-### Steps
+1. Go to [railway.app](https://railway.app) and sign in
+2. Click **"New Project"** → **"Deploy from GitHub repo"**
+3. Select your repository
+4. Railway auto-detects the `Dockerfile` and builds
 
-1. **Push code to GitHub**
-   - Create a GitHub repo and push this project's code
+### Environment Variables
 
-2. **Create a Vercel project**
-   - Go to [vercel.com](https://vercel.com) and sign in
-   - Click "Add New" → "Project" → Import your GitHub repo
+Go to your service → **Variables** tab and add:
 
-3. **Configure build settings**
-   - Vercel auto-detects settings from `vercel.json`
-   - The API runs as a serverless function (all `/api/*` requests route to a single Express handler)
-   - The frontend is served as static files with SPA fallback
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `SESSION_SECRET` | Any random string | Session encryption key |
+| `DEVICE_API_KEY` | Any random string | ESP32 authentication key |
+| `FRONTEND_URL` | `https://your-app.vercel.app` | Your Vercel frontend URL (for CORS) |
 
-4. **Set environment variables**
-   - Go to Settings → Environment Variables
-   - Add `SESSION_SECRET` and `DEVICE_API_KEY`
+### Get Your Backend URL
 
-5. **Deploy**
-   - Click Deploy
-   - Your app will be at `*.vercel.app`
-
-6. **Update ESP32 firmware**
-   - Same as Railway — update `serverURL` and `deviceKey` in the online master firmware
+1. Go to **Settings** → **Networking** → **Generate Domain**
+2. Copy the URL (e.g. `https://your-app.up.railway.app`)
+3. You'll need this URL for both Vercel and ESP32 setup
 
 ---
 
-## Build Commands Reference
+## Step 3: Deploy Frontend on Vercel
 
-| Command | Use |
-|---------|-----|
-| `npx tsx script/build-external.ts` | Build for external platforms (Railway/Vercel) |
-| `npm run build` | Build for Replit (uses Replit-specific plugins) |
-| `npm start` | Start production server (after build) |
+Vercel serves the React dashboard and admin panel as a fast static site.
 
-The external build script (`script/build-external.ts`) uses `vite.config.external.ts` which excludes Replit-specific plugins that aren't available on other platforms.
+### Setup
+
+1. Go to [vercel.com](https://vercel.com) and sign in
+2. Click **"Add New"** → **"Project"** → Import your GitHub repo
+3. Vercel auto-detects settings from `vercel.json`
+
+### Environment Variables
+
+Go to **Settings** → **Environment Variables** and add:
+
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `VITE_API_URL` | `https://your-app.up.railway.app` | Your Railway backend URL |
+
+**Important:** The variable must start with `VITE_` to be available in the frontend.
+
+### Deploy
+
+Click **Deploy**. Your frontend will be at `https://your-app.vercel.app`.
+
+---
+
+## Step 4: Connect Railway and Vercel
+
+After both are deployed, you need to link them:
+
+1. **On Railway:** Add `FRONTEND_URL` variable with your Vercel URL
+   - Example: `https://your-app.vercel.app`
+   - This allows the backend to accept requests from your frontend (CORS)
+   - If you have multiple frontends, separate URLs with commas
+
+2. **On Vercel:** Add `VITE_API_URL` variable with your Railway URL
+   - Example: `https://your-app.up.railway.app`
+   - This tells the frontend where to send API requests
+   - **Redeploy** Vercel after adding this variable (the variable is baked into the build)
+
+---
+
+## Step 5: Configure ESP32
+
+Open `esp32/online/master/master.ino` and update:
+
+```cpp
+char serverURL[128] = "https://your-app.up.railway.app";  // Railway backend URL
+char deviceKey[64] = "your-device-api-key";                // Must match DEVICE_API_KEY on Railway
+```
+
+Flash to your ESP32-S3 and it will send data directly to the Railway backend.
+
+---
+
+## How It Works
+
+```
+[ESP32 Slaves] → [ESP32 Master] → [Railway Backend API]
+                                          ↑
+                                   [Vercel Frontend] ← [Browser/Phone]
+```
+
+- ESP32 master sends device data to Railway backend via HTTP
+- Users open the Vercel frontend in their browser
+- Frontend fetches data from Railway backend via API calls
+- Railway handles all authentication, device registration, and alerts
+- Vercel serves the fast, globally-distributed dashboard
 
 ---
 
 ## Verifying Deployment
 
-After deploying, test that everything works:
+### Test Backend (Railway)
 
 ```bash
-# Check server is running
-curl https://YOUR-APP-URL/api/status
+# Check server status
+curl https://YOUR-RAILWAY-URL/api/status
 
-# Test device registration (replace YOUR_KEY with your DEVICE_API_KEY)
-curl -X POST https://YOUR-APP-URL/api/register \
+# Test device registration
+curl -X POST https://YOUR-RAILWAY-URL/api/register \
   -H "Content-Type: application/json" \
   -H "X-Device-Key: YOUR_KEY" \
   -d '{"slaveId": "test-device"}'
-
-# Open dashboard in browser
-open https://YOUR-APP-URL
-
-# Open admin panel (login: admin / admin1234)
-open https://YOUR-APP-URL/admin
 ```
+
+### Test Frontend (Vercel)
+
+1. Open `https://YOUR-VERCEL-URL` — Dashboard should load
+2. Open `https://YOUR-VERCEL-URL/admin` — Login with admin/admin1234
+3. Approve test devices and verify they appear on dashboard
 
 ---
 
-## File Structure (What Gets Deployed)
+## Environment Variables Summary
 
-```
-server/          ← Backend Express API
-client/          ← Frontend React app
-shared/          ← Shared types and schemas
-dist/            ← Built output (created by build command)
-  ├── public/    ← Built frontend static files
-  └── index.cjs  ← Built backend server bundle
-api/             ← Vercel serverless function wrapper
-Dockerfile       ← Railway Docker build config
-railway.toml     ← Railway deployment settings
-vercel.json      ← Vercel deployment settings
-```
+### Railway (Backend)
 
-The `esp32/` folder contains firmware for your physical devices and is not part of the web deployment.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SESSION_SECRET` | Yes | Random string for session encryption |
+| `DEVICE_API_KEY` | Yes | API key for ESP32 authentication |
+| `FRONTEND_URL` | Yes | Vercel URL for CORS (e.g. `https://your-app.vercel.app`) |
+| `PORT` | No | Server port (Railway sets this automatically) |
+
+### Vercel (Frontend)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VITE_API_URL` | Yes | Railway backend URL (e.g. `https://your-app.up.railway.app`) |
+
+---
+
+## Troubleshooting
+
+**Frontend can't reach backend:**
+- Check `VITE_API_URL` is set correctly on Vercel (must include `https://`)
+- Check `FRONTEND_URL` is set correctly on Railway (must match Vercel URL exactly)
+- Redeploy Vercel after changing `VITE_API_URL` (it's a build-time variable)
+
+**ESP32 can't connect:**
+- Check `serverURL` in firmware matches your Railway URL
+- Check `deviceKey` matches `DEVICE_API_KEY` on Railway
+- Ensure ESP32 has internet access (STA or AP+STA mode)
+
+**Admin login doesn't persist:**
+- Cross-origin cookies require `secure: true` and `sameSite: none`
+- Make sure Railway is serving over HTTPS (it does by default)
+- Try in a different browser if cookies are blocked
+
+**CORS errors:**
+- Ensure `FRONTEND_URL` on Railway exactly matches the origin (including `https://`, no trailing slash)
+- For multiple frontends: `FRONTEND_URL=https://app1.vercel.app,https://app2.vercel.app`

@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Slave, LoginData, ApproveSlave } from "@shared/schema";
 import { loginSchema, approveSlaveSchema, updateSlaveSchema } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -354,7 +354,7 @@ function AdminPanel() {
   const { data: slaves, isLoading } = useQuery<Slave[]>({
     queryKey: ["/api/slaves", "all"],
     queryFn: async () => {
-      const res = await fetch("/api/slaves?all=1");
+      const res = await fetch(apiUrl("/api/slaves?all=1"), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
