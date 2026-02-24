@@ -15,11 +15,8 @@ Two versions available:
 
 ## ESP32 Code Structure
 - `esp32/offline/master/master.ino` - Offline master (hosts dashboard + API locally)
-- `esp32/offline/slave/slave.ino` - Slave (identical in both versions)
 - `esp32/online/master/master.ino` - Online master (forwards data to hosted server)
-- `esp32/online/slave/slave.ino` - Slave (identical copy)
-- `esp32/master/master.ino` - Original offline master (kept for reference)
-- `esp32/slave/slave.ino` - Original slave (kept for reference)
+- `esp32/slave/slave.ino` - Shared slave firmware (same for both versions)
 - `esp32/README.md` - Full hardware setup and usage guide
 
 ## Pages
@@ -75,6 +72,7 @@ Two versions available:
 - `client/src/pages/admin.tsx` - Admin panel
 
 ## Recent Changes
-- 2026-02-24: Added online mode - ESP32 forwards data to hosted server, device API key auth, reorganized ESP32 code into offline/ and online/ folders, added heartbeat endpoint
+- 2026-02-24: Cleaned up ESP32 file structure — removed duplicates, single shared slave/slave.ino, offline/ and online/ contain only master firmware
+- 2026-02-24: Added online mode - ESP32 forwards data to hosted server, device API key auth, heartbeat endpoint
 - 2026-02-21: Major rewrite - added 3 network modes (AP/STA/AP+STA), setup wizard, slave web config page, auto-detection with admin approval flow, redesigned UI with modern effects
 - 2026-02-21: Initial MVP build with dashboard, admin panel, REST API, seed data

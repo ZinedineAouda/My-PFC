@@ -5,12 +5,24 @@ A hospital patient alarm system with a Master ESP32-S3 and multiple Slave ESP826
 
 ### Version 1: Offline (Local Network)
 Everything runs locally. The Master ESP32-S3 hosts the web dashboard, admin panel, and API on its own. No internet required.
-- Files: `offline/master/master.ino` + `offline/slave/slave.ino`
+- Master: `offline/master/master.ino`
 
 ### Version 2: Online (Cloud Dashboard)
 The Master ESP32-S3 collects data locally from slaves, then forwards it to a hosted web server (e.g. Replit). The dashboard and admin panel run online, accessible from anywhere.
-- Files: `online/master/master.ino` + `online/slave/slave.ino`
-- The slave code is identical in both versions.
+- Master: `online/master/master.ino`
+
+### Slave (Shared)
+The slave firmware is the same for both versions — one file, flash to all ESP-01 devices.
+- Slave: `slave/slave.ino`
+
+### File Structure
+```
+esp32/
+├── offline/master/master.ino   ← Offline master firmware
+├── online/master/master.ino    ← Online master firmware
+├── slave/slave.ino             ← Shared slave firmware (both versions)
+└── README.md                   ← This file
+```
 
 ## Required Hardware
 - 1x ESP32-S3 Dev Module (Master)
@@ -43,7 +55,7 @@ Install via Arduino IDE Library Manager:
 - Upload
 
 ### 2. Flash Each Slave
-- Open `offline/slave/slave.ino` (or `online/slave/slave.ino` — same file)
+- Open `slave/slave.ino` in Arduino IDE
 - Board: **Generic ESP8266 Module**
 - Flash Size: **1MB** (or 512KB for older ESP-01)
 - Upload Speed: **115200**
@@ -94,7 +106,7 @@ Install via Arduino IDE Library Manager:
 - Upload
 
 ### 3. Flash Each Slave
-- Same as offline — Open `online/slave/slave.ino`
+- Same slave file for both versions — Open `slave/slave.ino`
 - Board: **Generic ESP8266 Module**, Flash Size: **1MB**
 - Upload
 
