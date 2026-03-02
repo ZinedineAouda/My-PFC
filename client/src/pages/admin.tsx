@@ -50,6 +50,7 @@ import {
   CheckCircle,
   Clock,
   Settings,
+  Wifi,
 } from "lucide-react";
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -361,7 +362,7 @@ function AdminPanel() {
     refetchInterval: 3000,
   });
 
-  const { data: status } = useQuery<{ mode: number; setup: boolean }>({
+  const { data: status } = useQuery<{ mode: number; setup: boolean; isMasterOnline?: boolean }>({
     queryKey: ["/api/status"],
   });
 
@@ -429,6 +430,15 @@ function AdminPanel() {
                   {modeNames[status.mode] || "Unknown"}
                 </Badge>
               ) : null}
+              {status?.isMasterOnline !== undefined && (
+                <Badge
+                  variant="secondary"
+                  className={`no-default-active-elevate ${status.isMasterOnline ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'text-muted-foreground'}`}
+                >
+                  <Wifi className="w-3 h-3 mr-1" />
+                  Master: {status.isMasterOnline ? "Online" : "Offline"}
+                </Badge>
+              )}
               {activeAlerts > 0 && (
                 <Badge variant="destructive" className="no-default-active-elevate animate-pulse">
                   <AlertTriangle className="w-3 h-3 mr-1" />
