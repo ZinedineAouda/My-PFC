@@ -1,14 +1,15 @@
-#include <WiFi.h>
+﻿#include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <WiFiUdp.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 
 // --- ONLINE MODE SETTINGS ------------------------
 // Pre-configure these before flashing the ESP32!
-const String serverURL = "https://your-app.up.railway.app";
-const String deviceKey = "your-device-key";
+const String serverURL = "https://my-pfc-production.up.railway.app/";
+const String deviceKey = "esp32";
 unsigned long lastHeartbeat = 0;
 const unsigned long HEARTBEAT_INTERVAL = 10000;
 // -------------------------------------------------
@@ -544,8 +545,21 @@ setInterval(() => {if($('admin-page').style.display!=='none')loadDevices()},3000
 
 void forwardToCloud(String endpoint, String payload) {
   if (wifiMode != 4 || WiFi.status() != WL_CONNECTED) return;
+  
+  String url = serverURL;
+  if (url.endsWith("/") && endpoint.startsWith("/")) {
+    url = url.substring(0, url.length() - 1) + endpoint;
+  } else if (!url.endsWith("/") && !endpoint.startsWith("/")) {
+    url = url + "/" + endpoint;
+  } else {
+    url = url + endpoint;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure(); // Disable SSL certificate verification
+
   HTTPClient http;
-  http.begin(serverURL + endpoint);
+  http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("x-device-key", deviceKey);
   int httpCode = http.POST(payload);
