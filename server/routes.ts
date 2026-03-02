@@ -93,6 +93,7 @@ export async function registerRoutes(
       setup: storage.isSetupDone(),
       masterIP: "localhost",
       slaves: storage.getAllSlaves().length,
+      isMasterOnline: storage.isMasterOnline(),
     });
   });
 
@@ -167,6 +168,11 @@ export async function registerRoutes(
     const { slaveId } = parsed.data;
     const slave = storage.registerSlave(slaveId);
     return res.json({ success: true, approved: slave.approved, alertActive: slave.alertActive });
+  });
+
+  app.post("/api/master-ping", requireDeviceKey, (_req: Request, res: Response) => {
+    storage.updateMasterHeartbeat();
+    return res.json({ success: true });
   });
 
   app.post("/api/approve/:slaveId", requireAdmin, (req: Request, res: Response) => {

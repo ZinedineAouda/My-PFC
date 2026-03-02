@@ -14,11 +14,10 @@ function SlaveCard({ slave }: { slave: Slave }) {
   return (
     <Card
       data-testid={`card-slave-${slave.slaveId}`}
-      className={`relative transition-all duration-500 ${
-        isAlert
+      className={`relative transition-all duration-500 ${isAlert
           ? "ring-2 ring-red-500 dark:ring-red-400 bg-red-50 dark:bg-red-950/30"
           : ""
-      }`}
+        }`}
     >
       {isAlert && (
         <div className="absolute top-0 left-0 right-0 h-1 bg-red-500 rounded-t-md animate-pulse" />
@@ -38,13 +37,12 @@ function SlaveCard({ slave }: { slave: Slave }) {
           </div>
           <div
             data-testid={`status-indicator-${slave.slaveId}`}
-            className={`flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300 ${
-              isAlert
+            className={`flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300 ${isAlert
                 ? "bg-red-500 dark:bg-red-600 text-white animate-pulse"
                 : slave.registered
                   ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400"
                   : "bg-muted text-muted-foreground"
-            }`}
+              }`}
           >
             {isAlert ? (
               <Bell className="w-6 h-6" />
@@ -98,11 +96,10 @@ function SlaveCard({ slave }: { slave: Slave }) {
 
         <div className="mt-4 pt-3 border-t flex items-center gap-2">
           <div
-            className={`w-2 h-2 rounded-full ${
-              slave.registered
+            className={`w-2 h-2 rounded-full ${slave.registered
                 ? "bg-emerald-500"
                 : "bg-muted-foreground"
-            }`}
+              }`}
           />
           <span className="text-xs text-muted-foreground">
             {slave.registered ? "Connected" : "Not Connected"}
@@ -142,6 +139,16 @@ export default function Dashboard() {
   const { toast } = useToast();
   const prevAlertsRef = useRef<Set<string>>(new Set());
 
+  const { data: status } = useQuery({
+    queryKey: ["/api/status"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/status"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch status");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
+
   const { data: slaves, isLoading, error } = useQuery<Slave[]>({
     queryKey: ["/api/slaves", "approved"],
     queryFn: async () => {
@@ -177,6 +184,7 @@ export default function Dashboard() {
   const activeAlerts = slaves?.filter((s) => s.alertActive).length ?? 0;
   const totalDevices = slaves?.length ?? 0;
   const connectedDevices = slaves?.filter((s) => s.registered).length ?? 0;
+  const isMasterOnline = status?.isMasterOnline ?? false;
 
   return (
     <div className="min-h-screen bg-background">
@@ -193,6 +201,10 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
+              <Badge variant={isMasterOnline ? "default" : "secondary"} className={`no-default-active-elevate ${isMasterOnline ? 'bg-emerald-500 hover:bg-emerald-600' : ''}`}>
+                <Activity className="w-3 h-3 mr-1" />
+                Master: {isMasterOnline ? "Online" : "Offline"}
+              </Badge>
               <Badge variant="secondary" className="no-default-active-elevate">
                 {totalDevices} Device{totalDevices !== 1 ? "s" : ""}
               </Badge>

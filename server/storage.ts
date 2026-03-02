@@ -14,17 +14,21 @@ export interface IStorage {
   getMode(): number;
   setMode(mode: number): void;
   isSetupDone(): boolean;
+  updateMasterHeartbeat(): void;
+  isMasterOnline(): boolean;
 }
 
 export class MemStorage implements IStorage {
   private slaves: Map<string, Slave>;
   private wifiMode: number;
   private setupComplete: boolean;
+  private masterLastSeen: number | null;
 
   constructor() {
     this.slaves = new Map();
     this.wifiMode = 0;
     this.setupComplete = false;
+    this.masterLastSeen = null;
   }
 
   getAllSlaves(): Slave[] {
@@ -137,6 +141,16 @@ export class MemStorage implements IStorage {
 
   isSetupDone(): boolean {
     return this.setupComplete;
+  }
+
+  updateMasterHeartbeat(): void {
+    this.masterLastSeen = Date.now();
+  }
+
+  isMasterOnline(): boolean {
+    if (!this.masterLastSeen) return false;
+    // Consider online if heartbeat was within last 30 seconds
+    return Date.now() - this.masterLastSeen < 30000;
   }
 }
 

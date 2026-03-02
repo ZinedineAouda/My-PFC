@@ -3,6 +3,15 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <WiFiUdp.h>
+#include <HTTPClient.h>
+
+// --- ONLINE MODE SETTINGS ------------------------
+// Pre-configure these before flashing the ESP32!
+const String serverURL = "https://your-app.up.railway.app";
+const String deviceKey = "your-device-key";
+unsigned long lastHeartbeat = 0;
+const unsigned long HEARTBEAT_INTERVAL = 10000;
+// -------------------------------------------------
 
 char apSSID[64] = "HospitalAlarm";
 char apPass[64] = "";
@@ -226,25 +235,19 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135d
 </div>
 <div class="step" id="stepOnline">
 <h2 style="font-size:16px;text-align:center;margin-bottom:4px">&#127760; Online Mode Setup</h2>
-<p style="text-align:center;color:#94a3b8;font-size:13px;margin-bottom:16px">Enter your server URL then connect to internet Wi-Fi</p>
-<div class="form-group">
-<label>Dashboard Server URL</label>
-<input type="text" id="ol-srv-url" placeholder="https://your-app.up.railway.app">
-</div>
+<p style="text-align:center;color:#94a3b8;font-size:13px;margin-bottom:16px">Connect your master device to the Internet</p>
 <h3 style="font-size:13px;margin:12px 0 8px;color:#94a3b8">&#128246; Select Internet Wi-Fi</h3>
 <div id="ol-scan-area"><div class="scanning"><div class="spinner"></div><br>Scanning...</div></div>
 <div class="form-group" style="margin-top:12px">
 <label>Wi-Fi Password</label>
 <input type="password" id="ol-wifi-pass" placeholder="Enter network password">
 </div>
-<button class="btn btn-primary" id="ol-connectBtn" onclick="connectOnlineWifi()" disabled>Connect &amp; Get Link</button>
+<button class="btn btn-primary" id="ol-connectBtn" onclick="connectOnlineWifi()" disabled>Connect &amp; Finish</button>
 <button class="btn btn-secondary" onclick="scanOnlineWifi()">Rescan</button>
 <div id="ol-status"></div>
 <div id="ol-result" style="display:none;margin-top:16px;padding:16px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);border-radius:12px;text-align:center">
 <div style="font-size:32px;margin-bottom:8px">&#9989;</div>
-<p style="font-size:13px;color:#94a3b8;margin-bottom:10px">Connected! Your dashboard is available at:</p>
-<a id="ol-link" href="#" target="_blank" style="font-size:15px;font-weight:700;color:#34d399;word-break:break-all;text-decoration:underline"></a>
-<p style="font-size:11px;color:#64748b;margin-top:8px">Tap the link to open your dashboard &#8599;</p>
+<p style="font-size:13px;color:#94a3b8;margin-bottom:10px">Connected! Your device is now online.</p>
 </div>
 <button class="btn btn-secondary" style="margin-top:8px" onclick="goBack()">&#8592; Back</button>
 </div>
@@ -275,7 +278,7 @@ var selectedMode=0,selectedSSID='',apstaSSID='';
 var olSSID='';
  const scanOnlineWifi = () => {document.getElementById('ol-scan-area').innerHTML='<div class="scanning"><div class="spinner"></div><br>Scanning...</div>';fetch('/api/scan').then((r) => {return r.json()}).then((nets) => {if(nets.length===0){document.getElementById('ol-scan-area').innerHTML='<div class="scanning">No networks found.</div>';return;}var html='<div class="wifi-list">';nets.forEach((n) => {var bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';html+='<div class="wifi-item" onclick="pickOnlineWifi(this,\''+n.ssid+'\')">'+'<span class="wifi-name">'+n.ssid+'</span><span class="wifi-signal">'+bars+'</span></div>';});html+='</div>';document.getElementById('ol-scan-area').innerHTML=html;}).catch(() => {document.getElementById('ol-scan-area').innerHTML='<div class="scanning">Scan failed.</div>';});}
  const pickOnlineWifi = (el,ssid) => {olSSID=ssid;document.querySelectorAll('#stepOnline .wifi-item').forEach((i) => {i.classList.remove('selected')});el.classList.add('selected');document.getElementById('ol-connectBtn').disabled=false;}
- const connectOnlineWifi = () => {var srv=document.getElementById('ol-srv-url').value.trim();var pass=document.getElementById('ol-wifi-pass').value;if(!srv){document.getElementById('ol-status').innerHTML='<div class="status-msg error">Enter your server URL first</div>';return;}if(!olSSID){document.getElementById('ol-status').innerHTML='<div class="status-msg error">Select a Wi-Fi network first</div>';return;}document.getElementById('ol-connectBtn').disabled=true;document.getElementById('ol-connectBtn').textContent='Connecting...';document.getElementById('ol-status').innerHTML='<div class="status-msg info">Connecting to '+olSSID+'...</div>';fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:olSSID,password:pass})}).then((r) => {return r.json()}).then((d) => {if(d.success){document.getElementById('ol-status').innerHTML='';var link=srv.replace(/\/+$/,'');document.getElementById('ol-link').href=link;document.getElementById('ol-link').textContent=link;document.getElementById('ol-result').style.display='block';document.getElementById('ol-connectBtn').textContent='Connected &#10003;';}else{document.getElementById('ol-status').innerHTML='<div class="status-msg error">Failed: '+d.message+'</div>';document.getElementById('ol-connectBtn').disabled=false;document.getElementById('ol-connectBtn').textContent='Connect & Get Link';}}).catch(() => {document.getElementById('ol-status').innerHTML='<div class="status-msg error">Connection error</div>';document.getElementById('ol-connectBtn').disabled=false;document.getElementById('ol-connectBtn').textContent='Connect & Get Link';});}
+ const connectOnlineWifi = () => {var pass=document.getElementById('ol-wifi-pass').value;if(!olSSID){document.getElementById('ol-status').innerHTML='<div class="status-msg error">Select a Wi-Fi network first</div>';return;}document.getElementById('ol-connectBtn').disabled=true;document.getElementById('ol-connectBtn').textContent='Connecting...';document.getElementById('ol-status').innerHTML='<div class="status-msg info">Connecting to '+olSSID+'...</div>';fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:olSSID,password:pass})}).then((r) => {return r.json()}).then((d) => {if(d.success){document.getElementById('ol-status').innerHTML='<div class="status-msg success">Connected! IP: '+d.ip+'</div>';setTimeout(() => {fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:4})}).then((r) => {return r.json()}).then(() => {document.getElementById('ol-status').innerHTML='';document.getElementById('ol-result').style.display='block';document.getElementById('ol-connectBtn').textContent='Connected &#10003;';});},1500);}else{document.getElementById('ol-status').innerHTML='<div class="status-msg error">Failed: '+d.message+'</div>';document.getElementById('ol-connectBtn').disabled=false;document.getElementById('ol-connectBtn').textContent='Connect & Finish';}}).catch(() => {document.getElementById('ol-status').innerHTML='<div class="status-msg error">Connection error</div>';document.getElementById('ol-connectBtn').disabled=false;document.getElementById('ol-connectBtn').textContent='Connect & Finish';});}
  const saveApStaSettings = () => {var ssid=document.getElementById('apsta-ssid').value.trim();var pass=document.getElementById('apsta-pass').value;var wifiPass=document.getElementById('apsta-wifi-pass').value;if(!ssid){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Enter AP network name</div>';return;}if(pass.length>0&&pass.length<8){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">AP password must be 8+ chars or empty</div>';return;}if(!apstaSSID){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Select a hospital network</div>';return;}document.getElementById('apstaBtn').disabled=true;document.getElementById('apstaBtn').textContent='Connecting...';document.getElementById('apsta-status').innerHTML='<div class="status-msg info">Connecting to '+apstaSSID+'...</div>';fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:apstaSSID,password:wifiPass})}).then((r) => {return r.json()}).then((d) => {if(d.success){document.getElementById('apsta-status').innerHTML='<div class="status-msg success">Connected! IP: '+d.ip+'</div>';setTimeout(() => {fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:3,apSSID:ssid,apPass:pass})}).then((r) => {return r.json()}).then(() => {showStep('step3');document.getElementById('d2').classList.remove('active');document.getElementById('d2').classList.add('done');document.getElementById('d3').classList.add('active');document.getElementById('setup-info').textContent='Mode: AP+STA | AP: '+ssid;document.getElementById('setup-ip').textContent='AP: 192.168.4.1 | Network: '+d.ip;});},1500);}else{document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Failed: '+(d.message||'Error')+'</div>';document.getElementById('apstaBtn').disabled=false;document.getElementById('apstaBtn').textContent='Connect & Apply';}}).catch(() => {document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Connection error</div>';document.getElementById('apstaBtn').disabled=false;document.getElementById('apstaBtn').textContent='Connect & Apply';});}
  const finishSetup = () => {window.location.href='/';}
 </script>
@@ -539,6 +542,21 @@ setInterval(() => {if($('admin-page').style.display!=='none')loadDevices()},3000
 </html>
 )rawliteral";
 
+void forwardToCloud(String endpoint, String payload) {
+  if (wifiMode != 4 || WiFi.status() != WL_CONNECTED) return;
+  HTTPClient http;
+  http.begin(serverURL + endpoint);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("x-device-key", deviceKey);
+  int httpCode = http.POST(payload);
+  if (httpCode > 0) {
+    Serial.printf("[Cloud] %s -> HTTP %d\n", endpoint.c_str(), httpCode);
+  } else {
+    Serial.printf("[Cloud] %s -> Error: %s\n", endpoint.c_str(), http.errorToString(httpCode).c_str());
+  }
+  http.end();
+}
+
 void setupRoutes() {
   server.on("/setup", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send_P(200, "text/html", SETUP_HTML);
@@ -659,8 +677,10 @@ void setupRoutes() {
         WiFi.softAPdisconnect(true);
         WiFi.mode(WIFI_STA);
       } else if (wifiMode == 4) {
-        // Online mode: keep AP up so user can reach /online-setup info page
-        Serial.println("[MODE 4] Online selected. Flash esp32/online/master for cloud support.");
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
+        WiFi.softAP(apSSID, apPass, 1, 0, 8);
+        Serial.println("[MODE 4] Online Mode Active. AP+STA configured.");
       } else if (wifiMode == 3) {
         WiFi.mode(WIFI_AP_STA);
         WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
@@ -692,6 +712,7 @@ void setupRoutes() {
         slaves[idx].lastSeen = millis();
         request->send(200, "application/json", "{\"success\":true,\"message\":\"Registered\"}");
         Serial.printf("Slave %s re-registered\n", slaveId);
+        if (wifiMode == 4) forwardToCloud("/api/register", "{\"slaveId\":\"" + String(slaveId) + "\"}");
         return;
       }
       int slot = findFreeSlot();
@@ -712,6 +733,7 @@ void setupRoutes() {
       slaveCount++;
       request->send(200, "application/json", "{\"success\":true,\"message\":\"Pending approval\"}");
       Serial.printf("New slave %s detected - pending approval\n", slaveId);
+      if (wifiMode == 4) forwardToCloud("/api/register", "{\"slaveId\":\"" + String(slaveId) + "\"}");
     }
   );
   server.addHandler(registerHandler);
@@ -745,6 +767,7 @@ void setupRoutes() {
       digitalWrite(BUZZER_PIN, LOW);
       request->send(200, "application/json", "{\"success\":true}");
       Serial.printf("ALERT from %s!\n", slaveId);
+      if (wifiMode == 4) forwardToCloud("/api/alert", "{\"slaveId\":\"" + String(slaveId) + "\"}");
     }
   );
   server.addHandler(alertHandler);
@@ -861,6 +884,13 @@ void setup() {
 }
 
 void loop() {
+  if (wifiMode == 4 && WiFi.status() == WL_CONNECTED) {
+    if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL) {
+      forwardToCloud("/api/master-ping", "{}");
+      lastHeartbeat = millis();
+    }
+  }
+
   if (setupDone && millis() - lastBeacon > BEACON_INTERVAL) {
     String msg = "HOSPITAL_ALARM:" + masterIP;
     IPAddress broadcastIP;
