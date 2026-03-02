@@ -8,7 +8,7 @@ Everything runs locally. The Master ESP32-S3 hosts the web dashboard, admin pane
 - Master: `offline/master/master.ino`
 
 ### Version 2: Online (Cloud Dashboard)
-The Master ESP32-S3 collects data locally from slaves, then forwards it to a hosted web server (e.g. Replit). The dashboard and admin panel run online, accessible from anywhere.
+The Master ESP32-S3 collects data locally from slaves, then forwards it to a hosted web server (Railway). The dashboard and admin panel run online, accessible from anywhere.
 - Master: `online/master/master.ino`
 
 ### Slave (Shared)
@@ -99,16 +99,16 @@ Choose the correct file based on your hardware:
 ## Version 2: Online Setup
 
 ### 1. Deploy the Web Server
-1. Deploy/publish the Replit project (the web app in this repo)
-2. Note the URL (e.g. `https://your-app.replit.app`)
-3. Set the `DEVICE_API_KEY` environment variable in your Replit project (any random string)
+1. Deploy the app on Railway (see [hosting/railway.md](../hosting/railway.md))
+2. Note your Railway URL (e.g. `https://your-app.up.railway.app`)
+3. Set the `DEVICE_API_KEY` environment variable in your Railway project (any random string)
 
 ### 2. Flash the Master (Online)
 - Open `online/master/master.ino` in Arduino IDE
 - **Before uploading**, edit these two lines at the top:
   ```cpp
-  char serverURL[128] = "https://YOUR-APP.replit.app";  // Your Replit URL
-  char deviceKey[64] = "YOUR_DEVICE_API_KEY";           // Must match server's DEVICE_API_KEY
+  char serverURL[128] = "https://YOUR-APP.up.railway.app";  // Your Railway URL
+  char deviceKey[64] = "YOUR_DEVICE_API_KEY";                // Must match server's DEVICE_API_KEY
   ```
 - Board: **ESP32-S3 Dev Module**
 - Upload
@@ -140,7 +140,7 @@ Choose the correct file based on your hardware:
 Same as offline version — each slave creates "SlaveSetup-XXXX" Wi-Fi, configure via web page.
 
 ### 6. Approve Devices & Monitor (Online)
-1. Open your hosted dashboard URL (e.g. `https://your-app.replit.app`)
+1. Open your Railway dashboard URL (e.g. `https://your-app.up.railway.app`)
 2. Go to `/admin`, login with admin/admin1234
 3. Approve pending devices with patient name, bed, room
 4. Monitor all patients on the main dashboard from anywhere!

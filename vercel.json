@@ -1,8 +1,0 @@
-{
-  "buildCommand": "npx tsx script/build-external.ts",
-  "outputDirectory": "dist/public",
-  "framework": null,
-  "rewrites": [
-    { "source": "/:path*", "destination": "/index.html" }
-  ]
-}

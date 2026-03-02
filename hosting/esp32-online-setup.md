@@ -92,7 +92,7 @@ The wizard confirms setup is complete. The ESP32 will now:
 
 ## Step 7 — Approve Slave Devices
 
-1. Open your Vercel frontend: `https://your-app.vercel.app/admin`
+1. Open your Railway dashboard: `https://your-app.up.railway.app/admin`
 2. Login: `admin` / `admin1234`
 3. Any slave that pressed its button or powered on will appear under **"Pending Approval"**.
 4. Click **"Approve"**, enter the patient name, bed, and room number.

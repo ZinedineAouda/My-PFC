@@ -1,6 +1,6 @@
-# Deploy Backend on Railway
+# Deploy on Railway
 
-Railway hosts your Express server 24/7. It receives data from the ESP32 and serves the REST API to the frontend.
+Railway hosts your full-stack app — the Express backend AND the React frontend — all from one URL. The ESP32 sends data to the backend, and your browser accesses the dashboard from the same origin.
 
 ---
 
@@ -34,6 +34,8 @@ git push -u origin main
 4. Choose your repository from the list.
 5. Railway will detect the `Dockerfile` and start building automatically.
 
+> **What gets deployed?** The Dockerfile builds both the React frontend and Express backend into a single image. Express serves the frontend as static files, so everything is available at one URL.
+
 ---
 
 ## Step 3 — Set Environment Variables
@@ -44,9 +46,8 @@ In your Railway project, go to your service → **Variables** tab, and add:
 |---|---|---|
 | `SESSION_SECRET` | Any long random string | e.g. `openssl rand -hex 32` |
 | `DEVICE_API_KEY` | Any random string | Must match what you put in the ESP32 firmware |
-| `FRONTEND_URL` | *(set after Vercel deploy)* | Your Vercel URL, e.g. `https://your-app.vercel.app` |
 
-> **Note:** `FRONTEND_URL` is required for CORS. Set it after you have your Vercel URL (Step 2 of the Vercel guide).
+> **No `FRONTEND_URL` needed.** Since the frontend and backend are served from the same Railway URL, there is no cross-origin request — CORS is not required.
 
 ---
 
@@ -56,11 +57,11 @@ In your Railway project, go to your service → **Variables** tab, and add:
 2. Go to **Settings** → **Networking**.
 3. Click **"Generate Domain"**.
 4. Copy the URL — it will look like `https://your-app.up.railway.app`.
-5. **Save this URL** — you'll need it for the Vercel setup AND the ESP32.
+5. **Save this URL** — you'll need it for the ESP32 configuration.
 
 ---
 
-## Step 5 — Verify the Backend
+## Step 5 — Verify the Deployment
 
 Once deployed, test with:
 
@@ -73,6 +74,8 @@ curl https://YOUR-RAILWAY-URL/api/status
 ```
 
 If you get a JSON response, the backend is working.
+
+Then open your Railway URL in a browser — the dashboard should load.
 
 ---
 
@@ -91,4 +94,4 @@ curl -X POST https://YOUR-RAILWAY-URL/api/register \
 
 ## Next Step
 
-→ [Deploy Frontend on Vercel](./vercel.md)
+→ [Configure ESP32 for Online Mode](./esp32-online-setup.md)
