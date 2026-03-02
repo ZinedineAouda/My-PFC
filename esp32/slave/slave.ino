@@ -365,9 +365,11 @@ bool registerWithMaster() {
   if (WiFi.status() != WL_CONNECTED) return false;
 
   HTTPClient http;
+  http.setReuse(false); // Disable keep-alive
   String url = String(masterURL) + "/api/register";
   http.begin(wifiClient, url);
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("Connection", "close");
   http.setTimeout(5000);
 
   JsonDocument doc;
@@ -390,12 +392,14 @@ bool registerWithMaster() {
       Serial.println("Registered!");
       ledBlink(3, 100, 100);
       http.end();
+      wifiClient.stop();
       return true;
     }
   } else {
     Serial.printf("Reg fail HTTP: %d\n", httpCode);
   }
   http.end();
+  wifiClient.stop();
   return false;
 }
 
@@ -406,9 +410,11 @@ void sendAlert() {
   }
 
   HTTPClient http;
+  http.setReuse(false); // Disable keep-alive
   String url = String(masterURL) + "/api/alert";
   http.begin(wifiClient, url);
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("Connection", "close");
   http.setTimeout(5000);
 
   JsonDocument doc;
@@ -440,6 +446,7 @@ void sendAlert() {
     ledBlink(5, 50, 50);
   }
   http.end();
+  wifiClient.stop();
 }
 
 void ICACHE_RAM_ATTR buttonISR() {
