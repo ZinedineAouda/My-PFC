@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
+import cors from "cors";
 import { storage } from "./storage";
 import { insertSlaveSchema, updateSlaveSchema, approveSlaveSchema, alertRequestSchema, registerRequestSchema, setupSchema, connectWifiSchema } from "@shared/schema";
 
@@ -48,7 +49,12 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // No CORS needed — frontend and backend are served from the same Railway URL (same origin).
+  // Allow the ESP32 to hit the API routes without CORS blocking it.
+  app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-device-key"]
+  }));
 
   const isProduction = process.env.NODE_ENV === "production";
 
