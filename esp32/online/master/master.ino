@@ -11,7 +11,8 @@
 const String serverURL = "https://my-pfc-production.up.railway.app/";
 const String deviceKey = "esp32";
 unsigned long lastHeartbeat = 0;
-const unsigned long HEARTBEAT_INTERVAL = 10000;
+bool cloudBusy = false;                        // Prevents overlapping HTTPS calls
+const unsigned long HEARTBEAT_INTERVAL = 15000; // 15s is safe for a full SSL roundtrip
 // -------------------------------------------------
 
 char apSSID[64] = "HospitalAlarm";
@@ -555,7 +556,9 @@ setInterval(() => {if($('admin-page').style.display!=='none')loadDevices()},3000
 
 void forwardToCloud(String endpoint, String payload) {
   if (wifiMode != 4 || WiFi.status() != WL_CONNECTED) return;
-  
+  if (cloudBusy) { Serial.println("[Cloud] Skipped - previous request still running"); return; }
+  cloudBusy = true;
+
   String url = serverURL;
   if (url.endsWith("/") && endpoint.startsWith("/")) {
     url = url.substring(0, url.length() - 1) + endpoint;
@@ -566,15 +569,16 @@ void forwardToCloud(String endpoint, String payload) {
   }
 
   WiFiClientSecure client;
-  client.setInsecure(); // Disable SSL certificate verification
+  client.setInsecure();
+  client.setTimeout(12); // 12 seconds TCP timeout
 
   HTTPClient http;
-  http.setReuse(false); // Disable keep-alive to avoid connection refused on reused sockets
-  http.setTimeout(10000); // Set 10s timeout to prevent hanging connections
+  http.setReuse(false);
+  http.setTimeout(10000);
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("x-device-key", deviceKey);
-  http.addHeader("Connection", "close"); // Force close HTTP connection from server side
+  http.addHeader("Connection", "close");
   int httpCode = http.POST(payload);
   if (httpCode > 0) {
     Serial.printf("[Cloud] %s -> HTTP %d\n", endpoint.c_str(), httpCode);
@@ -582,7 +586,8 @@ void forwardToCloud(String endpoint, String payload) {
     Serial.printf("[Cloud] %s -> Error: %s\n", endpoint.c_str(), http.errorToString(httpCode).c_str());
   }
   http.end();
-  client.stop(); // Force close the client connection after use
+  client.stop();
+  cloudBusy = false;
 }
 
 void setupRoutes() {
