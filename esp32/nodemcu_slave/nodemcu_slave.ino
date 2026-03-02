@@ -1,23 +1,15 @@
 /*
  * Hospital Alarm System - Slave Device
- * Target: NodeMCU ESP8266 (e.g. NodeMCU v3 ESP8266)
+ * Target: NodeMCU ESP8266 (ESP-12E)
  *
  * Board in Arduino IDE: "NodeMCU 1.0 (ESP-12E Module)"
- *   Flash Size: 4MB
- *   CPU Frequency: 80 MHz
- *   Upload Speed: 115200
  *
- * NodeMCU available pins (example assignments):
- *   D1 (GPIO5) = Call button (active LOW, has internal pull-up)
- *           Wire button between D1 and GND
- *   D2 (GPIO4) = External LED (active HIGH or LOW depending on wiring)
- *           Wire LED to D2
- *
- * Wiring:
- *   3V3  -> 3.3V power (or plug via USB)
- *   GND  -> GND
- *   D1 (GPIO5) -> Push button -> GND (patient call button)
- *   D2 (GPIO4) -> LED -> Resistor -> GND (status indicator)
+ * Wiring (NodeMCU):
+ *   D1 (GPIO5)  -> Call Button -> GND (Patient Call Button)
+ *   D2 (GPIO4)  -> Cancel Button -> GND (Optional local cancel)
+ *   D5 (GPIO14) -> External LED -> Resistor -> GND
+ *   D6 (GPIO12) -> Buzzer -> GND
+ *   Built-in LED is also used for status indication
  *
  * Libraries required:
  *   - ArduinoJson (v7.x)
@@ -33,15 +25,20 @@
 #include <ESPAsyncTCP.h>
 #include <WiFiUdp.h>
 
-#define BUTTON_PIN     5  // D1 on NodeMCU (GPIO5)
-#define LED_PIN        4  // D2 on NodeMCU (GPIO4)
+#define BUTTON_PIN     D1
+#define BUZZER_PIN     D6
+#define EXT_LED_PIN    D5
+#define LED_PIN        LED_BUILTIN
+
 #define DEBOUNCE_MS    300
 #define REGISTER_INTERVAL_MS  10000
 #define HEARTBEAT_INTERVAL_MS 30000
 #define RECONNECT_INTERVAL_MS 5000
 
-#define LED_ON  HIGH      // Assuming external LED wired to GND
-#define LED_OFF LOW
+#define LED_ON  LOW
+#define LED_OFF HIGH
+#define EXT_LED_ON HIGH
+#define EXT_LED_OFF LOW
 
 char slaveId[32] = "";
 char targetSSID[64] = "";
@@ -82,8 +79,10 @@ String getApName() {
 void ledBlink(int times, int onMs, int offMs) {
   for (int i = 0; i < times; i++) {
     digitalWrite(LED_PIN, LED_ON);
+    digitalWrite(EXT_LED_PIN, EXT_LED_ON);
     delay(onMs);
     digitalWrite(LED_PIN, LED_OFF);
+    digitalWrite(EXT_LED_PIN, EXT_LED_OFF);
     if (i < times - 1) delay(offMs);
   }
 }
@@ -141,7 +140,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135d
 <div class="progress"><div class="dot active" id="d1"></div><div class="dot" id="d2"></div><div class="dot" id="d3"></div></div>
 <div class="logo">
 <div class="logo-icon">&#128276;</div>
-<h1>NodeMCU Slave Setup</h1>
+<h1>ESP-01 Slave Setup</h1>
 <p>Patient Call Button</p>
 </div>
 <div class="step active" id="step1">
@@ -172,7 +171,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135d
 <p id="conn-info" style="color:#94a3b8;font-size:13px"></p>
 <p id="conn-ip" style="color:#6ee7b7;font-weight:600;font-size:14px;margin-top:4px"></p>
 <div class="status warn" style="margin-top:16px">&#9888; This device needs admin approval before alerts work. Ask admin to approve in the Admin Panel.</div>
-<p style="color:#94a3b8;font-size:12px;margin-top:16px">Press GPIO0 (D3) button to send alerts.</p>
+<p style="color:#94a3b8;font-size:12px;margin-top:16px">Press GPIO0 button to send alerts.</p>
 </div>
 </div>
 </div>
@@ -231,7 +230,7 @@ h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,#6ee7b7,#34d
 <div class="card">
 <div class="header">
 <div class="icon" id="main-icon">&#128276;</div>
-<h1>NodeMCU Slave</h1>
+<h1>ESP-01 Slave</h1>
 </div>
 <div class="info-grid" id="info"></div>
 <button class="btn-alert" id="alertBtn" onclick="sendAlert()">&#128680; Send Alert</button>
@@ -360,9 +359,11 @@ bool registerWithMaster() {
   if (WiFi.status() != WL_CONNECTED) return false;
 
   HTTPClient http;
+  http.setReuse(false); // Disable keep-alive
   String url = String(masterURL) + "/api/register";
   http.begin(wifiClient, url);
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("Connection", "close");
   http.setTimeout(5000);
 
   JsonDocument doc;
@@ -385,12 +386,14 @@ bool registerWithMaster() {
       Serial.println("Registered!");
       ledBlink(3, 100, 100);
       http.end();
+      wifiClient.stop();
       return true;
     }
   } else {
     Serial.printf("Reg fail HTTP: %d\n", httpCode);
   }
   http.end();
+  wifiClient.stop();
   return false;
 }
 
@@ -401,9 +404,11 @@ void sendAlert() {
   }
 
   HTTPClient http;
+  http.setReuse(false); // Disable keep-alive
   String url = String(masterURL) + "/api/alert";
   http.begin(wifiClient, url);
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("Connection", "close");
   http.setTimeout(5000);
 
   JsonDocument doc;
@@ -424,6 +429,8 @@ void sendAlert() {
       alertPending = true;
       alertSentTime = millis();
       digitalWrite(LED_PIN, LED_ON);
+      digitalWrite(EXT_LED_PIN, EXT_LED_ON);
+      digitalWrite(BUZZER_PIN, HIGH);
     } else {
       String reason = respDoc["reason"] | "unknown";
       Serial.print("Rejected: ");
@@ -435,6 +442,7 @@ void sendAlert() {
     ledBlink(5, 50, 50);
   }
   http.end();
+  wifiClient.stop();
 }
 
 void ICACHE_RAM_ATTR buttonISR() {
@@ -452,7 +460,12 @@ void setup() {
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
+  pinMode(EXT_LED_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  
   digitalWrite(LED_PIN, LED_OFF);
+  digitalWrite(EXT_LED_PIN, EXT_LED_OFF);
+  digitalWrite(BUZZER_PIN, LOW);
 
   generateSlaveId();
   Serial.print("ID: ");
@@ -587,6 +600,19 @@ void loop() {
   if (alertPending && millis() - alertSentTime > 30000) {
     alertPending = false;
     digitalWrite(LED_PIN, LED_OFF);
+    digitalWrite(EXT_LED_PIN, EXT_LED_OFF);
+    digitalWrite(BUZZER_PIN, LOW);
+  }
+
+  if (alertPending) {
+    // Pulse external LED and buzzer when alert is active
+    if ((millis() % 1000) < 500) {
+      digitalWrite(EXT_LED_PIN, EXT_LED_ON);
+      digitalWrite(BUZZER_PIN, HIGH);
+    } else {
+      digitalWrite(EXT_LED_PIN, EXT_LED_OFF);
+      digitalWrite(BUZZER_PIN, LOW);
+    }
   }
 
   if (buttonPressed) {
