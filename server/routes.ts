@@ -63,9 +63,10 @@ export async function registerRoutes(
       secret: process.env.SESSION_SECRET || "hospital-alarm-secret-key",
       resave: false,
       saveUninitialized: false,
+      proxy: true,
       cookie: {
-        secure: isProduction,
-        sameSite: isProduction ? "none" : "lax",
+        secure: false, // Railway handles HTTPS, cookie works fine without secure flag if on same origin
+        sameSite: "lax",
         maxAge: 24 * 60 * 60 * 1000,
       },
     })
@@ -75,7 +76,11 @@ export async function registerRoutes(
     const { username, password } = req.body;
     if (username === "admin" && password === "admin1234") {
       req.session.isAdmin = true;
-      return res.json({ success: true, message: "Logged in" });
+      req.session.save((err) => {
+        if (err) console.error("Session save error:", err);
+        res.json({ success: true, message: "Logged in" });
+      });
+      return;
     }
     return res.status(401).json({ message: "Invalid credentials" });
   });
