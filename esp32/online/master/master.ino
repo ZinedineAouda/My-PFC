@@ -1,4 +1,4 @@
-#include <WiFi.h>
+﻿#include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -569,6 +569,7 @@ void forwardToCloud(String endpoint, String payload) {
   client.setInsecure(); // Disable SSL certificate verification
 
   HTTPClient http;
+  http.setTimeout(10000); // Set 10s timeout to prevent hanging connections
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("x-device-key", deviceKey);
@@ -579,6 +580,7 @@ void forwardToCloud(String endpoint, String payload) {
     Serial.printf("[Cloud] %s -> Error: %s\n", endpoint.c_str(), http.errorToString(httpCode).c_str());
   }
   http.end();
+  client.stop(); // Force close the client connection after use
 }
 
 void setupRoutes() {
