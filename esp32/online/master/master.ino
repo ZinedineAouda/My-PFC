@@ -289,6 +289,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135d
 <h3><span class="mode-icon">&#128260;</span> AP + STA Mode</h3>
 <p>Master creates AP for slaves AND connects to hospital Wi-Fi for online sync.</p>
 </div>
+<div class="mode-card" onclick="selectMode(4)" id="mode4">
+<h3><span class="mode-icon">&#127760;</span> Online + AP + STA Mode</h3>
+<p>Master creates AP for slaves, connects to internet Wi-Fi, and <strong>sends data directly to website</strong>. Internet required.</p>
+</div>
 </div>
 <button class="btn btn-primary" id="nextBtn" onclick="goStep2()" disabled>Continue</button>
 <button class="btn btn-secondary" onclick="showStep('stepServer')">Back</button>
@@ -308,6 +312,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135d
 <div class="step" id="stepAPSTA">
 <h2 style="font-size:16px;text-align:center;margin-bottom:4px">AP + STA Settings</h2>
 <p style="text-align:center;color:#94a3b8;font-size:13px;margin-bottom:16px">Configure AP for slaves, then connect to hospital Wi-Fi for internet</p>
+<div id="apsta-online-note" style="display:none;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;background:rgba(16,185,129,.1);color:#34d399;border:1px solid rgba(16,185,129,.3);text-align:center">&#127760; Online+AP+STA: Data will be sent directly to your hosted website. Internet required.</div>
 <div class="form-group">
 <label>AP Network Name (SSID)</label>
 <input type="text" id="apsta-ssid" placeholder="e.g. HospitalAlarm" value="HospitalAlarm">
@@ -343,14 +348,14 @@ var selectedMode=0,selectedSSID='',apstaSSID='';
 function selectMode(m){selectedMode=m;document.querySelectorAll('.mode-card').forEach(function(c){c.classList.remove('selected')});document.getElementById('mode'+m).classList.add('selected');document.getElementById('nextBtn').disabled=false;}
 function showStep(id){document.querySelectorAll('.step').forEach(function(s){s.classList.remove('active')});document.getElementById(id).classList.add('active');}
 function testServer(){var url=document.getElementById('srv-url').value.trim();var key=document.getElementById('srv-key').value.trim();if(!url){document.getElementById('srv-status').innerHTML='<div class="status-msg error">Enter server URL</div>';return;}if(!key){document.getElementById('srv-status').innerHTML='<div class="status-msg error">Enter device API key</div>';return;}document.getElementById('srv-status').innerHTML='<div class="status-msg info">Saving server config...</div>';fetch('/api/server-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,key:key})}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('srv-status').innerHTML='<div class="status-msg success">Server config saved!</div>';document.getElementById('d1').classList.remove('active');document.getElementById('d1').classList.add('done');document.getElementById('d2').classList.add('active');setTimeout(function(){showStep('step1');},800);}else{document.getElementById('srv-status').innerHTML='<div class="status-msg error">Error: '+(d.message||'Failed')+'</div>';}}).catch(function(){document.getElementById('srv-status').innerHTML='<div class="status-msg error">Could not save config</div>';});}
-function goStep2(){document.getElementById('d2').classList.remove('active');document.getElementById('d2').classList.add('done');document.getElementById('d3').classList.add('active');if(selectedMode===3){showStep('stepAPSTA');scanApSta();return;}showStep('step2');scanWifi();}
-function scanWifi(){document.getElementById('scan-area').innerHTML='<div class="scanning"><div class="spinner"></div><br>Scanning...</div>';fetch('/api/scan').then(function(r){return r.json()}).then(function(nets){if(nets.length===0){document.getElementById('scan-area').innerHTML='<div class="scanning">No networks found.</div>';return;}var html='<div class="wifi-list">';nets.forEach(function(n){var bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';html+='<div class="wifi-item" onclick="pickWifi(this,\''+n.ssid+'\')"><span class="wifi-name">'+n.ssid+'</span><span class="wifi-signal">'+bars+'</span></div>';});html+='</div>';document.getElementById('scan-area').innerHTML=html;}).catch(function(){document.getElementById('scan-area').innerHTML='<div class="scanning">Scan failed.</div>';});}
+function goStep2(){document.getElementById('d2').classList.remove('active');document.getElementById('d2').classList.add('done');document.getElementById('d3').classList.add('active');if(selectedMode===3||selectedMode===4){showStep('stepAPSTA');scanApSta();if(selectedMode===4){document.getElementById('apsta-online-note').style.display='block';}else{document.getElementById('apsta-online-note').style.display='none';}return;}showStep('step2');scanWifi();}
+function scanWifi(){document.getElementById('scan-area').innerHTML='<div class="scanning"><div class="spinner"></div><br>Scanning...</div>';fetch('/api/scan').then(function(r){return r.json()}).then(function(nets){if(nets.length===0){document.getElementById('scan-area').innerHTML='<div class="scanning">No networks found.</div>';return;}var html='<div class="wifi-list">';nets.forEach(function(n){var bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';html+='<div class="wifi-item" onclick="pickWifi(this,\''+n.ssid+'\')">'+'<span class="wifi-name">'+n.ssid+'</span><span class="wifi-signal">'+bars+'</span></div>';});html+='</div>';document.getElementById('scan-area').innerHTML=html;}).catch(function(){document.getElementById('scan-area').innerHTML='<div class="scanning">Scan failed.</div>';});}
 function pickWifi(el,ssid){selectedSSID=ssid;document.querySelectorAll('#step2 .wifi-item').forEach(function(i){i.classList.remove('selected')});el.classList.add('selected');document.getElementById('connectBtn').disabled=false;}
 function connectWifi(){var pass=document.getElementById('wifi-pass').value;document.getElementById('connectBtn').disabled=true;document.getElementById('connectBtn').textContent='Connecting...';document.getElementById('wifi-status').innerHTML='<div class="status-msg info">Connecting to '+selectedSSID+'...</div>';fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selectedSSID,password:pass})}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('wifi-status').innerHTML='<div class="status-msg success">Connected! IP: '+d.ip+'</div>';setTimeout(function(){applyMode(d.ip)},1500);}else{document.getElementById('wifi-status').innerHTML='<div class="status-msg error">Failed: '+d.message+'</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect';}}).catch(function(){document.getElementById('wifi-status').innerHTML='<div class="status-msg error">Connection error</div>';document.getElementById('connectBtn').disabled=false;document.getElementById('connectBtn').textContent='Connect';});}
-function applyMode(staIP){fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:selectedMode})}).then(function(r){return r.json()}).then(function(d){showStep('step3');document.getElementById('d3').classList.remove('active');document.getElementById('d3').classList.add('done');document.getElementById('d4').classList.add('active');var modes=['','AP Mode','STA Mode','AP + STA Mode'];document.getElementById('setup-info').textContent='Mode: '+modes[selectedMode];document.getElementById('setup-ip').textContent='Network IP: '+staIP;}).catch(function(){});}
-function scanApSta(){document.getElementById('apsta-scan-area').innerHTML='<div class="scanning"><div class="spinner"></div><br>Scanning...</div>';fetch('/api/scan').then(function(r){return r.json()}).then(function(nets){if(nets.length===0){document.getElementById('apsta-scan-area').innerHTML='<div class="scanning">No networks found.</div>';return;}var html='<div class="wifi-list">';nets.forEach(function(n){var bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';html+='<div class="wifi-item" onclick="pickApStaWifi(this,\''+n.ssid+'\')"><span class="wifi-name">'+n.ssid+'</span><span class="wifi-signal">'+bars+'</span></div>';});html+='</div>';document.getElementById('apsta-scan-area').innerHTML=html;}).catch(function(){document.getElementById('apsta-scan-area').innerHTML='<div class="scanning">Scan failed.</div>';});}
+function applyMode(staIP){fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:selectedMode})}).then(function(r){return r.json()}).then(function(d){showStep('step3');document.getElementById('d3').classList.remove('active');document.getElementById('d3').classList.add('done');document.getElementById('d4').classList.add('active');var modes=['','AP Mode','STA Mode','AP + STA Mode','Online + AP + STA'];document.getElementById('setup-info').textContent='Mode: '+modes[selectedMode];document.getElementById('setup-ip').textContent='Network IP: '+staIP;}).catch(function(){});}
+function scanApSta(){document.getElementById('apsta-scan-area').innerHTML='<div class="scanning"><div class="spinner"></div><br>Scanning...</div>';fetch('/api/scan').then(function(r){return r.json()}).then(function(nets){if(nets.length===0){document.getElementById('apsta-scan-area').innerHTML='<div class="scanning">No networks found.</div>';return;}var html='<div class="wifi-list">';nets.forEach(function(n){var bars=n.rssi>-50?'&#9679;&#9679;&#9679;&#9679;':n.rssi>-65?'&#9679;&#9679;&#9679;&#9675;':n.rssi>-75?'&#9679;&#9679;&#9675;&#9675;':'&#9679;&#9675;&#9675;&#9675;';html+='<div class="wifi-item" onclick="pickApStaWifi(this,\''+n.ssid+'\')">'+'<span class="wifi-name">'+n.ssid+'</span><span class="wifi-signal">'+bars+'</span></div>';});html+='</div>';document.getElementById('apsta-scan-area').innerHTML=html;}).catch(function(){document.getElementById('apsta-scan-area').innerHTML='<div class="scanning">Scan failed.</div>';});}
 function pickApStaWifi(el,ssid){apstaSSID=ssid;document.querySelectorAll('#stepAPSTA .wifi-item').forEach(function(i){i.classList.remove('selected')});el.classList.add('selected');document.getElementById('apstaBtn').disabled=false;}
-function saveApStaSettings(){var ssid=document.getElementById('apsta-ssid').value.trim();var pass=document.getElementById('apsta-pass').value;var wifiPass=document.getElementById('apsta-wifi-pass').value;if(!ssid){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Enter AP network name</div>';return;}if(pass.length>0&&pass.length<8){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">AP password must be 8+ chars or empty</div>';return;}if(!apstaSSID){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Select a hospital network</div>';return;}document.getElementById('apstaBtn').disabled=true;document.getElementById('apstaBtn').textContent='Connecting...';document.getElementById('apsta-status').innerHTML='<div class="status-msg info">Connecting to '+apstaSSID+'...</div>';fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:apstaSSID,password:wifiPass})}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('apsta-status').innerHTML='<div class="status-msg success">Connected! IP: '+d.ip+'</div>';setTimeout(function(){fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:3,apSSID:ssid,apPass:pass})}).then(function(r){return r.json()}).then(function(){showStep('step3');document.getElementById('d3').classList.remove('active');document.getElementById('d3').classList.add('done');document.getElementById('d4').classList.add('active');document.getElementById('setup-info').textContent='Mode: AP+STA | AP: '+ssid;document.getElementById('setup-ip').textContent='AP: 192.168.4.1 | Network: '+d.ip;});},1500);}else{document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Failed: '+(d.message||'Error')+'</div>';document.getElementById('apstaBtn').disabled=false;document.getElementById('apstaBtn').textContent='Connect & Apply';}}).catch(function(){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Connection error</div>';document.getElementById('apstaBtn').disabled=false;document.getElementById('apstaBtn').textContent='Connect & Apply';});}
+function saveApStaSettings(){var ssid=document.getElementById('apsta-ssid').value.trim();var pass=document.getElementById('apsta-pass').value;var wifiPass=document.getElementById('apsta-wifi-pass').value;if(!ssid){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Enter AP network name</div>';return;}if(pass.length>0&&pass.length<8){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">AP password must be 8+ chars or empty</div>';return;}if(!apstaSSID){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Select a hospital network</div>';return;}document.getElementById('apstaBtn').disabled=true;document.getElementById('apstaBtn').textContent='Connecting...';document.getElementById('apsta-status').innerHTML='<div class="status-msg info">Connecting to '+apstaSSID+'...</div>';fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:apstaSSID,password:wifiPass})}).then(function(r){return r.json()}).then(function(d){if(d.success){document.getElementById('apsta-status').innerHTML='<div class="status-msg success">Connected! IP: '+d.ip+'</div>';setTimeout(function(){var modeLabel=selectedMode===4?'Online+AP+STA':'AP+STA';fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:selectedMode,apSSID:ssid,apPass:pass})}).then(function(r){return r.json()}).then(function(){showStep('step3');document.getElementById('d3').classList.remove('active');document.getElementById('d3').classList.add('done');document.getElementById('d4').classList.add('active');document.getElementById('setup-info').textContent='Mode: '+modeLabel+' | AP: '+ssid;document.getElementById('setup-ip').textContent='AP: 192.168.4.1 | Network: '+d.ip;});},1500);}else{document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Failed: '+(d.message||'Error')+'</div>';document.getElementById('apstaBtn').disabled=false;document.getElementById('apstaBtn').textContent='Connect & Apply';}}).catch(function(){document.getElementById('apsta-status').innerHTML='<div class="status-msg error">Connection error</div>';document.getElementById('apstaBtn').disabled=false;document.getElementById('apstaBtn').textContent='Connect & Apply';});}
 function finishSetup(){window.location.href='/status';}
 </script>
 </body>
@@ -406,7 +411,7 @@ h1{font-size:22px;text-align:center;margin-bottom:8px;background:linear-gradient
 <script>
 function refresh(){
   fetch('/api/status').then(function(r){return r.json()}).then(function(s){
-    var modes=['Not set','AP','STA','AP+STA'];
+    var modes=['Not set','AP','STA','AP+STA','Online+AP+STA'];
     var html='<div class="row"><span class="label">Mode</span><span class="value">'+modes[s.mode]+'</span></div>';
     html+='<div class="row"><span class="label">Master IP</span><span class="value">'+s.masterIP+'</span></div>';
     html+='<div class="row"><span class="label">Total Slaves</span><span class="value">'+s.slaves+'</span></div>';
@@ -565,9 +570,11 @@ void setupRoutes() {
       apPass[sizeof(apPass) - 1] = '\0';
       setupDone = true;
       if (wifiMode == 2) {
+        // STA only — disable AP, use hospital Wi-Fi
         WiFi.softAPdisconnect(true);
         WiFi.mode(WIFI_STA);
       } else if (wifiMode == 3) {
+        // AP+STA — slaves connect to AP, master uses hospital Wi-Fi for internet
         WiFi.mode(WIFI_AP_STA);
         WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
         delay(100);
@@ -576,6 +583,19 @@ void setupRoutes() {
         } else {
           WiFi.softAP(apSSID, NULL, 1, 0, 8);
         }
+      } else if (wifiMode == 4) {
+        // Online+AP+STA — same physical setup as AP+STA but explicitly for
+        // direct cloud forwarding. Slaves connect via AP, master sends data
+        // straight to the hosted website using the STA internet connection.
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
+        delay(100);
+        if (strlen(apPass) >= 8) {
+          WiFi.softAP(apSSID, apPass, 1, 0, 8);
+        } else {
+          WiFi.softAP(apSSID, NULL, 1, 0, 8);
+        }
+        Serial.println("[MODE 4] Online+AP+STA: Slaves connect via AP, data forwarded to hosted website.");
       }
       String resp = "{\"success\":true,\"mode\":" + String(wifiMode) + ",\"apSSID\":\"" + String(apSSID) + "\",\"staIP\":\"" + masterIP + "\"}";
       request->send(200, "application/json", resp);
@@ -787,11 +807,14 @@ void loop() {
   if (setupDone && millis() - lastBeacon > BEACON_INTERVAL) {
     String msg = "HOSPITAL_ALARM:" + masterIP;
     IPAddress broadcastIP;
-    if (wifiMode == 3) {
+    // Mode 3 (AP+STA) and Mode 4 (Online+AP+STA) both run an AP for slaves
+    if (wifiMode == 3 || wifiMode == 4) {
+      // Broadcast on AP subnet so slaves connected to our AP can discover master
       broadcastIP = IPAddress(192,168,4,255);
       beacon.beginPacket(broadcastIP, BEACON_PORT);
       beacon.write((uint8_t*)msg.c_str(), msg.length());
       beacon.endPacket();
+      // Also broadcast on hospital network if STA is connected
       broadcastIP = IPAddress(255,255,255,255);
     } else {
       broadcastIP = IPAddress(255,255,255,255);

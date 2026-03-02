@@ -26,9 +26,9 @@ esp32/
 
 ## Required Hardware
 - 1x ESP32-S3 Dev Module (Master)
-- 1+ ESP8266 ESP-01 or ESP-01S (Slaves - one per bed)
-- Push buttons (one per slave, wired GPIO0 to GND)
-- 3.3V power supply for each ESP-01 (NOT 5V!)
+- 1+ ESP8266 ESP-01 or ESP-01S **OR** NodeMCU ESP8266 (Slaves - one per bed)
+- Push buttons (one per slave)
+- 3.3V power supply/USB for each Slave device
 - Buzzer (optional, for master on GPIO 4)
 
 ## Required Arduino Libraries
@@ -39,7 +39,7 @@ Install via Arduino IDE Library Manager:
 2. **AsyncTCP** by me-no-dev
 3. **ArduinoJson** by Benoit Blanchon (v7+)
 
-### Slave (ESP8266 ESP-01)
+### Slave (ESP8266 ESP-01 or NodeMCU ESP8266)
 Install via Arduino IDE Library Manager:
 1. **ESPAsyncWebServer** (ESP8266 version) by me-no-dev
 2. **ESPAsyncTCP** by me-no-dev
@@ -55,12 +55,20 @@ Install via Arduino IDE Library Manager:
 - Upload
 
 ### 2. Flash Each Slave
+Choose the correct file based on your hardware:
+
+**For ESP-01 / ESP-01S:**
 - Open `slave/slave.ino` in Arduino IDE
 - Board: **Generic ESP8266 Module**
 - Flash Size: **1MB** (or 512KB for older ESP-01)
 - Upload Speed: **115200**
-- You need a USB-to-serial adapter (FTDI/CH340) to flash the ESP-01
-- To enter flash mode: hold GPIO0 LOW while powering on, then release
+- *Note:* You need a USB-to-serial adapter. Hold GPIO0 LOW while powering on to enter flash mode.
+
+**For NodeMCU ESP8266:**
+- Open `slave/nodemcu_slave.ino` in Arduino IDE
+- Board: **NodeMCU 1.0 (ESP-12E Module)**
+- Flash Size: **4MB**
+- Upload Speed: **115200**
 
 ### 3. Setup Master (Offline)
 1. Connect your phone/laptop to Wi-Fi **"HospitalAlarm"** (open, no password)
@@ -106,8 +114,16 @@ Install via Arduino IDE Library Manager:
 - Upload
 
 ### 3. Flash Each Slave
-- Same slave file for both versions — Open `slave/slave.ino`
+Choose the correct file based on your hardware:
+
+**For ESP-01 / ESP-01S:**
+- Open `slave/slave.ino`
 - Board: **Generic ESP8266 Module**, Flash Size: **1MB**
+- Upload
+
+**For NodeMCU ESP8266:**
+- Open `slave/nodemcu_slave.ino`
+- Board: **NodeMCU 1.0 (ESP-12E Module)**, Flash Size: **4MB**
 - Upload
 
 ### 4. Setup Master (Online)
@@ -159,7 +175,7 @@ Same as offline version — each slave creates "SlaveSetup-XXXX" Wi-Fi, configur
 
 ## Wiring
 
-### Slave (ESP8266 ESP-01)
+### Slave Option 1: ESP8266 ESP-01 / ESP-01S
 | Pin | Function | Notes |
 |-----|----------|-------|
 | GPIO 0 | Call Button | Wire push button between GPIO0 and GND. Must be HIGH (open) at boot! |
@@ -173,6 +189,18 @@ Same as offline version — each slave creates "SlaveSetup-XXXX" Wi-Fi, configur
 - Press the call button only after the device has booted (LED blinks twice)
 - ESP-01S has a blue LED on GPIO2 (active LOW); original ESP-01 may differ
 - No buzzer pin available on ESP-01 (only 2 GPIO pins)
+
+### Slave Option 2: NodeMCU ESP8266
+| Pin | Function | Notes |
+|-----|----------|-------|
+| D1 (GPIO5) | Call Button | Wire push button between D1 and GND. |
+| D2 (GPIO4) | External LED | Wire LED to D2 and GND (with a resistor) |
+| 3V3 / Vin | Power | Complete power setup via 3.3V/5V pin or use USB |
+| GND | Ground | Connect to GND |
+
+**Important NodeMCU notes:**
+- Unlike the ESP-01, the chosen D1 and D2 pins do not interfere with the boot process.
+- The button should trigger an active LOW signal when pressed (D1 to GND).
 
 ### Master (ESP32-S3)
 | Pin | Function | Notes |

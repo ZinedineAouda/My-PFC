@@ -1,0 +1,94 @@
+# Deploy Backend on Railway
+
+Railway hosts your Express server 24/7. It receives data from the ESP32 and serves the REST API to the frontend.
+
+---
+
+## Prerequisites
+
+- A [GitHub](https://github.com) account
+- Your project pushed to a GitHub repository
+- A [Railway](https://railway.app) account (free tier works)
+
+---
+
+## Step 1 — Push Code to GitHub
+
+If you haven't already:
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git push -u origin main
+```
+
+---
+
+## Step 2 — Create a Railway Project
+
+1. Go to [railway.app](https://railway.app) and sign in.
+2. Click **"New Project"**.
+3. Select **"Deploy from GitHub repo"**.
+4. Choose your repository from the list.
+5. Railway will detect the `Dockerfile` and start building automatically.
+
+---
+
+## Step 3 — Set Environment Variables
+
+In your Railway project, go to your service → **Variables** tab, and add:
+
+| Variable | Value | Notes |
+|---|---|---|
+| `SESSION_SECRET` | Any long random string | e.g. `openssl rand -hex 32` |
+| `DEVICE_API_KEY` | Any random string | Must match what you put in the ESP32 firmware |
+| `FRONTEND_URL` | *(set after Vercel deploy)* | Your Vercel URL, e.g. `https://your-app.vercel.app` |
+
+> **Note:** `FRONTEND_URL` is required for CORS. Set it after you have your Vercel URL (Step 2 of the Vercel guide).
+
+---
+
+## Step 4 — Get Your Railway URL
+
+1. In your Railway project, click your service.
+2. Go to **Settings** → **Networking**.
+3. Click **"Generate Domain"**.
+4. Copy the URL — it will look like `https://your-app.up.railway.app`.
+5. **Save this URL** — you'll need it for the Vercel setup AND the ESP32.
+
+---
+
+## Step 5 — Verify the Backend
+
+Once deployed, test with:
+
+```bash
+# Check server is running
+curl https://YOUR-RAILWAY-URL/api/status
+
+# Expected response:
+# {"mode":0,"setup":false,"masterIP":"localhost","slaves":0}
+```
+
+If you get a JSON response, the backend is working.
+
+---
+
+## Step 6 — Test Device Registration
+
+```bash
+curl -X POST https://YOUR-RAILWAY-URL/api/register \
+  -H "Content-Type: application/json" \
+  -H "X-Device-Key: YOUR_DEVICE_API_KEY" \
+  -d '{"slaveId": "test-device"}'
+
+# Expected: {"success":true,"message":"Pending approval"}
+```
+
+---
+
+## Next Step
+
+→ [Deploy Frontend on Vercel](./vercel.md)
