@@ -569,10 +569,12 @@ void forwardToCloud(String endpoint, String payload) {
   client.setInsecure(); // Disable SSL certificate verification
 
   HTTPClient http;
+  http.setReuse(false); // Disable keep-alive to avoid connection refused on reused sockets
   http.setTimeout(10000); // Set 10s timeout to prevent hanging connections
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("x-device-key", deviceKey);
+  http.addHeader("Connection", "close"); // Force close HTTP connection from server side
   int httpCode = http.POST(payload);
   if (httpCode > 0) {
     Serial.printf("[Cloud] %s -> HTTP %d\n", endpoint.c_str(), httpCode);
