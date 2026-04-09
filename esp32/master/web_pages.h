@@ -190,7 +190,8 @@ body { font-family:'Outfit', sans-serif; background:#0f172a; color:var(--slate-2
 </div>
 
 <script>
-const authHeader = 'Basic YWRtaW46YWRtaW4xMjM0';
+const authHeader = 'admin1234';
+const authType = 'X-Auth-Token';
 function selectMode(m) {
   selMode=m;
   document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
@@ -246,7 +247,7 @@ function doConnect() {
 function finishSetup() {
   fetch('/api/setup', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+    headers: { 'Content-Type': 'application/json', [authType]: authHeader },
     body: JSON.stringify({ mode: selMode })
   }).then(() => {
     document.getElementById('finish-info').textContent = 'System is ready in mode ' + selMode;
@@ -454,7 +455,7 @@ function submitModal() {
   const r = document.getElementById('m-room').value;
   fetch('/api/approve/' + editId, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+    headers: { 'Content-Type': 'application/json', [authType]: authHeader },
     body: JSON.stringify({ patientName: n, bed: b, room: r })
   }).then(r => {
     if(!r.ok) alert('Auth Failed');
@@ -466,7 +467,7 @@ function delDev(id) {
   if(confirm('Delete ' + id + '?')) {
     fetch('/api/slaves/' + id, {
       method:'DELETE',
-      headers: { 'Authorization': authHeader }
+      headers: { [authType]: authHeader }
     }).then(() => setTimeout(refresh, 500)); 
   }
 }

@@ -146,6 +146,40 @@ export async function registerRoutes(
     return res.json(storage.getApprovedSlaves());
   });
 
+  // Master Sync Endpoint: The ESP32 calls this to sync its local state with the server
+  app.post("/api/master-sync", requireDeviceKey, (req: Request, res: Response) => {
+    storage.updateMasterHeartbeat();
+    const { slaves } = req.body; // Array of { slaveId, alertActive, ... }
+    
+    // 1. Process incoming data from Master (e.g. alerts triggered on Master AP mode)
+    if (Array.isArray(slaves)) {
+      slaves.forEach((s: any) => {
+        const local = storage.getSlave(s.slaveId);
+        if (local && local.approved) {
+          if (s.alertActive && !local.alertActive) {
+            storage.triggerAlert(s.slaveId);
+            broadcast({ type: "UPDATE", payload: storage.getSlave(s.slaveId) });
+          } else if (!s.alertActive && local.alertActive) {
+            storage.clearAlert(s.slaveId);
+            broadcast({ type: "UPDATE", payload: storage.getSlave(s.slaveId) });
+          }
+        } else if (!local) {
+          // Auto-register new slaves discovered by Master
+          storage.registerSlave(s.slaveId);
+          broadcast({ type: "REGISTER", payload: storage.getSlave(s.slaveId) });
+        }
+      });
+    }
+
+    // 2. Return the Full Source of Truth to the Master
+    // ESP32 will use this to update its local 'approved' and 'alertActive' flags
+    return res.json({
+      success: true,
+      mode: storage.getMode(),
+      slaves: storage.getAllSlaves()
+    });
+  });
+
   app.post("/api/register", requireDeviceKey, (req: Request, res: Response) => {
     const parsed = registerRequestSchema.safeParse(req.body);
     if (!parsed.success) {

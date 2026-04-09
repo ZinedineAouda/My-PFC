@@ -56,13 +56,30 @@ WiFiUDP beacon;
 unsigned long lastBeacon = 0;
 
 bool checkAdminAuth(AsyncWebServerRequest *request) {
-  if (!request->hasHeader("Authorization")) return false;
-  String authHeader = request->header("Authorization");
-  if (!authHeader.startsWith("Basic ")) return false;
-  String expected = "YWRtaW46YWRtaW4xMjM0";
-  String provided = authHeader.substring(6);
-  provided.trim();
-  return (provided == expected);
+  // Debug: Print all headers to Serial Monitor
+  int headersCount = request->headers();
+  for(int i=0; i<headersCount; i++) {
+    const AsyncWebHeader* h = request->getHeader(i);
+    Serial.printf("[DEBUG] Header %s: %s\n", h->name().c_str(), h->value().c_str());
+  }
+
+  // Use custom header to avoid browser-level Basic Auth interference
+  if (request->hasHeader("X-Auth-Token")) {
+    if (request->header("X-Auth-Token") == "admin1234") return true;
+  }
+  
+  // Fallback to legacy check
+  if (request->hasHeader("Authorization")) {
+    String authHeader = request->header("Authorization");
+    if (authHeader.startsWith("Basic ")) {
+      String provided = authHeader.substring(6);
+      provided.trim();
+      if (provided == "YWRtaW46YWRtaW4xMjM0") return true;
+    }
+  }
+
+  Serial.println("[AUTH] Rejecting request: Invalid or missing token");
+  return false;
 }
 
 void sendUnauthorized(AsyncWebServerRequest *request) {
@@ -106,40 +123,66 @@ String getSlavesJson(bool onlyApproved) {
   return output;
 }
 
-void forwardToCloud(String endpoint, String payload) {
+void syncToCloud() {
   if (wifiMode != 4 || WiFi.status() != WL_CONNECTED) return;
-  if (cloudBusy) { Serial.println("[Cloud] Skipped - previous request still running"); return; }
+  if (cloudBusy) return;
   cloudBusy = true;
-
-  String url = serverURL;
-  if (url.endsWith("/") && endpoint.startsWith("/")) {
-    url = url.substring(0, url.length() - 1) + endpoint;
-  } else if (!url.endsWith("/") && !endpoint.startsWith("/")) {
-    url = url + "/" + endpoint;
-  } else {
-    url = url + endpoint;
-  }
 
   WiFiClientSecure client;
   client.setInsecure();
-  client.setTimeout(12); // 12 seconds TCP timeout
-
   HTTPClient http;
-  http.setReuse(false);
-  http.setTimeout(10000);
-  http.begin(client, url);
+  http.begin(client, serverURL + "/api/master-sync");
   http.addHeader("Content-Type", "application/json");
   http.addHeader("x-device-key", deviceKey);
-  http.addHeader("Connection", "close");
+
+  JsonDocument sendDoc;
+  JsonArray arr = sendDoc["slaves"].to<JsonArray>();
+  for (int i = 0; i < MAX_SLAVES; i++) {
+    if (slaves[i].used) {
+      JsonObject obj = arr.add<JsonObject>();
+      obj["slaveId"] = slaves[i].slaveId;
+      obj["alertActive"] = slaves[i].alertActive;
+    }
+  }
+  String payload;
+  serializeJson(sendDoc, payload);
+
   int httpCode = http.POST(payload);
-  if (httpCode > 0) {
-    Serial.printf("[Cloud] %s -> HTTP %d\n", endpoint.c_str(), httpCode);
+  if (httpCode == 200) {
+    String response = http.getString();
+    JsonDocument recvDoc;
+    deserializeJson(recvDoc, response);
+    JsonArray remoteSlaves = recvDoc["slaves"];
+    for (JsonObject remote : remoteSlaves) {
+      const char* rid = remote["slaveId"];
+      int idx = findSlaveIndex(rid);
+      if (idx >= 0) {
+        slaves[idx].approved = remote["approved"] | false;
+        // If server says alert is inactive but we thought it was active
+        if (remote.containsKey("alertActive")) {
+          bool rAlert = remote["alertActive"] | false;
+          if (!rAlert && slaves[idx].alertActive) {
+            slaves[idx].alertActive = false;
+            Serial.printf("[CLOUD] Remote cleared alert for %s\n", rid);
+          }
+        }
+      } else {
+        // Slave on server but not here? Add it.
+        int slot = findFreeSlot();
+        if (slot >= 0) {
+          strncpy(slaves[slot].slaveId, rid, 31);
+          strncpy(slaves[slot].patientName, remote["patientName"] | "", 63);
+          slaves[slot].approved = remote["approved"] | false;
+          slaves[slot].used = true;
+          slaveCount++;
+        }
+      }
+    }
+    Serial.println("[CLOUD] Sync successful");
   } else {
-    Serial.printf("[Cloud] %s -> Error: %s\n", endpoint.c_str(), http.errorToString(httpCode).c_str());
+    Serial.printf("[CLOUD] Sync failed: %d\n", httpCode);
   }
   http.end();
-  client.stop();
-  Serial.printf("[CLOUD] HEARTBEAT Result: %d\n", httpCode);
   cloudBusy = false;
 }
 
@@ -493,32 +536,10 @@ void setup() {
 }
 
 void loop() {
-  if (wifiMode == 4 && WiFi.status() == WL_CONNECTED && !cloudBusy) {
-    if (pendingMasterPingCloud) {
-       pendingMasterPingCloud = false;
-       forwardToCloud("/api/master-ping", "{}");
-    } else {
-       for (int i = 0; i < MAX_SLAVES; i++) {
-         if (slaves[i].used) {
-           if (slaves[i].pendingRegisterCloud) {
-             slaves[i].pendingRegisterCloud = false;
-             forwardToCloud("/api/register", "{\"slaveId\":\"" + String(slaves[i].slaveId) + "\"}");
-             break;
-           }
-           if (slaves[i].pendingAlertCloud) {
-             slaves[i].pendingAlertCloud = false;
-             forwardToCloud("/api/alert", "{\"slaveId\":\"" + String(slaves[i].slaveId) + "\"}");
-             break;
-           }
-         }
-       }
-    }
-  }
-
   if (wifiMode == 4 && WiFi.status() == WL_CONNECTED) {
     if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL) {
-      pendingMasterPingCloud = true;
       lastHeartbeat = millis();
+      syncToCloud();
     }
   }
 

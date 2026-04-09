@@ -9,7 +9,7 @@ export interface IStorage {
   updateSlave(slaveId: string, data: UpdateSlave): Slave | undefined;
   deleteSlave(slaveId: string): boolean;
   registerSlave(slaveId: string): Slave;
-  triggerAlert(slaveId: string): { success: boolean; reason?: string };
+  triggerAlert(slaveId: string): { success: boolean; slave?: Slave; reason?: string };
   clearAlert(slaveId: string): boolean;
   getMode(): number;
   setMode(mode: number): void;
@@ -110,16 +110,16 @@ export class MemStorage implements IStorage {
     return slave;
   }
 
-  triggerAlert(slaveId: string): { success: boolean; reason?: string } {
+  triggerAlert(slaveId: string): { success: boolean; slave?: Slave; reason?: string } {
     const slave = this.slaves.get(slaveId);
     if (!slave) return { success: false, reason: "unknown slave" };
     if (!slave.approved) return { success: false, reason: "not approved" };
-    if (slave.alertActive) return { success: false, reason: "alert already active" };
+    if (slave.alertActive) return { success: false, slave, reason: "alert already active" };
     slave.alertActive = true;
     slave.lastAlertTime = new Date().toISOString();
     slave.lastSeen = Date.now();
     this.slaves.set(slaveId, slave);
-    return { success: true };
+    return { success: true, slave };
   }
 
   clearAlert(slaveId: string): boolean {
