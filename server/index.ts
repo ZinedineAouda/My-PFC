@@ -6,104 +6,50 @@ import { createServer } from "http";
 const app = express();
 app.set("trust proxy", 1);
 
-// EMERGENCY ROOT HEALTHCHECK - Must be at the very top for Railway/Deployment probes
+// --- EMERGENCY BOOTSTRAP HEALTHCHECK ---
+// This handles Railway probes immediately, even before the rest of the app boots.
 app.get("/health", (_req, res) => res.status(200).send("OK"));
 app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
 
 const httpServer = createServer(app);
 
-declare module "http" {
-  interface IncomingMessage {
-    rawBody: unknown;
-  }
-}
-
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
-
+app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
+    hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true,
   });
-
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
-    }
+(async () => {
+  const port = parseInt(process.env.PORT || "5000", 10);
+  
+  // START LISTENING IMMEDIATELY
+  // This satisfies Railway healthchecks immediately.
+  httpServer.listen(port, "0.0.0.0", () => {
+    log(`Server listening on port ${port} (0.0.0.0)`);
   });
 
-  next();
-});
+  try {
+    log("Initializing routes and static files...");
+    await registerRoutes(httpServer, app);
 
-(async () => {
-  await registerRoutes(httpServer, app);
+    if (process.env.NODE_ENV === "production") {
+      serveStatic(app);
+    } else {
+      const { setupVite } = await import("./vite");
+      await setupVite(httpServer, app);
+    }
+    log("App initialization complete.");
+  } catch (err) {
+    console.error("CRITICAL BOOT ERROR:", err);
+    // Still keep the server alive so we can see logs
+  }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    console.error("Internal Server Error:", err);
-
-    if (res.headersSent) {
-      return next(err);
-    }
-
-    return res.status(status).json({ message });
+    res.status(status).json({ message: err.message || "Internal Server Error" });
   });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
-    const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
-  }
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
 })();
