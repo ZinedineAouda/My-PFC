@@ -499,11 +499,12 @@ void setup() {
   digitalWrite(BUZZER_PIN, LOW);
   memset(slaves, 0, sizeof(slaves));
 
+  WiFi.persistent(false); // Prevents slow flash writes on every boot
+  WiFi.setSleep(false);   // Disables modem sleep for lowest AP latency
   WiFi.mode(WIFI_AP);
   WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
-  delay(100);
   WiFi.softAP(apSSID, NULL, 1, 0, 8);
-  delay(500);
+  // Disabled the heavy 500ms delay to make boot instantaneous
 
   Serial.print("AP IP: ");
   Serial.println(WiFi.softAPIP());

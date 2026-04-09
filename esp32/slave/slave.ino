@@ -142,6 +142,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
 
   // WiFi AP for Setup
+  WiFi.persistent(false);                 // Prevent flash degradation and speed up sequential boot/reconnects
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);     // Disable power saving to instantly receive UDP beacons/IP leases
   WiFi.mode(WIFI_AP);
   WiFi.softAP(String("Setup-" + slaveId).c_str());
 
@@ -212,6 +214,10 @@ void loop() {
       if (pkt.startsWith("HOSPITAL_ALARM:")) {
         String ip = pkt.substring(15);
         String newURL = "http://" + ip;
+        // Fix for Cloud Mode (4) where Master broadcasts its STA IP but we are on its AP
+        if (WiFi.gatewayIP().toString() == "192.168.4.1") {
+          newURL = "http://192.168.4.1";
+        }
         if (!masterDiscovered || masterURL != newURL) {
           masterURL = newURL;
           masterDiscovered = true;
@@ -221,12 +227,12 @@ void loop() {
       }
     }
 
-    // Fallback: if no beacon received in 30s, try the default AP IP
+    // Fallback: if no beacon received in 10s, try the default AP IP
     static unsigned long beaconWaitStart = 0;
     if (!masterDiscovered) {
       if (beaconWaitStart == 0) beaconWaitStart = millis();
-      if (millis() - beaconWaitStart > 30000) {
-        Serial.println("[FALLBACK] No beacon found. Trying 192.168.4.1...");
+      if (millis() - beaconWaitStart > 10000) {
+        Serial.println("[FALLBACK] No beacon found in 10s. Trying 192.168.4.1...");
         masterURL = "http://192.168.4.1";
         masterDiscovered = true;
         doRegister();

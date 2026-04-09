@@ -250,8 +250,9 @@ function finishSetup() {
     headers: { 'Content-Type': 'application/json', [authType]: authHeader },
     body: JSON.stringify({ mode: selMode })
   }).then(() => {
-    document.getElementById('finish-info').textContent = 'System is ready in mode ' + selMode;
+    document.getElementById('finish-info').textContent = 'Redirecting to Dashboard...';
     showStep('stepFinish');
+    setTimeout(() => { window.location.href = '/'; }, 1500);
   });
 }
 </script>
@@ -259,100 +260,205 @@ function finishSetup() {
 </html>
 )rawliteral";
 
-// --- DASHBOARD PAGE ---
 const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard - Hospital Alarm</title>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+<title>Unified Dashboard - Hospital Alarm</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root { --bg: #0f172a; --card-bg: rgba(30, 41, 59, 0.6); --primary: #3b82f6; --crimson: #ef4444; --emerald: #10b981; --slate-400: #94a3b8; --slate-200: #e2e8f0; --glass-border: rgba(255, 255, 255, 0.1); }
+:root { --bg: #020617; --card-bg: rgba(15, 23, 42, 0.6); --primary: #10b981; --crimson: #ef4444; --slate-400: #94a3b8; --slate-200: #e2e8f0; --glass: rgba(255,255,255,0.05); }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'Outfit', sans-serif; background:#0f172a; color:var(--slate-200); min-height:100vh; overflow-x:hidden; }
-header { padding: 20px 40px; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px); border-bottom: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
-.logo { display:flex; align-items:center; gap:12px; }
-.logo-icon { width:36px; height:36px; background:linear-gradient(135deg, var(--primary), #8b5cf6); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; }
-.logo h1 { font-size:18px; font-weight:700; }
-.stats { display:flex; gap:15px; }
-.stat-item { background:rgba(255,255,255,0.05); padding:6px 14px; border-radius:20px; font-size:12px; font-weight:600; border:1px solid var(--glass-border); }
-.stat-item.alert { background:rgba(239,68,68,0.1); color:var(--crimson); border-color:rgba(239,68,68,0.2); animation: pulse 2s infinite; }
-@keyframes pulse { 0%, 100% { opacity:1; } 50% { opacity:0.6; } }
-main { padding: 40px; max-width: 1400px; margin: 0 auto; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
-.card { background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; padding: 24px; transition: all 0.3s; position: relative; overflow: hidden; }
-.card:hover { transform: translateY(-5px); border-color: var(--primary); }
-.card.alerting { border-color: var(--crimson); background: rgba(239, 68, 68, 0.05); animation: alertGlow 2s infinite; }
-@keyframes alertGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } 50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); } }
-.card-header { display: flex; justify-content: space-between; margin-bottom: 20px; }
-.p-name { font-size: 20px; font-weight: 700; color: white; }
-.p-id { font-size: 12px; color: var(--slate-400); font-family: monospace; }
-.status-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-.badge-alert { background: var(--crimson); color: white; box-shadow: 0 4px 10px var(--crimson); }
-.badge-online { background: rgba(16, 185, 129, 0.1); color: var(--emerald); border: 1px solid rgba(16, 185, 129, 0.2); }
-.info-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 15px; }
-.info-box { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 12px; }
-.info-label { font-size: 10px; color: var(--slate-400); text-transform: uppercase; letter-spacing: 0.5px; }
-.info-value { font-size: 16px; font-weight: 600; margin-top: 2px; }
-.card-footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--glass-border); font-size: 11px; color: var(--slate-400); display: flex; align-items: center; gap: 8px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--slate-400); }
-.dot.online { background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
-.nav-btn { color: var(--slate-200); text-decoration: none; font-size: 13px; padding: 8px 16px; border-radius: 10px; background: rgba(255,255,255,0.05); }
-.nav-btn:hover { background: rgba(255,255,255,0.1); }
+body { font-family:'Outfit', sans-serif; background:var(--bg); color:var(--slate-200); min-height:100vh; display:flex; flex-direction:column; }
+header { background:rgba(2, 6, 23, 0.8); backdrop-filter:blur(12px); border-bottom:1px solid var(--glass); padding:20px 40px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:100; }
+.logo-area { display:flex; align-items:center; gap:12px; }
+.logo-icon { width:40px; height:40px; background:linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; box-shadow:0 10px 20px rgba(59,130,246,0.3); }
+.logo-text h1 { font-size:18px; font-weight:700; color:white; }
+.logo-text p { font-size:12px; color:var(--slate-400); text-transform:uppercase; letter-spacing:1px; }
+
+main { padding:40px; flex:1; max-width:1400px; margin:0 auto; width:100%; display:flex; flex-direction:column; gap:40px; }
+.section-title { font-size:14px; font-weight:600; color:var(--slate-400); display:flex; align-items:center; gap:10px; margin-bottom:20px; text-transform:uppercase; letter-spacing:1px; }
+
+.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:24px; }
+
+/* Dashboard Card matching React */
+.card { background:var(--card-bg); border:1px solid var(--glass); border-radius:24px; padding:24px; position:relative; overflow:hidden; transition:all 0.3s; backdrop-filter:blur(12px); }
+.card:hover { border-color:rgba(16,185,129,0.3); transform:translateY(-4px); }
+.card.alerting { border-color:var(--crimson); background:rgba(239, 68, 68, 0.05); }
+.card.alerting::before { content:''; position:absolute; inset:0; background:rgba(239,68,68,0.1); animation:pulse 2s infinite; pointer-events:none; }
+@keyframes pulse { 0%, 100% { opacity:0.3; } 50% { opacity:1; } }
+
+.c-head { display:flex; justify-content:space-between; margin-bottom:24px; }
+.c-title { font-size:20px; font-weight:700; color:white; line-height:1.2; }
+.c-id { font-size:12px; color:var(--slate-400); margin-top:4px; display:flex; align-items:center; gap:4px; }
+.c-icon { width:56px; height:56px; border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:24px; transition:0.4s; }
+.card.online .c-icon { background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.2); }
+.card.offline .c-icon { background:var(--glass); border:1px solid var(--glass); opacity:0.5; }
+.card.alerting .c-icon { background:var(--crimson); box-shadow:0 10px 20px rgba(239,68,68,0.4); transform:scale(1.1); animation:bounce 2s infinite; }
+@keyframes bounce { 0%, 100% { transform:translateY(0) scale(1.1); } 50% { transform:translateY(-5px) scale(1.1); } }
+
+.c-stats { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.c-box { background:rgba(255,255,255,0.03); border:1px solid var(--glass); border-radius:12px; padding:12px; }
+.c-box-label { font-size:12px; color:var(--slate-400); margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+.c-box-val { font-size:16px; font-weight:700; color:white; }
+
+.c-foot { margin-top:20px; padding-top:16px; border-top:1px solid var(--glass); display:flex; justify-content:space-between; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--slate-400); }
+.c-foot-left { display:flex; align-items:center; gap:8px; }
+.dot { width:8px; height:8px; border-radius:50%; background:var(--slate-400); }
+.card.online .dot { background:var(--primary); box-shadow:0 0 10px var(--primary); }
+.card.alerting .dot { background:var(--crimson); box-shadow:0 0 10px var(--crimson); }
+
+/* Admin Pending Card */
+.pending-card { background:rgba(245, 158, 11, 0.05); border:1px dashed rgba(245, 158, 11, 0.3); border-radius:16px; padding:20px; display:flex; justify-content:space-between; align-items:center; }
+.p-id { font-family:monospace; font-size:16px; font-weight:600; color:#f59e0b; }
+.p-desc { font-size:13px; color:var(--slate-400); margin-top:4px; }
+.btn { padding:10px 20px; border-radius:10px; border:none; font-weight:600; cursor:pointer; color:white; transition:0.2s; }
+.btn:hover { transform:translateY(-2px); }
+.btn-approve { background:var(--primary); box-shadow:0 5px 15px rgba(16,185,129,0.3); }
+
+/* Modal */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(8px); z-index:999; display:none; align-items:center; justify-content:center; }
+.modal { background:var(--card-bg); border:1px solid var(--glass); border-radius:24px; padding:32px; width:100%; max-width:400px; box-shadow:0 25px 50px rgba(0,0,0,0.5); }
+.input { width:100%; padding:14px; background:rgba(0,0,0,0.3); border:1px solid var(--glass); border-radius:12px; color:white; margin-bottom:16px; outline:none; font-family:inherit; }
+.input:focus { border-color:#3b82f6; }
+label { display:block; font-size:12px; color:var(--slate-400); margin-bottom:6px; font-weight:500; }
 </style>
 </head>
 <body>
+
 <header>
-  <div class="logo">
+  <div class="logo-area">
     <div class="logo-icon">&#128276;</div>
-    <h1>Hospital Alarm</h1>
+    <div class="logo-text">
+      <h1>Station Dashboard</h1>
+      <p>Local Operating Mode</p>
+    </div>
   </div>
-  <div class="stats" id="head-stats"></div>
-  <div style="display:flex; gap:10px;">
-    <a href="/admin" class="nav-btn">Admin Panel</a>
-    <a href="/setup" class="nav-btn">Setup</a>
+  <div>
+    <button class="btn" style="background:rgba(255,255,255,0.1);" onclick="location.href='/setup'">Configure AP</button>
   </div>
 </header>
+
 <main>
-  <div class="grid" id="slave-grid"></div>
+  <div id="admin-panel" style="display:none;">
+    <div class="section-title"><span style="color:#f59e0b;">&#9888;</span> Action Required</div>
+    <div id="pending-grid" style="display:flex; flex-direction:column; gap:12px;"></div>
+  </div>
+
+  <div>
+    <div class="section-title">&#128187; Active Monitoring Units</div>
+    <div class="grid" id="slave-grid"></div>
+  </div>
 </main>
+
+<div class="modal-overlay" id="approval-modal">
+  <div class="modal">
+    <h2 style="margin-bottom:24px; font-weight:700;">Approve Device</h2>
+    <label>Patient/Device Name</label>
+    <input type="text" id="m-name" class="input" placeholder="e.g. John Doe">
+    <div style="display:flex; gap:15px;">
+      <div style="flex:1;"><label>Bed</label><input type="text" id="m-bed" class="input" placeholder="e.g. B-12"></div>
+      <div style="flex:1;"><label>Room</label><input type="text" id="m-room" class="input" placeholder="e.g. ICU"></div>
+    </div>
+    <div style="display:flex; gap:12px; margin-top:10px;">
+      <button class="btn btn-approve" style="flex:1;" onclick="submitApproval()">Approve & Join Mesh</button>
+      <button class="btn" style="background:rgba(255,255,255,0.1);" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
+let pendingApprovalId = null;
+const authHeader = 'Basic YWRtaW46YWRtaW4xMjM0';
+
 function refresh() {
-  fetch('/api/slaves?approved=1').then(r => r.json()).then(slaves => {
+  fetch('/api/slaves?all=1').then(r => r.json()).then(slaves => {
     const grid = document.getElementById('slave-grid');
-    const stats = document.getElementById('head-stats');
-    let alerts = slaves.filter(s => s.alertActive).length;
-    stats.innerHTML = `<div class="stat-item">${slaves.length} Units</div>
-                       <div class="stat-item ${alerts?'alert':''}">${alerts} Alerts</div>`;
+    const pendGrid = document.getElementById('pending-grid');
+    const adminPanel = document.getElementById('admin-panel');
     
-    let h = '';
+    let hActive = '';
+    let hPending = '';
+    let pendingCount = 0;
+
     slaves.forEach(s => {
-      h += `<div class="card ${s.alertActive?'alerting':''}">
-              <div class="card-header">
-                <div>
-                  <div class="p-name">${s.patientName || 'Emergency Unit'}</div>
-                  <div class="p-id">${s.slaveId}</div>
-                </div>
-                <div>
-                  ${s.alertActive ? '<span class="status-badge badge-alert">Alert</span>' : '<span class="status-badge badge-online">Monitoring</span>'}
-                </div>
-              </div>
-              <div class="info-row">
-                <div class="info-box"><div class="info-label">Bed</div><div class="info-value">${s.bed || '-'}</div></div>
-                <div class="info-box"><div class="info-label">Room</div><div class="info-value">${s.room || '-'}</div></div>
-              </div>
-              <div class="card-footer">
-                <div class="dot ${s.registered?'online':''}"></div>
-                ${s.registered ? 'Device Connected' : 'Last seen: ' + new Date(s.lastSeen).toLocaleTimeString()}
-              </div>
-            </div>`;
+      if (!s.approved) {
+        pendingCount++;
+        hPending += `<div class="pending-card">
+                       <div>
+                         <div class="p-id">${s.slaveId}</div>
+                         <div class="p-desc">Unknown device requesting mesh access</div>
+                       </div>
+                       <button class="btn btn-approve" onclick="openApproval('${s.slaveId}')">Approve Unit</button>
+                     </div>`;
+      } else {
+        const isOnline = s.registered;
+        const isAlert = s.alertActive;
+        const stateClass = isAlert ? 'alerting' : (isOnline ? 'online' : 'offline');
+        const icon = isAlert ? '&#128276;' : (isOnline ? '&#10084;' : '&#9888;');
+        const timeStr = s.lastAlertTime ? new Date(s.lastAlertTime).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : 'No Events';
+
+        hActive += `<div class="card ${stateClass}">
+                      <div class="c-head">
+                        <div>
+                          <div class="c-title">${s.patientName || 'Unnamed Unit'}</div>
+                          <div class="c-id">&#128274; ${s.slaveId}</div>
+                        </div>
+                        <div class="c-icon">${icon}</div>
+                      </div>
+                      <div class="c-stats">
+                        <div class="c-box"><div class="c-box-label">&#128716; Bed</div><div class="c-box-val">${s.bed || '-'}</div></div>
+                        <div class="c-box"><div class="c-box-label">&#128682; Room</div><div class="c-box-val">${s.room || '-'}</div></div>
+                      </div>
+                      <div class="c-foot">
+                        <div class="c-foot-left">
+                          <div class="dot"></div>
+                          ${isOnline ? 'SYSTEM STABLE' : 'LINK DOWN'}
+                        </div>
+                        <div>&#128336; ${timeStr}</div>
+                      </div>
+                    </div>`;
+      }
     });
-    grid.innerHTML = h || '<div style="grid-column: 1/-1; text-align:center; padding:100px; opacity:0.5;">No active units</div>';
+
+    if (pendingCount > 0) {
+      adminPanel.style.display = 'block';
+      pendGrid.innerHTML = hPending;
+    } else {
+      adminPanel.style.display = 'none';
+      pendGrid.innerHTML = '';
+    }
+
+    grid.innerHTML = hActive || '<div style="grid-column:1/-1; text-align:center; padding:100px; color:var(--slate-400);">No active units found. Connect a slave module to begin.</div>';
   });
 }
-refresh(); setInterval(refresh, 2000);
+
+function openApproval(id) {
+  pendingApprovalId = id;
+  document.getElementById('approval-modal').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('approval-modal').style.display = 'none';
+}
+function submitApproval() {
+  const n = document.getElementById('m-name').value;
+  const b = document.getElementById('m-bed').value;
+  const r = document.getElementById('m-room').value;
+  
+  fetch('/api/approve/' + pendingApprovalId, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Auth-Token': authHeader },
+    body: JSON.stringify({ patientName: n, bed: b, room: r })
+  }).then(res => {
+    closeModal();
+    refresh();
+  });
+}
+
+refresh();
+setInterval(refresh, 2000);
 </script>
 </body>
 </html>
