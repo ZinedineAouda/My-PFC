@@ -16,18 +16,18 @@
 #define BUTTON_PIN     0    // GPIO0 (Built-in on ESP-01)
 #define LED_PIN        2    // GPIO2 (Built-in on ESP-01)
 #define DEBOUNCE_MS    300
-#define HEARTBEAT_MS   30000
-#define RECONNECT_MS   5000
+#define HEARTBEAT_MS   15000
+#define RECONNECT_MS   10000
 #define BEACON_PORT    5555
 
 #define LED_ON  LOW
 #define LED_OFF HIGH
 
 // --- STATE ---
-char slaveId[32] = "";
-char targetSSID[64] = "";
-char targetPass[64] = "";
-char masterURL[128] = "http://192.168.4.1";
+String slaveId = "";
+String targetSSID = "";
+String targetPass = "";
+String masterURL = "http://192.168.4.1";
 
 bool setupDone = false;
 bool isRegistered = false;
@@ -39,7 +39,6 @@ bool connectPending = false;
 
 unsigned long lastButtonPress = 0;
 unsigned long lastHeartbeat = 0;
-unsigned long lastReconnect = 0;
 unsigned long alertSentTime = 0;
 
 AsyncWebServer server(80);
@@ -65,11 +64,12 @@ void ledBlink(int n, int d1, int d2) {
 bool sendToMaster(String path, String payload) {
   if (WiFi.status() != WL_CONNECTED) return false;
   HTTPClient http;
-  http.begin(wifiClient, String(masterURL) + path);
+  http.begin(wifiClient, masterURL + path);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(5000);
   int code = http.POST(payload);
   http.end();
+  Serial.printf("[HTTP] POST %s -> status: %d\n", path.c_str(), code);
   return (code == 200);
 }
 
@@ -80,7 +80,10 @@ void doRegister() {
   serializeJson(doc, body);
   if (sendToMaster("/api/register", body)) {
     isRegistered = true;
+    Serial.println("[SYNC] registered successfully with Master");
     ledBlink(2, 100, 100);
+  } else {
+    Serial.println("[SYNC] registration FAILED");
   }
 }
 
@@ -93,7 +96,9 @@ void doAlert() {
     alertPending = true;
     alertSentTime = millis();
     digitalWrite(LED_PIN, LED_ON);
+    Serial.println("[ALERT] Signal RECEIVED by Master");
   } else {
+    Serial.println("[ALERT] FAILED to notify Master!");
     ledBlink(4, 50, 50);
   }
 }
@@ -106,12 +111,15 @@ void setup() {
   digitalWrite(LED_PIN, LED_OFF);
   
   uint32_t id = ESP.getChipId();
-  snprintf(slaveId, sizeof(slaveId), "slave-%06X", id & 0xFFFFFF);
+  char buf[32];
+  snprintf(buf, 31, "slave-%06X", id & 0xFFFFFF);
+  slaveId = String(buf);
+  
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
 
   // WiFi AP for Setup
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(String("Setup-" + String(slaveId)).c_str());
+  WiFi.softAP(String("Setup-" + slaveId).c_str());
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send_P(200, "text/html", setupDone ? SLAVE_STATUS_HTML : SLAVE_SETUP_HTML);
@@ -144,8 +152,8 @@ void setup() {
   server.on("/api/connect", HTTP_POST, [](AsyncWebServerRequest *r){}, NULL, 
     [](AsyncWebServerRequest *r, uint8_t *data, size_t len, size_t idx, size_t tot) {
       JsonDocument doc; deserializeJson(doc, data);
-      strncpy(targetSSID, doc["ssid"] | "", 63);
-      strncpy(targetPass, doc["password"] | "", 63);
+      targetSSID = doc["ssid"] | "";
+      targetPass = doc["password"] | "";
       connectPending = true;
       r->send(200, "application/json", "{\"success\":true}");
   });
@@ -161,39 +169,51 @@ void setup() {
 void loop() {
   if (connectPending) {
     connectPending = false;
-    WiFi.begin(targetSSID, targetPass);
+    Serial.println("Connecting to network...");
+    WiFi.begin(targetSSID.c_str(), targetPass.c_str());
     if (WiFi.waitForConnectResult() == WL_CONNECTED) {
       WiFi.softAPdisconnect(true);
       WiFi.mode(WIFI_STA);
       setupDone = true;
       udp.begin(BEACON_PORT);
+      Serial.println("WiFi Connected. AP shut down.");
     }
   }
 
   if (setupDone && WiFi.status() == WL_CONNECTED) {
-    // Check for Master Beacon
     int sz = udp.parsePacket();
     if (sz > 0) {
       char buf[64]; int len = udp.read(buf, 63); buf[len] = '\0';
       String pkt = String(buf);
       if (pkt.startsWith("HOSPITAL_ALARM:")) {
         String ip = pkt.substring(15);
-        snprintf(masterURL, 127, "http://%s", ip.c_str());
-        masterDiscovered = true;
+        String newURL = "http://" + ip;
+        if (!masterDiscovered || masterURL != newURL) {
+          masterURL = newURL;
+          masterDiscovered = true;
+          Serial.printf("Master located at: %s\n", masterURL.c_str());
+          doRegister(); 
+        }
       }
     }
 
-    // Heartbeat/Register
     if (millis() - lastHeartbeat > HEARTBEAT_MS) {
-      doRegister();
       lastHeartbeat = millis();
+      doRegister();
     }
   }
 
   if (buttonPressed) {
     buttonPressed = false;
-    if (setupDone) doAlert();
-    else ledBlink(3, 100, 100);
+    if (setupDone && masterDiscovered) {
+      doAlert();
+    } else if (!setupDone) {
+      ledBlink(3, 100, 100);
+      Serial.println("Action denied: Setup not complete.");
+    } else {
+      ledBlink(2, 200, 200);
+      Serial.println("Action denied: Searching for Master...");
+    }
   }
 
   if (alertPending && millis() - alertSentTime > 30000) {

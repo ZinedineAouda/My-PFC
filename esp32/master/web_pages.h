@@ -190,7 +190,7 @@ body { font-family:'Outfit', sans-serif; background:#0f172a; color:var(--slate-2
 </div>
 
 <script>
-let selMode=0, selSSID='';
+const authHeader = 'Basic YWRtaW46YWRtaW4xMjM0';
 function selectMode(m) {
   selMode=m;
   document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
@@ -246,7 +246,7 @@ function doConnect() {
 function finishSetup() {
   fetch('/api/setup', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
     body: JSON.stringify({ mode: selMode })
   }).then(() => {
     document.getElementById('finish-info').textContent = 'System is ready in mode ' + selMode;
@@ -421,6 +421,7 @@ header { margin-bottom: 30px; display: flex; justify-content: space-between; ali
 
 <script>
 let editId = null;
+const authHeader = 'Basic YWRtaW46YWRtaW4xMjM0';
 function refresh() {
   fetch('/api/slaves?all=1').then(r => r.json()).then(devs => {
     const pend = document.getElementById('pending-list');
@@ -453,11 +454,22 @@ function submitModal() {
   const r = document.getElementById('m-room').value;
   fetch('/api/approve/' + editId, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
     body: JSON.stringify({ patientName: n, bed: b, room: r })
-  }).then(() => { closeModal(); refresh(); });
+  }).then(r => {
+    if(!r.ok) alert('Auth Failed');
+    closeModal();
+    setTimeout(refresh, 500);
+  });
 }
-function delDev(id) { if(confirm('Delete ' + id + '?')) fetch('/api/slaves/' + id, {method:'DELETE'}).then(refresh); }
+function delDev(id) { 
+  if(confirm('Delete ' + id + '?')) {
+    fetch('/api/slaves/' + id, {
+      method:'DELETE',
+      headers: { 'Authorization': authHeader }
+    }).then(() => setTimeout(refresh, 500)); 
+  }
+}
 refresh();
 </script>
 </body>

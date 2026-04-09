@@ -139,6 +139,7 @@ void forwardToCloud(String endpoint, String payload) {
   }
   http.end();
   client.stop();
+  Serial.printf("[CLOUD] HEARTBEAT Result: %d\n", httpCode);
   cloudBusy = false;
 }
 
@@ -214,12 +215,16 @@ void setupRoutes() {
       }
       strncpy(staSSID, ssid, sizeof(staSSID));
       strncpy(staPass, pass, sizeof(staPass));
+      WiFi.mode(WIFI_AP_STA);
       WiFi.begin(staSSID, staPass);
+      Serial.printf("Connecting to STA: %s...\n", staSSID);
       int attempts = 0;
-      while (WiFi.status() != WL_CONNECTED && attempts < 10) {
-        delay(100);
+      while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+        delay(500);
+        Serial.print(".");
         attempts++;
       }
+      Serial.println();
       if (WiFi.status() == WL_CONNECTED) {
         masterIP = WiFi.localIP().toString();
         String resp = "{\"success\":true,\"ip\":\"" + masterIP + "\"}";
@@ -227,8 +232,9 @@ void setupRoutes() {
         Serial.print("Connected to WiFi. IP: ");
         Serial.println(masterIP);
       } else {
+        Serial.println("Connection Failed.");
         WiFi.disconnect();
-        request->send(200, "application/json", "{\"success\":false,\"message\":\"Could not connect\"}");
+        request->send(200, "application/json", "{\"success\":false,\"message\":\"Connection timeout. Check credentials.\"}");
       }
     }
   );
@@ -356,8 +362,11 @@ void setupRoutes() {
       slaves[idx].lastSeen = millis();
       
       request->send(200, "application/json", "{\"success\":true}");
-      Serial.printf("ALERT from %s!\n", slaveId);
-      if (wifiMode == 4) slaves[idx].pendingAlertCloud = true;
+      Serial.printf("[ALERT] Received from Slave: %s\n", slaveId);
+      if (wifiMode == 4) {
+        slaves[idx].pendingAlertCloud = true;
+        Serial.printf("[ALERT] Queued for Cloud: %s\n", slaveId);
+      }
     }
   );
   server.addHandler(alertHandler);
@@ -376,17 +385,63 @@ void setupRoutes() {
   );
   server.addHandler(loginHandler);
 
-  server.on("/api/clearAlert/*", HTTP_POST, [](AsyncWebServerRequest *request) {
-    if (!checkAdminAuth(request)) { sendUnauthorized(request); return; }
-    String url = request->url();
-    int lastSlash = url.lastIndexOf('/');
-    String slaveId = url.substring(lastSlash + 1);
-    int idx = findSlaveIndex(slaveId.c_str());
-    if (idx < 0) { request->send(404, "application/json", "{\"message\":\"Not found\"}"); return; }
-    slaves[idx].alertActive = false;
-    request->send(200, "application/json", "{\"success\":true}");
-    Serial.printf("Alert cleared: %s\n", slaveId.c_str());
-  });
+  AsyncCallbackJsonWebHandler* approveHandler = new AsyncCallbackJsonWebHandler("/api/approve/",
+    [](AsyncWebServerRequest *request, JsonVariant &json) {
+      if (!checkAdminAuth(request)) { sendUnauthorized(request); return; }
+      String url = request->url();
+      int lastSlash = url.lastIndexOf('/');
+      String slaveId = url.substring(lastSlash + 1);
+      int idx = findSlaveIndex(slaveId.c_str());
+      if (idx < 0) { request->send(404, "application/json", "{\"message\":\"Not found\"}"); return; }
+      
+      JsonObject obj = json.as<JsonObject>();
+      strncpy(slaves[idx].patientName, obj["patientName"] | "", sizeof(slaves[idx].patientName));
+      strncpy(slaves[idx].bed, obj["bed"] | "", sizeof(slaves[idx].bed));
+      strncpy(slaves[idx].room, obj["room"] | "", sizeof(slaves[idx].room));
+      slaves[idx].approved = true;
+      slaves[idx].lastSeen = millis();
+      
+      request->send(200, "application/json", "{\"success\":true}");
+      Serial.printf("Approved via JSON: %s\n", slaveId.c_str());
+    }
+  );
+  server.addHandler(approveHandler);
+
+  AsyncCallbackJsonWebHandler* updateSlaveHandler = new AsyncCallbackJsonWebHandler("/api/slaves/",
+    [](AsyncWebServerRequest *request, JsonVariant &json) {
+      if (request->method() != HTTP_PUT) return; 
+      if (!checkAdminAuth(request)) { sendUnauthorized(request); return; }
+      String url = request->url();
+      int lastSlash = url.lastIndexOf('/');
+      String slaveId = url.substring(lastSlash + 1);
+      int idx = findSlaveIndex(slaveId.c_str());
+      if (idx < 0) { request->send(404, "application/json", "{\"message\":\"Not found\"}"); return; }
+
+      JsonObject obj = json.as<JsonObject>();
+      if (obj.containsKey("patientName")) strncpy(slaves[idx].patientName, obj["patientName"] | "", sizeof(slaves[idx].patientName));
+      if (obj.containsKey("bed")) strncpy(slaves[idx].bed, obj["bed"] | "", sizeof(slaves[idx].bed));
+      if (obj.containsKey("room")) strncpy(slaves[idx].room, obj["room"] | "", sizeof(slaves[idx].room));
+      
+      request->send(200, "application/json", "{\"success\":true}");
+      Serial.printf("Updated via JSON: %s\n", slaveId.c_str());
+    }
+  );
+  server.addHandler(updateSlaveHandler);
+
+  AsyncCallbackJsonWebHandler* clearAlertHandler = new AsyncCallbackJsonWebHandler("/api/clearAlert/",
+    [](AsyncWebServerRequest *request, JsonVariant &json) {
+      if (!checkAdminAuth(request)) { sendUnauthorized(request); return; }
+      String url = request->url();
+      int lastSlash = url.lastIndexOf('/');
+      String slaveId = url.substring(lastSlash + 1);
+      int idx = findSlaveIndex(slaveId.c_str());
+      if (idx < 0) { request->send(404, "application/json", "{\"message\":\"Not found\"}"); return; }
+      slaves[idx].alertActive = false;
+      request->send(200, "application/json", "{\"success\":true}");
+      Serial.printf("Alert cleared: %s\n", slaveId.c_str());
+    }
+  );
+  server.addHandler(clearAlertHandler);
 
   server.onNotFound([](AsyncWebServerRequest *request) {
     String url = request->url();
@@ -399,46 +454,10 @@ void setupRoutes() {
       memset(&slaves[idx], 0, sizeof(Slave));
       slaveCount--;
       request->send(200, "application/json", "{\"success\":true}");
-      Serial.printf("Deleted: %s\n", slaveId.c_str());
-      return;
-    }
-    if (request->method() == HTTP_POST && url.startsWith("/api/approve/")) {
-      request->send(200, "application/json", "{\"success\":true}");
       return;
     }
     if (request->method() == HTTP_OPTIONS) { request->send(200); return; }
     request->send(404, "application/json", "{\"message\":\"Not found\"}");
-  });
-
-  server.onRequestBody([](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    String url = request->url();
-    if (request->method() == HTTP_PUT && url.startsWith("/api/slaves/")) {
-      if (!checkAdminAuth(request)) { sendUnauthorized(request); return; }
-      String slaveId = url.substring(12);
-      int idx = findSlaveIndex(slaveId.c_str());
-      if (idx < 0) { request->send(404, "application/json", "{\"message\":\"Not found\"}"); return; }
-      JsonDocument doc;
-      if (deserializeJson(doc, (const char*)data, len)) { request->send(400, "application/json", "{\"message\":\"Bad JSON\"}"); return; }
-      if (doc.containsKey("patientName")) strncpy(slaves[idx].patientName, doc["patientName"] | "", sizeof(slaves[idx].patientName));
-      if (doc.containsKey("bed")) strncpy(slaves[idx].bed, doc["bed"] | "", sizeof(slaves[idx].bed));
-      if (doc.containsKey("room")) strncpy(slaves[idx].room, doc["room"] | "", sizeof(slaves[idx].room));
-      request->send(200, "application/json", "{\"success\":true}");
-      Serial.printf("Updated: %s\n", slaveId.c_str());
-    }
-    if (request->method() == HTTP_POST && url.startsWith("/api/approve/")) {
-      if (!checkAdminAuth(request)) { sendUnauthorized(request); return; }
-      String slaveId = url.substring(13);
-      int idx = findSlaveIndex(slaveId.c_str());
-      if (idx < 0) { request->send(404, "application/json", "{\"message\":\"Not found\"}"); return; }
-      JsonDocument doc;
-      if (deserializeJson(doc, (const char*)data, len)) { request->send(400, "application/json", "{\"message\":\"Bad JSON\"}"); return; }
-      strncpy(slaves[idx].patientName, doc["patientName"] | "", sizeof(slaves[idx].patientName));
-      strncpy(slaves[idx].bed, doc["bed"] | "", sizeof(slaves[idx].bed));
-      strncpy(slaves[idx].room, doc["room"] | "", sizeof(slaves[idx].room));
-      slaves[idx].approved = true;
-      request->send(200, "application/json", "{\"success\":true}");
-      Serial.printf("Approved: %s -> %s\n", slaveId.c_str(), slaves[idx].patientName);
-    }
   });
 }
 
