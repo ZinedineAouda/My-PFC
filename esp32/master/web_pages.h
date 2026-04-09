@@ -464,4 +464,35 @@ refresh();
 </html>
 )rawliteral";
 
+const char ONLINE_INFO_HTML[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud Info - Hospital Alarm</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root { --bg: #0f172a; --card-bg: rgba(30, 41, 59, 0.7); --primary: #3b82f6; --slate-400: #94a3b8; --slate-200: #e2e8f0; --glass-border: rgba(255, 255, 255, 0.1); }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Outfit', sans-serif; background:#0f172a; color:var(--slate-200); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+.card { background:var(--card-bg); backdrop-filter:blur(16px); border:1px solid var(--glass-border); border-radius:24px; padding:40px; width:100%; max-width:400px; text-align:center; }
+.icon { font-size:48px; margin-bottom:20px; }
+h1 { font-size:24px; margin-bottom:10px; }
+p { color:var(--slate-400); font-size:14px; margin-bottom:20px; }
+.btn { display:block; width:100%; padding:14px; background:var(--primary); color:white; border-radius:12px; text-decoration:none; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">☁️</div>
+  <h1>Online Mode Active</h1>
+  <p>The system is currently syncing with the Railway cloud. You can use the link below to access your dashboard from anywhere.</p>
+  <a href="/setup" class="btn">Configure Network</a>
+  <a href="/" style="display:block; margin-top:15px; color:var(--primary); text-decoration:none; font-size:13px;">Go to Local Dashboard</a>
+</div>
+</body>
+</html>
+)rawliteral";
+
 #endif
