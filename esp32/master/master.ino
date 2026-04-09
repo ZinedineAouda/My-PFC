@@ -258,27 +258,13 @@ void setupRoutes() {
       }
       strncpy(staSSID, ssid, sizeof(staSSID));
       strncpy(staPass, pass, sizeof(staPass));
-      WiFi.mode(WIFI_AP_STA);
+      
+      // Start connection asynchronously
+      Serial.printf("Initiating connection to STA: %s...\n", staSSID);
       WiFi.begin(staSSID, staPass);
-      Serial.printf("Connecting to STA: %s...\n", staSSID);
-      int attempts = 0;
-      while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-        delay(500);
-        Serial.print(".");
-        attempts++;
-      }
-      Serial.println();
-      if (WiFi.status() == WL_CONNECTED) {
-        masterIP = WiFi.localIP().toString();
-        String resp = "{\"success\":true,\"ip\":\"" + masterIP + "\"}";
-        request->send(200, "application/json", resp);
-        Serial.print("Connected to WiFi. IP: ");
-        Serial.println(masterIP);
-      } else {
-        Serial.println("Connection Failed.");
-        WiFi.disconnect();
-        request->send(200, "application/json", "{\"success\":false,\"message\":\"Connection timeout. Check credentials.\"}");
-      }
+      
+      // Return immediately so the server doesn't hang
+      request->send(200, "application/json", "{\"success\":true,\"message\":\"Connection initiated. Checking status...\"}");
     }
   );
   server.addHandler(connectHandler);
@@ -536,6 +522,12 @@ void setup() {
 }
 
 void loop() {
+  if (WiFi.status() == WL_CONNECTED && (masterIP == "192.168.4.1" || masterIP == "")) {
+    masterIP = WiFi.localIP().toString();
+    Serial.print("[WIFI] Connected! Local IP: ");
+    Serial.println(masterIP);
+  }
+
   if (wifiMode == 4 && WiFi.status() == WL_CONNECTED) {
     if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL) {
       lastHeartbeat = millis();
