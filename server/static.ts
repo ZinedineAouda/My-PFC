@@ -1,17 +1,20 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
-// ESM-compatible __dirname
-const __filename_esm = fileURLToPath(import.meta.url);
-const __dirname_esm = path.dirname(__filename_esm);
+// A safe fallback to find the current directory regardless of ESM or CJS context
+function getBaseDir() {
+  if (typeof __dirname !== 'undefined') {
+    return __dirname;
+  }
+  return process.cwd();
+}
 
 function findPublicDir(): string | null {
   const targets = ["dist/public", "public", "client/dist", "dist"];
+  const root = process.cwd();
   
   // 1. Check direct paths relative to process.cwd() (the project root on Railway)
-  const root = process.cwd();
   for (const t of targets) {
     const p = path.resolve(root, t);
     if (fs.existsSync(p) && fs.existsSync(path.resolve(p, "index.html"))) {
@@ -19,14 +22,15 @@ function findPublicDir(): string | null {
     }
   }
 
-  // 2. Check relative to this file's directory
+  // 2. Check relative to script's directory
+  const baseDir = getBaseDir();
   for (const t of targets) {
-    const p = path.resolve(__dirname_esm, t);
+    const p = path.resolve(baseDir, t);
     if (fs.existsSync(p) && fs.existsSync(path.resolve(p, "index.html"))) {
       return p;
     }
     // and sibling check
-    const sibling = path.resolve(__dirname_esm, "..", t);
+    const sibling = path.resolve(baseDir, "..", t);
     if (fs.existsSync(sibling) && fs.existsSync(path.resolve(sibling, "index.html"))) {
       return sibling;
     }
