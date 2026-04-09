@@ -11,8 +11,7 @@ import SetupPage from "@/pages/setup";
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/admin" component={AdminPage} />
+      <Route path="/" component={AdminPage} />
       <Route path="/setup" component={SetupPage} />
       <Route component={NotFound} />
     </Switch>

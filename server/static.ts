@@ -1,8 +1,13 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
-function findPublicDir(startPath: string): string | null {
+// ESM-compatible __dirname
+const __filename_esm = fileURLToPath(import.meta.url);
+const __dirname_esm = path.dirname(__filename_esm);
+
+function findPublicDir(): string | null {
   const targets = ["dist/public", "public", "client/dist", "dist"];
   
   // 1. Check direct paths relative to process.cwd() (the project root on Railway)
@@ -14,14 +19,14 @@ function findPublicDir(startPath: string): string | null {
     }
   }
 
-  // 2. Check relative to __dirname (where the script bundle is)
+  // 2. Check relative to this file's directory
   for (const t of targets) {
-    const p = path.resolve(__dirname, t);
+    const p = path.resolve(__dirname_esm, t);
     if (fs.existsSync(p) && fs.existsSync(path.resolve(p, "index.html"))) {
       return p;
     }
     // and sibling check
-    const sibling = path.resolve(__dirname, "..", t);
+    const sibling = path.resolve(__dirname_esm, "..", t);
     if (fs.existsSync(sibling) && fs.existsSync(path.resolve(sibling, "index.html"))) {
       return sibling;
     }
@@ -31,7 +36,7 @@ function findPublicDir(startPath: string): string | null {
 }
 
 export function serveStatic(app: Express) {
-  const foundPath = findPublicDir(__dirname);
+  const foundPath = findPublicDir();
 
   if (foundPath) {
     console.log(`[SUCCESS] Static assets located at: ${foundPath}`);

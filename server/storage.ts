@@ -16,6 +16,15 @@ export interface IStorage {
   isSetupDone(): boolean;
   updateMasterHeartbeat(): void;
   isMasterOnline(): boolean;
+  syncFromMaster(slaves: Array<{
+    slaveId: string;
+    patientName?: string;
+    bed?: string;
+    room?: string;
+    alertActive?: boolean;
+    approved?: boolean;
+    online?: boolean;
+  }>): void;
 }
 
 export class MemStorage implements IStorage {
@@ -56,6 +65,7 @@ export class MemStorage implements IStorage {
       lastAlertTime: null,
       registered: false,
       approved: false,
+      online: false,
       lastSeen: null,
     };
     this.slaves.set(data.slaveId, slave);
@@ -92,6 +102,7 @@ export class MemStorage implements IStorage {
     if (slave) {
       slave.registered = true;
       slave.lastSeen = Date.now();
+      slave.online = true;
       this.slaves.set(slaveId, slave);
       return slave;
     }
@@ -104,6 +115,7 @@ export class MemStorage implements IStorage {
       lastAlertTime: null,
       registered: true,
       approved: false,
+      online: true,
       lastSeen: Date.now(),
     };
     this.slaves.set(slaveId, slave);
@@ -118,6 +130,7 @@ export class MemStorage implements IStorage {
     slave.alertActive = true;
     slave.lastAlertTime = new Date().toISOString();
     slave.lastSeen = Date.now();
+    slave.online = true;
     this.slaves.set(slaveId, slave);
     return { success: true, slave };
   }
@@ -149,8 +162,62 @@ export class MemStorage implements IStorage {
 
   isMasterOnline(): boolean {
     if (!this.masterLastSeen) return false;
-    // Consider online if heartbeat was within last 30 seconds
     return Date.now() - this.masterLastSeen < 30000;
+  }
+
+  // ── Bidirectional sync from ESP32 master ──────────────────
+  syncFromMaster(incoming: Array<{
+    slaveId: string;
+    patientName?: string;
+    bed?: string;
+    room?: string;
+    alertActive?: boolean;
+    approved?: boolean;
+    online?: boolean;
+  }>): void {
+    this.updateMasterHeartbeat();
+
+    for (const remote of incoming) {
+      const local = this.slaves.get(remote.slaveId);
+      if (local) {
+        // Update online/alert state from master
+        if (remote.online !== undefined) local.online = remote.online;
+
+        // Accept alert state from master (master is source of truth for alerts)
+        if (remote.alertActive !== undefined) {
+          if (remote.alertActive && !local.alertActive) {
+            local.alertActive = true;
+            local.lastAlertTime = new Date().toISOString();
+          } else if (!remote.alertActive && local.alertActive) {
+            // Only clear if cloud didn't set it
+            local.alertActive = false;
+          }
+        }
+
+        // Update metadata if provided by master
+        if (remote.patientName) local.patientName = remote.patientName;
+        if (remote.bed) local.bed = remote.bed;
+        if (remote.room) local.room = remote.room;
+
+        local.lastSeen = Date.now();
+        this.slaves.set(remote.slaveId, local);
+      } else {
+        // New device discovered by master — auto-register
+        const newSlave: Slave = {
+          slaveId: remote.slaveId,
+          patientName: remote.patientName || "",
+          bed: remote.bed || "",
+          room: remote.room || "",
+          alertActive: remote.alertActive || false,
+          lastAlertTime: remote.alertActive ? new Date().toISOString() : null,
+          registered: true,
+          approved: remote.approved || false,
+          online: remote.online || false,
+          lastSeen: Date.now(),
+        };
+        this.slaves.set(remote.slaveId, newSlave);
+      }
+    }
   }
 }
 

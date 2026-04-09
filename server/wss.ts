@@ -1,9 +1,10 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import { log } from "./index";
+import { storage } from "./storage";
 
 export type WsMessage = {
-  type: "ALERT" | "REGISTER" | "UPDATE" | "DELETE" | "MASTER_STATUS";
+  type: "ALERT" | "REGISTER" | "UPDATE" | "DELETE" | "MASTER_STATUS" | "FULL_STATE";
   payload: any;
 };
 
@@ -13,16 +14,27 @@ export function initWss(server: Server) {
   wss = new WebSocketServer({ server, path: "/ws" });
 
   wss.on("connection", (ws) => {
-    log("New client connected", "WS");
+    log("Client connected", "WS");
+
+    // Send full state snapshot on connect
+    const fullState: WsMessage = {
+      type: "FULL_STATE",
+      payload: {
+        devices: storage.getAllSlaves(),
+        masterOnline: storage.isMasterOnline(),
+        mode: storage.getMode(),
+      },
+    };
+    ws.send(JSON.stringify(fullState));
 
     ws.on("error", (err) => log(`Error: ${err.message}`, "WS"));
 
-    // Heartbeat to prevent Railway from killing the connection
+    // Heartbeat to prevent Railway from killing idle connections
     const interval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.ping();
       }
-    }, 30000);
+    }, 25000);
 
     ws.on("close", () => {
       clearInterval(interval);
@@ -41,5 +53,23 @@ export function broadcast(msg: WsMessage) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(data);
     }
+  });
+}
+
+export function broadcastDeviceUpdate(slaveId: string) {
+  const slave = storage.getSlave(slaveId);
+  if (slave) {
+    broadcast({ type: "UPDATE", payload: slave });
+  }
+}
+
+export function broadcastAllDevices() {
+  broadcast({
+    type: "FULL_STATE",
+    payload: {
+      devices: storage.getAllSlaves(),
+      masterOnline: storage.isMasterOnline(),
+      mode: storage.getMode(),
+    },
   });
 }

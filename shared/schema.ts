@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+// ─── Slave Device Schema ────────────────────────────────────────────
 export const slaveSchema = z.object({
   slaveId: z.string().min(1),
   patientName: z.string().default(""),
@@ -9,6 +10,7 @@ export const slaveSchema = z.object({
   lastAlertTime: z.string().nullable().default(null),
   registered: z.boolean().default(false),
   approved: z.boolean().default(false),
+  online: z.boolean().default(false),
   lastSeen: z.number().nullable().default(null),
 });
 
@@ -53,8 +55,22 @@ export const connectWifiSchema = z.object({
   password: z.string().optional().default(""),
 });
 
+// Master sync: array of slave states from ESP32
+export const masterSyncSchema = z.object({
+  slaves: z.array(z.object({
+    slaveId: z.string(),
+    patientName: z.string().optional().default(""),
+    bed: z.string().optional().default(""),
+    room: z.string().optional().default(""),
+    alertActive: z.boolean().optional().default(false),
+    approved: z.boolean().optional().default(false),
+    online: z.boolean().optional().default(false),
+  })),
+});
+
 export type Slave = z.infer<typeof slaveSchema>;
 export type InsertSlave = z.infer<typeof insertSlaveSchema>;
 export type ApproveSlave = z.infer<typeof approveSlaveSchema>;
 export type UpdateSlave = z.infer<typeof updateSlaveSchema>;
 export type LoginData = z.infer<typeof loginSchema>;
+export type MasterSync = z.infer<typeof masterSyncSchema>;

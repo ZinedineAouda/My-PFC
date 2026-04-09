@@ -1,0 +1,12 @@
+# Railway Environment Variables
+# Copy and paste these exact variables and values into your Railway project (Variables tab)
+
+NODE_ENV=production
+PORT=5000
+
+# The secret key used to authenticate the ESP32 Master with the Railway server
+# Note: You MUST update the `CLOUD_DEVICE_KEY` in `esp32/master/config.h` to match this exact value!
+DEVICE_API_KEY=esp32_master_super_secure_key_123
+
+# Security secret for the admin session cookies
+SESSION_SECRET=hosp_alarm_session_secret_xyz789
