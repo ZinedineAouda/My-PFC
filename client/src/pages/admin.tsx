@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { Slave, LoginData, ApproveSlave } from "@shared/schema";
+import type { Slave, LoginData, ApproveSlave, UpdateSlave } from "@shared/schema";
 import { loginSchema, approveSlaveSchema, updateSlaveSchema } from "@shared/schema";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useWebsocket } from "@/hooks/use-websocket";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +52,9 @@ import {
   Clock,
   Settings,
   Wifi,
+  RefreshCw,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 function LoginForm({ onLogin }: { onLogin: () => void }) {
   const { toast } = useToast();
@@ -167,6 +170,11 @@ function AdminPanel() {
 
   const { data: status } = useQuery<{ mode: number; setup: boolean; isMasterOnline?: boolean }>({
     queryKey: ["/api/status"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/status"), { credentials: "include" });
+      if (!res.ok) throw new Error("Status sync failed");
+      return res.json();
+    },
   });
 
   const clearAlertMutation = useMutation({

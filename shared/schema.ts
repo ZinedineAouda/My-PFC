@@ -45,7 +45,7 @@ export const registerRequestSchema = z.object({
 });
 
 export const setupSchema = z.object({
-  mode: z.number().min(1).max(3),
+  mode: z.number().min(1).max(4),
 });
 
 export const connectWifiSchema = z.object({
