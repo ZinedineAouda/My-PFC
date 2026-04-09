@@ -11,9 +11,9 @@ const httpServer = createServer();
 // --- THE ULTIMATE SURVIVAL HEALTHCHECK (Node.js Level) ---
 // This answers before Express even gets the request.
 httpServer.on("request", (req, res) => {
-  if (req.url === "/health" || req.url === "/api/health") {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("OK");
+  if (req.url === "/health" || req.url === "/api/health" || req.url === "/api/status") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok", mode: 4 }));
     return;
   }
 });
