@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import session from "express-session";
 import cors from "cors";
 import { storage } from "./storage";
+import { initWss, broadcast } from "./wss";
 import { insertSlaveSchema, updateSlaveSchema, approveSlaveSchema, alertRequestSchema, registerRequestSchema, setupSchema, connectWifiSchema } from "@shared/schema";
 
 declare module "express-session" {
@@ -49,14 +50,14 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  initWss(httpServer);
+
   // Allow the ESP32 to hit the API routes without CORS blocking it.
   app.use(cors({
     origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "x-device-key"]
   }));
-
-  const isProduction = process.env.NODE_ENV === "production";
 
   app.use(
     session({
@@ -152,6 +153,7 @@ export async function registerRoutes(
     }
     const { slaveId } = parsed.data;
     const slave = storage.registerSlave(slaveId);
+    broadcast({ type: "REGISTER", payload: slave });
     if (slave.approved) {
       return res.json({ success: true, message: "Registered" });
     }
@@ -168,6 +170,7 @@ export async function registerRoutes(
     if (!result.success) {
       return res.json({ success: false, reason: result.reason });
     }
+    broadcast({ type: "ALERT", payload: { slaveId } });
     return res.json({ success: true });
   });
 
@@ -183,6 +186,7 @@ export async function registerRoutes(
 
   app.post("/api/master-ping", requireDeviceKey, (_req: Request, res: Response) => {
     storage.updateMasterHeartbeat();
+    broadcast({ type: "MASTER_STATUS", payload: { online: true } });
     return res.json({ success: true });
   });
 
@@ -195,6 +199,7 @@ export async function registerRoutes(
     if (!slave) {
       return res.status(404).json({ message: "Slave not found" });
     }
+    broadcast({ type: "UPDATE", payload: slave });
     return res.json({ success: true, slave });
   });
 
@@ -205,6 +210,7 @@ export async function registerRoutes(
     }
     try {
       const slave = storage.addSlave(parsed.data);
+      broadcast({ type: "REGISTER", payload: slave });
       return res.json({ success: true, slave });
     } catch (err: any) {
       return res.status(409).json({ message: err.message });
@@ -220,6 +226,7 @@ export async function registerRoutes(
     if (!slave) {
       return res.status(404).json({ message: "Slave not found" });
     }
+    broadcast({ type: "UPDATE", payload: slave });
     return res.json({ success: true, slave });
   });
 
@@ -228,6 +235,7 @@ export async function registerRoutes(
     if (!deleted) {
       return res.status(404).json({ message: "Slave not found" });
     }
+    broadcast({ type: "DELETE", payload: { slaveId: req.params.slaveId } });
     return res.json({ success: true, message: "Deleted" });
   });
 
@@ -236,6 +244,7 @@ export async function registerRoutes(
     if (!cleared) {
       return res.status(404).json({ message: "Slave not found" });
     }
+    broadcast({ type: "UPDATE", payload: { slaveId: req.params.slaveId, alertActive: false } });
     return res.json({ success: true, message: "Alert cleared" });
   });
 

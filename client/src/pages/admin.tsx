@@ -63,303 +63,106 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   const loginMutation = useMutation({
     mutationFn: async (data: LoginData) => {
       const res = await apiRequest("POST", "/api/admin/login", data);
+      if (!res.ok) throw new Error("Invalid credentials");
       return res.json();
     },
     onSuccess: () => {
       onLogin();
-      toast({ title: "Logged in", description: "Welcome to admin panel." });
+      toast({ title: "Authorized", description: "Terminal access granted." });
     },
     onError: (err: Error) => {
       toast({
         title: "Login Failed",
-        description: err.message.includes("401") ? "Invalid credentials" : err.message,
+        description: err.message,
         variant: "destructive",
       });
     },
   });
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm">
-        <CardContent className="pt-6">
-          <div className="flex flex-col items-center mb-6">
-            <div className="flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-4">
-              <Lock className="w-7 h-7 text-primary" />
+    <div className="min-h-screen bg-[#070b14] flex items-center justify-center p-4 font-['Outfit']">
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_50%,rgba(16,185,129,0.05)_0%,transparent_50%)]" />
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md relative"
+      >
+        <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-2xl blur opacity-20" />
+        <Card className="bg-[#0f172a]/80 border-white/10 backdrop-blur-2xl relative">
+          <CardContent className="pt-8 px-8 pb-10">
+            <div className="flex flex-col items-center mb-10">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/20 flex items-center justify-center mb-4">
+                <Shield className="w-8 h-8 text-emerald-400" />
+              </div>
+              <h1 className="text-3xl font-extrabold text-white tracking-tight">Management Hub</h1>
+              <p className="text-slate-400 text-sm mt-2">Secure Administrator Access</p>
             </div>
-            <h1 className="text-2xl font-bold">Admin Login</h1>
-            <p className="text-sm text-muted-foreground mt-1">Hospital Alarm System</p>
-          </div>
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit((data) => loginMutation.mutate(data))}
-              className="space-y-4"
-            >
-              <FormField
-                control={form.control}
-                name="username"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Username</FormLabel>
-                    <FormControl>
-                      <Input
-                        data-testid="input-username"
-                        placeholder="Enter username"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input
-                        data-testid="input-password"
-                        type="password"
-                        placeholder="Enter password"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button
-                data-testid="button-login"
-                type="submit"
-                className="w-full"
-                disabled={loginMutation.isPending}
-              >
-                {loginMutation.isPending ? "Signing in..." : "Sign In"}
-                <LogIn className="w-4 h-4 ml-2" />
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit((data) => loginMutation.mutate(data))} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-slate-400 text-xs font-bold uppercase tracking-widest">Username</FormLabel>
+                      <FormControl>
+                        <Input className="bg-white/5 border-white/10 text-white h-12 rounded-xl focus:ring-emerald-500/50" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-slate-400 text-xs font-bold uppercase tracking-widest">Password</FormLabel>
+                      <FormControl>
+                        <Input type="password" className="bg-white/5 border-white/10 text-white h-12 rounded-xl focus:ring-emerald-500/50" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button 
+                  type="submit" 
+                  className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/20"
+                  disabled={loginMutation.isPending}
+                >
+                  {loginMutation.isPending ? "Authenticating..." : "Establish Secure Link"}
+                  {!loginMutation.isPending && <LogIn className="w-4 h-4 ml-2" />}
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
-  );
-}
-
-function ApproveDialog({
-  slave,
-  open,
-  onOpenChange,
-}: {
-  slave: Slave;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { toast } = useToast();
-  const form = useForm<ApproveSlave>({
-    resolver: zodResolver(approveSlaveSchema),
-    defaultValues: { patientName: "", bed: "", room: "" },
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: async (data: ApproveSlave) => {
-      const res = await apiRequest("POST", `/api/approve/${slave.slaveId}`, data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
-      toast({ title: "Device Approved", description: `${slave.slaveId} is now active.` });
-      form.reset();
-      onOpenChange(false);
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Approve Device: {slave.slaveId}</DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit((data) => approveMutation.mutate(data))}
-            className="space-y-4"
-          >
-            <FormField
-              control={form.control}
-              name="patientName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Patient Name</FormLabel>
-                  <FormControl>
-                    <Input data-testid="input-approve-patient-name" placeholder="Patient full name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="bed"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Bed Number</FormLabel>
-                  <FormControl>
-                    <Input data-testid="input-approve-bed" placeholder="e.g. 12A" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="room"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Room</FormLabel>
-                  <FormControl>
-                    <Input data-testid="input-approve-room" placeholder="e.g. 301" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="flex justify-end gap-2 pt-2">
-              <DialogClose asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
-              </DialogClose>
-              <Button data-testid="button-submit-approve" type="submit" disabled={approveMutation.isPending}>
-                {approveMutation.isPending ? "Approving..." : "Approve & Save"}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function EditSlaveDialog({
-  slave,
-  open,
-  onOpenChange,
-}: {
-  slave: Slave;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { toast } = useToast();
-  const form = useForm({
-    resolver: zodResolver(
-      updateSlaveSchema.extend({
-        patientName: updateSlaveSchema.shape.patientName.unwrap(),
-        bed: updateSlaveSchema.shape.bed.unwrap(),
-        room: updateSlaveSchema.shape.room.unwrap(),
-      })
-    ),
-    defaultValues: {
-      patientName: slave.patientName,
-      bed: slave.bed,
-      room: slave.room,
-    },
-  });
-
-  const editMutation = useMutation({
-    mutationFn: async (data: { patientName: string; bed: string; room: string }) => {
-      const res = await apiRequest("PUT", `/api/slaves/${slave.slaveId}`, data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
-      toast({ title: "Updated", description: "Patient information updated." });
-      onOpenChange(false);
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit: {slave.slaveId}</DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit((data) => editMutation.mutate(data))}
-            className="space-y-4"
-          >
-            <FormField
-              control={form.control}
-              name="patientName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Patient Name</FormLabel>
-                  <FormControl>
-                    <Input data-testid="input-edit-patient-name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="bed"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Bed Number</FormLabel>
-                  <FormControl>
-                    <Input data-testid="input-edit-bed" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="room"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Room</FormLabel>
-                  <FormControl>
-                    <Input data-testid="input-edit-room" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="flex justify-end gap-2 pt-2">
-              <DialogClose asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
-              </DialogClose>
-              <Button data-testid="button-submit-edit" type="submit" disabled={editMutation.isPending}>
-                {editMutation.isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
   );
 }
 
 function AdminPanel() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [approveSlaveData, setApproveSlaveData] = useState<Slave | null>(null);
   const [editSlaveData, setEditSlaveData] = useState<Slave | null>(null);
+
+  useWebsocket((msg) => {
+    queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+    if (msg.type === "REGISTER") {
+      toast({ title: "Sensory Input", description: "New hardware detected." });
+    }
+  });
 
   const { data: slaves, isLoading } = useQuery<Slave[]>({
     queryKey: ["/api/slaves", "all"],
     queryFn: async () => {
       const res = await fetch(apiUrl("/api/slaves?all=1"), { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch");
+      if (!res.ok) throw new Error("Sync failed");
       return res.json();
     },
-    refetchInterval: 3000,
   });
 
   const { data: status } = useQuery<{ mode: number; setup: boolean; isMasterOnline?: boolean }>({
@@ -373,10 +176,7 @@ function AdminPanel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
-      toast({ title: "Alert Cleared", description: "The alert has been dismissed." });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: "System Ready", description: "Alert state cleared." });
     },
   });
 
@@ -387,261 +187,242 @@ function AdminPanel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
-      toast({ title: "Deleted", description: "Device has been removed." });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: "Node Decommissioned", description: "Device link severed." });
     },
   });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/logout");
-      return res.json();
+      await apiRequest("POST", "/api/admin/logout");
     },
-    onSuccess: () => {
-      window.location.reload();
-    },
+    onSuccess: () => window.location.reload(),
   });
 
   const pendingDevices = slaves?.filter((s) => !s.approved) ?? [];
   const approvedDevices = slaves?.filter((s) => s.approved) ?? [];
   const activeAlerts = approvedDevices.filter((s) => s.alertActive).length;
-  const modeNames: Record<number, string> = { 1: "AP Mode", 2: "STA Mode", 3: "AP+STA Mode" };
+  const isMasterOnline = status?.isMasterOnline ?? false;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary text-primary-foreground">
-                <Shield className="w-5 h-5" />
+    <div className="min-h-screen bg-[#070b14] text-slate-100 font-['Outfit'] pb-20">
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_0%_0%,rgba(16,185,129,0.05)_0%,transparent_40%)]" />
+      
+      <header className="sticky top-0 z-50 border-b border-white/5 bg-[#070b14]/80 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 py-5">
+          <div className="flex items-center justify-between gap-6 flex-wrap">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-slate-800 border border-white/10">
+                <Shield className="w-6 h-6 text-emerald-400" />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">Admin Panel</h1>
-                <p className="text-sm text-muted-foreground">Device Management</p>
+                <h1 className="text-xl font-bold text-white">Security Command</h1>
+                <p className="text-xs font-bold text-emerald-500/60 tracking-widest uppercase">Encryption Active</p>
               </div>
             </div>
+            
             <div className="flex items-center gap-2 flex-wrap">
-              {status?.mode ? (
-                <Badge variant="secondary" className="no-default-active-elevate">
-                  <Settings className="w-3 h-3 mr-1" />
-                  {modeNames[status.mode] || "Unknown"}
-                </Badge>
-              ) : null}
-              {status?.isMasterOnline !== undefined && (
-                <Badge
-                  variant="secondary"
-                  className={`no-default-active-elevate ${status.isMasterOnline ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'text-muted-foreground'}`}
-                >
-                  <Wifi className="w-3 h-3 mr-1" />
-                  Master: {status.isMasterOnline ? "Online" : "Offline"}
-                </Badge>
-              )}
-              {activeAlerts > 0 && (
-                <Badge variant="destructive" className="no-default-active-elevate animate-pulse">
-                  <AlertTriangle className="w-3 h-3 mr-1" />
-                  {activeAlerts} Alert{activeAlerts !== 1 ? "s" : ""}
-                </Badge>
-              )}
-              <a href="/">
-                <Button variant="secondary" size="sm">
-                  <Activity className="w-4 h-4 mr-2" />
-                  Dashboard
-                </Button>
-              </a>
-              <a href="/setup">
-                <Button variant="secondary" size="sm">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Setup
-                </Button>
-              </a>
-              <Button
-                data-testid="button-logout"
-                variant="secondary"
-                size="sm"
-                onClick={() => logoutMutation.mutate()}
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
-              </Button>
+              <div className={`px-4 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 ${isMasterOnline ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-900 border-white/5 text-slate-500'}`}>
+                <RefreshCw className={`w-3 h-3 ${isMasterOnline ? 'animate-spin-slow' : ''}`} />
+                {isMasterOnline ? 'HUB LINKED' : 'LATENCY ERR'}
+              </div>
+
+              <a href="/"><Button variant="secondary" size="sm" className="bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-xl"><Activity className="w-4 h-4 mr-2" /> Live Dashboard</Button></a>
+              <a href="/setup"><Button variant="secondary" size="sm" className="bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-xl"><Settings className="w-4 h-4 mr-2" /> Global Config</Button></a>
+              <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()} className="text-slate-500 hover:text-red-400"><LogOut className="w-4 h-4 mr-2" /> Exit</Button>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+      <main className="max-w-7xl mx-auto px-6 py-10 space-y-12 relative">
         <section>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-6">
             <Clock className="w-5 h-5 text-amber-500" />
-            <h2 className="text-lg font-semibold">Pending Approval</h2>
-            <Badge variant="secondary" className="no-default-active-elevate">{pendingDevices.length}</Badge>
+            <h2 className="text-lg font-bold text-white tracking-tight">Discovery Queue</h2>
+            <div className="px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-400">{pendingDevices.length} NEW</div>
           </div>
-          {isLoading ? (
-            <Card><CardContent className="p-8 text-center text-muted-foreground">Loading...</CardContent></Card>
-          ) : pendingDevices.length === 0 ? (
-            <Card>
-              <CardContent className="p-6 text-center text-muted-foreground">
-                No pending devices. Waiting for slave devices to connect and register...
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-2">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <AnimatePresence mode="popLayout">
               {pendingDevices.map((slave) => (
-                <Card key={slave.slaveId} className="border-l-4 border-l-amber-400">
-                  <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
-                    <div>
-                      <p className="font-mono text-sm font-bold" data-testid={`text-pending-id-${slave.slaveId}`}>{slave.slaveId}</p>
-                      <p className="text-sm text-muted-foreground">Detected - Awaiting approval</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="no-default-active-elevate bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">Pending</Badge>
-                      <Button
-                        size="sm"
-                        data-testid={`button-approve-${slave.slaveId}`}
-                        onClick={() => setApproveSlaveData(slave)}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-1" />
-                        Approve
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="secondary" data-testid={`button-reject-${slave.slaveId}`}>
-                            <Trash2 className="w-4 h-4 mr-1" />
-                            Reject
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Reject Device</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Remove device "{slave.slaveId}"? It can register again later.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => deleteMutation.mutate(slave.slaveId)}>
-                              Reject
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </CardContent>
-                </Card>
+                <motion.div
+                  key={slave.slaveId}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                >
+                  <Card className="bg-slate-900/40 border-amber-500/20 backdrop-blur-xl group hover:border-amber-500/40 transition-colors">
+                    <CardContent className="p-5">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <p className="text-xs font-bold text-amber-500 tracking-widest uppercase mb-1">Signal Detected</p>
+                          <h3 className="text-lg font-bold text-white font-mono">{slave.slaveId}</h3>
+                        </div>
+                        <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                          <Wifi className="w-4 h-4 text-amber-500 animate-ping" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-6">
+                        <Button className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl" onClick={() => setApproveSlaveData(slave)}>Authorize</Button>
+                        <Button variant="ghost" className="text-slate-500 hover:text-red-400" onClick={() => deleteMutation.mutate(slave.slaveId)}><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               ))}
-            </div>
-          )}
+            </AnimatePresence>
+            {pendingDevices.length === 0 && (
+              <div className="col-span-full py-12 text-center rounded-2xl border border-dashed border-white/10 text-slate-500 font-medium">Scanning for new hardware...</div>
+            )}
+          </div>
         </section>
 
         <section>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-6">
             <CheckCircle className="w-5 h-5 text-emerald-500" />
-            <h2 className="text-lg font-semibold">Approved Devices</h2>
-            <Badge variant="secondary" className="no-default-active-elevate">{approvedDevices.length}</Badge>
+            <h2 className="text-lg font-bold text-white tracking-tight">Active Infrastructure</h2>
+            <div className="px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-400">{approvedDevices.length} NODES</div>
           </div>
-          {approvedDevices.length === 0 ? (
-            <Card>
-              <CardContent className="p-6 text-center text-muted-foreground">
-                No approved devices yet. Approve pending devices above.
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-2">
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <AnimatePresence mode="popLayout">
               {approvedDevices.map((slave) => (
-                <Card
+                <motion.div
                   key={slave.slaveId}
-                  className={`border-l-4 ${slave.alertActive ? "border-l-red-500 bg-red-50/50 dark:bg-red-950/20" : "border-l-emerald-500"}`}
-                  data-testid={`card-approved-${slave.slaveId}`}
+                  layout
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                 >
-                  <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
-                    <div>
-                      <p className="font-mono text-sm font-bold">{slave.slaveId}</p>
-                      <p className="text-sm font-medium" data-testid={`text-approved-name-${slave.slaveId}`}>
-                        {slave.patientName || "No name"} - Bed {slave.bed || "-"}, Room {slave.room || "-"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {slave.alertActive ? (
-                        <Badge variant="destructive" className="no-default-active-elevate">
-                          <AlertTriangle className="w-3 h-3 mr-1" />
-                          Alert
-                        </Badge>
-                      ) : slave.registered ? (
-                        <Badge variant="secondary" className="no-default-active-elevate">Online</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="no-default-active-elevate text-muted-foreground">Offline</Badge>
-                      )}
-                      {slave.alertActive && (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          data-testid={`button-clear-alert-${slave.slaveId}`}
-                          onClick={() => clearAlertMutation.mutate(slave.slaveId)}
-                          disabled={clearAlertMutation.isPending}
-                        >
-                          <BellOff className="w-4 h-4 mr-1" />
-                          Clear
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        data-testid={`button-edit-${slave.slaveId}`}
-                        onClick={() => setEditSlaveData(slave)}
-                      >
-                        <Pencil className="w-4 h-4 mr-1" />
-                        Edit
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="secondary" data-testid={`button-delete-${slave.slaveId}`}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Device</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Remove device "{slave.slaveId}" ({slave.patientName})? This cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              data-testid={`button-confirm-delete-${slave.slaveId}`}
-                              onClick={() => deleteMutation.mutate(slave.slaveId)}
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </CardContent>
-                </Card>
+                  <Card className={`bg-slate-900/40 backdrop-blur-xl border-l-4 transition-all ${slave.alertActive ? "border-red-500/50 shadow-lg shadow-red-500/10" : "border-emerald-500/30"}`}>
+                    <CardContent className="p-5">
+                      <div className="flex justify-between mb-4">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-white font-bold truncate leading-tight">{slave.patientName || "NODE_01"}</h4>
+                          <p className="text-[10px] font-bold text-slate-500 tracking-tighter uppercase mt-1">ID: {slave.slaveId}</p>
+                        </div>
+                        <Badge className={`${slave.alertActive ? 'bg-red-500 animate-pulse' : 'bg-white/5 text-slate-500'} border-none`}>{slave.alertActive ? 'EMERGENCY' : 'LINKED'}</Badge>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 mb-5">
+                        <div className="p-2 rounded-lg bg-white/5 border border-white/5 text-[11px]">
+                          <span className="block text-slate-500 uppercase font-bold tracking-widest">Bed</span>
+                          <span className="text-white font-bold">{slave.bed || "-"}</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-white/5 border border-white/5 text-[11px]">
+                          <span className="block text-slate-500 uppercase font-bold tracking-widest">Room</span>
+                          <span className="text-white font-bold">{slave.room || "-"}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {slave.alertActive && <Button size="sm" className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg" onClick={() => clearAlertMutation.mutate(slave.slaveId)}>Silence</Button>}
+                        <Button size="sm" variant="secondary" className="flex-1 bg-white/5 text-slate-300 rounded-lg hover:bg-white/10" onClick={() => setEditSlaveData(slave)}><Pencil className="w-3 h-3 mr-2" /> Modify</Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild><Button size="sm" variant="ghost" className="text-slate-600 hover:text-red-400"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
+                          <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                            <AlertDialogHeader><AlertDialogTitle>Confirm Purge</AlertDialogTitle><AlertDialogDescription className="text-slate-400">Sever all links with {slave.patientName}? Critical alert capability will be lost.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel className="bg-white/5 text-white border-none">Abort</AlertDialogCancel><AlertDialogAction onClick={() => deleteMutation.mutate(slave.slaveId)} className="bg-red-500 hover:bg-red-600">Execute Delete</AlertDialogAction></AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               ))}
-            </div>
-          )}
+            </AnimatePresence>
+          </div>
         </section>
       </main>
 
-      {approveSlaveData && (
-        <ApproveDialog
-          slave={approveSlaveData}
-          open={!!approveSlaveData}
-          onOpenChange={(open) => { if (!open) setApproveSlaveData(null); }}
-        />
-      )}
-      {editSlaveData && (
-        <EditSlaveDialog
-          slave={editSlaveData}
-          open={!!editSlaveData}
-          onOpenChange={(open) => { if (!open) setEditSlaveData(null); }}
-        />
-      )}
+      <Dialog open={!!approveSlaveData} onOpenChange={(o) => !o && setApproveSlaveData(null)}>
+        <DialogContent className="bg-[#0f172a] border-white/10 text-white font-['Outfit'] sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-xl font-bold">Node Authorization: {approveSlaveData?.slaveId}</DialogTitle></DialogHeader>
+          <ApproveForm slaveId={approveSlaveData?.slaveId || ""} onComplete={() => setApproveSlaveData(null)} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editSlaveData} onOpenChange={(o) => !o && setEditSlaveData(null)}>
+        <DialogContent className="bg-[#0f172a] border-white/10 text-white font-['Outfit'] sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-xl font-bold">Modify Infrastructure</DialogTitle></DialogHeader>
+          {editSlaveData && <EditForm slave={editSlaveData} onComplete={() => setEditSlaveData(null)} />}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function ApproveForm({ slaveId, onComplete }: { slaveId: string, onComplete: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const form = useForm<ApproveSlave>({
+    resolver: zodResolver(approveSlaveSchema),
+    defaultValues: { patientName: "", bed: "", room: "" },
+  });
+
+  const mutation = useMutation({
+    mutationFn: (data: ApproveSlave) => apiRequest("POST", `/api/approve/${slaveId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
+      toast({ title: "Authorized", description: "Node added to network." });
+      onComplete();
+    },
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))} className="space-y-4 pt-4">
+        <FormField control={form.control} name="patientName" render={({ field }) => (
+          <FormItem><FormLabel className="text-slate-500 text-[10px] font-bold uppercase">Subject Name</FormLabel><FormControl><Input className="bg-white/5 border-white/10" {...field} /></FormControl></FormItem>
+        )} />
+        <div className="grid grid-cols-2 gap-4">
+          <FormField control={form.control} name="bed" render={({ field }) => (
+            <FormItem><FormLabel className="text-slate-500 text-[10px] font-bold uppercase">Bed</FormLabel><FormControl><Input className="bg-white/5 border-white/10" {...field} /></FormControl></FormItem>
+          )} />
+          <FormField control={form.control} name="room" render={({ field }) => (
+            <FormItem><FormLabel className="text-slate-500 text-[10px] font-bold uppercase">Room</FormLabel><FormControl><Input className="bg-white/5 border-white/10" {...field} /></FormControl></FormItem>
+          )} />
+        </div>
+        <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 font-bold mt-4" disabled={mutation.isPending}>Activate Node</Button>
+      </form>
+    </Form>
+  );
+}
+
+function EditForm({ slave, onComplete }: { slave: Slave, onComplete: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const form = useForm({
+    resolver: zodResolver(updateSlaveSchema),
+    defaultValues: { patientName: slave.patientName || "", bed: slave.bed || "", room: slave.room || "" },
+  });
+
+  const mutation = useMutation({
+    mutationFn: (data: any) => apiRequest("PUT", `/api/slaves/${slave.slaveId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
+      toast({ title: "Updated", description: "Node parameters modified." });
+      onComplete();
+    },
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit((d) => mutation.mutate(d))} className="space-y-4 pt-4">
+        <FormField control={form.control} name="patientName" render={({ field }) => (
+          <FormItem><FormLabel className="text-slate-500 text-[10px] font-bold uppercase">Subject Name</FormLabel><FormControl><Input className="bg-white/5 border-white/10" {...field} /></FormControl></FormItem>
+        )} />
+        <div className="grid grid-cols-2 gap-4">
+          <FormField control={form.control} name="bed" render={({ field }) => (
+            <FormItem><FormLabel className="text-slate-500 text-[10px] font-bold uppercase">Bed</FormLabel><FormControl><Input className="bg-white/5 border-white/10" {...field} /></FormControl></FormItem>
+          )} />
+          <FormField control={form.control} name="room" render={({ field }) => (
+            <FormItem><FormLabel className="text-slate-500 text-[10px] font-bold uppercase">Room</FormLabel><FormControl><Input className="bg-white/5 border-white/10" {...field} /></FormControl></FormItem>
+          )} />
+        </div>
+        <Button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 font-bold mt-4" disabled={mutation.isPending}>Apply Changes</Button>
+      </form>
+    </Form>
   );
 }
 
@@ -651,21 +432,8 @@ export default function AdminPage() {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!session?.authenticated) {
-    return (
-      <LoginForm
-        onLogin={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/session"] })}
-      />
-    );
-  }
+  if (isLoading) return <div className="min-h-screen bg-[#070b14] flex items-center justify-center text-emerald-500 font-mono">STABILIZING_HANDSHAKE...</div>;
+  if (!session?.authenticated) return <LoginForm onLogin={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/session"] })} />;
 
   return <AdminPanel />;
 }

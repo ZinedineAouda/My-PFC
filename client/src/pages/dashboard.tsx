@@ -1,112 +1,96 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiUrl } from "@/lib/queryClient";
 import type { Slave } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bell, BellOff, Activity, Bed, DoorOpen, Clock, AlertTriangle, Heart } from "lucide-react";
+import { Bell, BellOff, Activity, Bed, DoorOpen, Clock, AlertTriangle, Heart, Shield, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useWebsocket } from "@/hooks/use-websocket";
+import { motion, AnimatePresence } from "framer-motion";
 
 function SlaveCard({ slave }: { slave: Slave }) {
   const isAlert = slave.alertActive;
 
   return (
-    <Card
-      data-testid={`card-slave-${slave.slaveId}`}
-      className={`relative transition-all duration-500 ${isAlert
-          ? "ring-2 ring-red-500 dark:ring-red-400 bg-red-50 dark:bg-red-950/30"
-          : ""
-        }`}
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.3 }}
+      className="relative"
     >
-      {isAlert && (
-        <div className="absolute top-0 left-0 right-0 h-1 bg-red-500 rounded-t-md animate-pulse" />
-      )}
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-2 mb-4">
-          <div className="flex-1 min-w-0">
-            <h3
-              data-testid={`text-patient-name-${slave.slaveId}`}
-              className="text-lg font-semibold truncate"
-            >
-              {slave.patientName}
-            </h3>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              ID: {slave.slaveId}
-            </p>
-          </div>
-          <div
-            data-testid={`status-indicator-${slave.slaveId}`}
-            className={`flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300 ${isAlert
-                ? "bg-red-500 dark:bg-red-600 text-white animate-pulse"
-                : slave.registered
-                  ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400"
-                  : "bg-muted text-muted-foreground"
-              }`}
-          >
-            {isAlert ? (
-              <Bell className="w-6 h-6" />
-            ) : slave.registered ? (
-              <Heart className="w-5 h-5" />
-            ) : (
-              <BellOff className="w-5 h-5" />
-            )}
-          </div>
-        </div>
-
+      <div
+        className={`relative overflow-hidden group rounded-2xl border transition-all duration-500 shadow-xl ${
+          isAlert
+            ? "bg-red-950/40 border-red-500/50 ring-2 ring-red-500/50 shadow-red-900/40"
+            : "bg-slate-900/60 border-white/10 hover:border-emerald-500/30 shadow-black/40"
+        } backdrop-blur-xl`}
+      >
         {isAlert && (
-          <Badge
-            data-testid={`badge-alert-${slave.slaveId}`}
-            variant="destructive"
-            className="mb-3 text-xs font-bold uppercase tracking-wider no-default-active-elevate"
-          >
-            <AlertTriangle className="w-3 h-3 mr-1" />
-            ALERT ACTIVE
-          </Badge>
+          <div className="absolute inset-0 bg-red-500/10 animate-pulse pointer-events-none" />
         )}
 
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm">
-            <Bed className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <span className="text-muted-foreground">Bed:</span>
-            <span data-testid={`text-bed-${slave.slaveId}`} className="font-medium">
-              {slave.bed}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <DoorOpen className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <span className="text-muted-foreground">Room:</span>
-            <span data-testid={`text-room-${slave.slaveId}`} className="font-medium">
-              {slave.room}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            <span className="text-muted-foreground">Last Alert:</span>
-            <span
-              data-testid={`text-last-alert-${slave.slaveId}`}
-              className="font-medium"
-            >
-              {slave.lastAlertTime
-                ? new Date(slave.lastAlertTime).toLocaleString()
-                : "Never"}
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-4 pt-3 border-t flex items-center gap-2">
-          <div
-            className={`w-2 h-2 rounded-full ${slave.registered
-                ? "bg-emerald-500"
-                : "bg-muted-foreground"
+        <div className="p-6 relative z-10">
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xl font-bold text-white tracking-tight truncate leading-tight">
+                {slave.patientName || "Unnamed Station"}
+              </h3>
+              <p className="text-xs font-medium text-slate-400 mt-1 flex items-center gap-1.5">
+                <Shield className="w-3 h-3" /> {slave.slaveId}
+              </p>
+            </div>
+            <div
+              className={`flex-shrink-0 flex items-center justify-center w-14 h-14 rounded-2xl transition-all duration-500 ${
+                isAlert
+                  ? "bg-red-500 shadow-lg shadow-red-500/50 scale-110"
+                  : slave.registered
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20"
+                  : "bg-slate-800 text-slate-500 border border-white/5"
               }`}
-          />
-          <span className="text-xs text-muted-foreground">
-            {slave.registered ? "Connected" : "Not Connected"}
-          </span>
+            >
+              {isAlert ? (
+                <Bell className="w-7 h-7 text-white animate-bounce" />
+              ) : (
+                <Heart className={`w-6 h-6 ${slave.registered ? "fill-emerald-400" : ""}`} />
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+              <div className="flex items-center gap-3">
+                <Bed className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm text-slate-300">Bed</span>
+              </div>
+              <span className="text-sm font-bold text-white">{slave.bed || "-"}</span>
+            </div>
+            
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+              <div className="flex items-center gap-3">
+                <DoorOpen className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm text-slate-300">Room</span>
+              </div>
+              <span className="text-sm font-bold text-white">{slave.room || "-"}</span>
+            </div>
+
+            <div className="pt-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-widest text-slate-500">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${slave.registered ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-700'}`} />
+                {slave.registered ? 'SYSTEM STABLE' : 'LINK DOWN'}
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {slave.lastAlertTime ? new Date(slave.lastAlertTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : "NO EVENTS"}
+              </div>
+            </div>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </motion.div>
   );
 }
 
@@ -137,7 +121,14 @@ function DashboardSkeleton() {
 
 export default function Dashboard() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const prevAlertsRef = useRef<Set<string>>(new Set());
+
+  useWebsocket((msg) => {
+    console.log("WS Event:", msg.type);
+    queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
+  });
 
   const { data: status } = useQuery({
     queryKey: ["/api/status"],
@@ -146,7 +137,6 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch status");
       return res.json();
     },
-    refetchInterval: 5000,
   });
 
   const { data: slaves, isLoading, error } = useQuery<Slave[]>({
@@ -156,7 +146,6 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    refetchInterval: 2000,
   });
 
   useEffect(() => {
@@ -170,8 +159,8 @@ export default function Dashboard() {
         const slave = slaves.find((s) => s.slaveId === id);
         if (slave) {
           toast({
-            title: "Patient Alert!",
-            description: `${slave.patientName} (Bed ${slave.bed}, Room ${slave.room}) needs assistance!`,
+            title: "CRITICAL ALERT",
+            description: `${slave.patientName} (Bed ${slave.bed}) Emergency request!`,
             variant: "destructive",
           });
         }
@@ -187,75 +176,91 @@ export default function Dashboard() {
   const isMasterOnline = status?.isMasterOnline ?? false;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-md bg-primary text-primary-foreground">
-                <Activity className="w-5 h-5" />
+    <div className="min-h-screen bg-[#070b14] text-slate-100 font-['Outfit']">
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.08)_0%,transparent_50%)]" />
+      
+      <header className="sticky top-0 z-50 border-b border-white/5 bg-[#070b14]/80 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 py-5">
+          <div className="flex items-center justify-between gap-6 flex-wrap">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/20">
+                <Activity className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">Patient Alarm System</h1>
-                <p className="text-sm text-muted-foreground">Real-time monitoring dashboard</p>
+                <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+                  Signal Command Center
+                </h1>
+                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-500/80 tracking-widest uppercase">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live Monitoring Active
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <Badge variant={isMasterOnline ? "default" : "secondary"} className={`no-default-active-elevate ${isMasterOnline ? 'bg-emerald-500 hover:bg-emerald-600' : ''}`}>
-                <Activity className="w-3 h-3 mr-1" />
-                Master: {isMasterOnline ? "Online" : "Offline"}
-              </Badge>
-              <Badge variant="secondary" className="no-default-active-elevate">
-                {totalDevices} Device{totalDevices !== 1 ? "s" : ""}
-              </Badge>
-              <Badge variant="secondary" className="no-default-active-elevate">
-                {connectedDevices} Connected
-              </Badge>
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${isMasterOnline ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-900 border-white/5 text-slate-500'}`}>
+                <RefreshCw className={`w-4 h-4 ${isMasterOnline ? 'animate-spin-slow' : ''}`} />
+                <span className="text-sm font-bold">Master: {isMasterOnline ? 'ONLINE' : 'OFFLINE'}</span>
+              </div>
+              
+              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/5 text-slate-300">
+                <Shield className="w-4 h-4" />
+                <span className="text-sm font-bold">{connectedDevices}/{totalDevices} Devices</span>
+              </div>
+
               {activeAlerts > 0 && (
-                <Badge variant="destructive" data-testid="badge-active-alerts" className="no-default-active-elevate animate-pulse">
-                  <AlertTriangle className="w-3 h-3 mr-1" />
-                  {activeAlerts} Active Alert{activeAlerts !== 1 ? "s" : ""}
-                </Badge>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500 text-white shadow-lg shadow-red-500/30 animate-bounce">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span className="text-sm font-extrabold">{activeAlerts} EMERGENCY</span>
+                </div>
               )}
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {isLoading ? (
-          <DashboardSkeleton />
-        ) : error ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <AlertTriangle className="w-12 h-12 text-destructive mx-auto mb-4" />
-              <h2 className="text-lg font-semibold mb-2">Connection Error</h2>
-              <p className="text-muted-foreground">Unable to connect to the alarm system. Retrying...</p>
-            </CardContent>
-          </Card>
-        ) : slaves && slaves.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <Bed className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">No Devices Registered</h2>
-              <p className="text-muted-foreground">
-                Add patient devices through the admin panel to get started.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {slaves
-              ?.sort((a, b) => {
-                if (a.alertActive && !b.alertActive) return -1;
-                if (!a.alertActive && b.alertActive) return 1;
-                return a.slaveId.localeCompare(b.slaveId);
-              })
-              .map((slave) => (
-                <SlaveCard key={slave.slaveId} slave={slave} />
-              ))}
-          </div>
-        )}
+      <main className="max-w-7xl mx-auto px-6 py-10 relative">
+        <AnimatePresence mode="popLayout">
+          {isLoading ? (
+            <DashboardSkeleton key="skeleton" />
+          ) : error ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key="error">
+              <Card className="bg-red-950/20 border-red-500/20 backdrop-blur-xl">
+                <CardContent className="p-12 text-center">
+                  <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+                  <h2 className="text-2xl font-bold text-white mb-3">System Link Failure</h2>
+                  <p className="text-slate-400 max-w-md mx-auto">Lost connection to the primary server. Attempting to re-establish secure handshake...</p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ) : slaves && slaves.length === 0 ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key="empty">
+              <Card className="bg-slate-900/40 border-white/5 backdrop-blur-xl">
+                <CardContent className="p-16 text-center">
+                  <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-8">
+                    <Bed className="w-12 h-12 text-slate-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-3">No Active Channels</h2>
+                  <p className="text-slate-400 max-w-sm mx-auto">
+                    Please register patient stations in the Management Hub to begin monitoring.
+                  </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {slaves
+                ?.sort((a, b) => {
+                  if (a.alertActive && !b.alertActive) return -1;
+                  if (!a.alertActive && b.alertActive) return 1;
+                  return a.slaveId.localeCompare(b.slaveId);
+                })
+                .map((slave) => (
+                  <SlaveCard key={slave.slaveId} slave={slave} />
+                ))}
+            </div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );
