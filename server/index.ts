@@ -53,34 +53,6 @@ const httpServer = createServer(app);
     console.error("[BOOT] CRITICAL ERROR:", err);
   }
 
-  // Last-resort fallback if static serving fails
-  app.get("/", (req, res) => {
-    const rootFiles = fs.readdirSync(process.cwd());
-    const dirName = __dirname;
-    const env = process.env.NODE_ENV;
-    
-    let debugInfo = `<h3>Debug Info (Railway):</h3>`;
-    debugInfo += `<p>NODE_ENV: ${env}</p>`;
-    debugInfo += `<p>CWD: ${process.cwd()}</p>`;
-    debugInfo += `<p>DIRNAME: ${dirName}</p>`;
-    debugInfo += `<p>FILES IN ROOT: ${rootFiles.join(', ')}</p>`;
-    
-    if (fs.existsSync(path.join(process.cwd(), 'dist'))) {
-      debugInfo += `<p>CONTENTS OF DIST: ${fs.readdirSync(path.join(process.cwd(), 'dist')).join(', ')}</p>`;
-    }
-
-    res.send(`
-      <div style="font-family: sans-serif; padding: 20px;">
-        <h1>Hospital Alarm System</h1>
-        <p>The dashboard is loading. If it stays like this, the server is still mapping the build files.</p>
-        <div style="background: #f0f0f0; padding: 10px; border-radius: 5px; font-family: monospace;">
-          ${debugInfo}
-        </div>
-        <p>Please refresh in 10 seconds.</p>
-      </div>
-    `);
-  });
-
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     res.status(err.status || 500).json({ message: err.message || "Internal Server Error" });
   });
