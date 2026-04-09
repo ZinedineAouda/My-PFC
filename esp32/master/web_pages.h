@@ -371,7 +371,7 @@ label { display:block; font-size:12px; color:var(--slate-400); margin-bottom:6px
 
 <script>
 let pendingApprovalId = null;
-const authHeader = 'Basic YWRtaW46YWRtaW4xMjM0';
+const authHeader = 'admin1234';
 
 function refresh() {
   fetch('/api/slaves?all=1').then(r => r.json()).then(slaves => {
