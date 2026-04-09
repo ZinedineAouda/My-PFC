@@ -1,9 +1,11 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
+import MemoryStore from "memorystore";
 import cors from "cors";
 import { storage } from "./storage";
 import { initWss, broadcast } from "./wss";
+import { log } from "./index";
 import { insertSlaveSchema, updateSlaveSchema, approveSlaveSchema, alertRequestSchema, registerRequestSchema, setupSchema, connectWifiSchema } from "@shared/schema";
 
 declare module "express-session" {
@@ -60,15 +62,17 @@ export async function registerRoutes(
     allowedHeaders: ["Content-Type", "Authorization", "x-device-key"]
   }));
 
+  const SessionStore = MemoryStore(session);
   app.use(
     session({
       secret: process.env.SESSION_SECRET || "hospital-alarm-secret-key",
       resave: false,
       saveUninitialized: false,
       proxy: true,
+      store: new SessionStore({ checkPeriod: 86400000 }), // prune expired entries every 24h
       cookie: {
-        secure: false, // Railway handles HTTPS, cookie works fine without secure flag if on same origin
-        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production", // send only over HTTPS in production
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         maxAge: 24 * 60 * 60 * 1000,
       },
     })

@@ -61,16 +61,29 @@ void ledBlink(int n, int d1, int d2) {
 }
 
 // --- LOGIC ---
-bool sendToMaster(String path, String payload) {
-  if (WiFi.status() != WL_CONNECTED) return false;
+// Returns empty string on success, or the "reason" field from the JSON response on failure
+String sendToMaster(String path, String payload) {
+  if (WiFi.status() != WL_CONNECTED) return "wifi_disconnected";
   HTTPClient http;
   http.begin(wifiClient, masterURL + path);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(5000);
   int code = http.POST(payload);
-  http.end();
   Serial.printf("[HTTP] POST %s -> status: %d\n", path.c_str(), code);
-  return (code == 200);
+  if (code == 200) {
+    String body = http.getString();
+    http.end();
+    // Parse reason from JSON if success == false
+    JsonDocument respDoc;
+    DeserializationError err = deserializeJson(respDoc, body);
+    if (!err && respDoc["success"] == false) {
+      const char* reason = respDoc["reason"] | "unknown";
+      return String(reason);
+    }
+    return ""; // empty = success
+  }
+  http.end();
+  return "http_" + String(code);
 }
 
 void doRegister() {
@@ -78,12 +91,13 @@ void doRegister() {
   doc["slaveId"] = slaveId;
   String body;
   serializeJson(doc, body);
-  if (sendToMaster("/api/register", body)) {
+  String reason = sendToMaster("/api/register", body);
+  if (reason == "") {
     isRegistered = true;
     Serial.println("[SYNC] registered successfully with Master");
     ledBlink(2, 100, 100);
   } else {
-    Serial.println("[SYNC] registration FAILED");
+    Serial.printf("[SYNC] registration result: %s\n", reason.c_str());
   }
 }
 
@@ -92,13 +106,23 @@ void doAlert() {
   doc["slaveId"] = slaveId;
   String body;
   serializeJson(doc, body);
-  if (sendToMaster("/api/alert", body)) {
+  String reason = sendToMaster("/api/alert", body);
+  if (reason == "") {
     alertPending = true;
     alertSentTime = millis();
     digitalWrite(LED_PIN, LED_ON);
     Serial.println("[ALERT] Signal RECEIVED by Master");
+  } else if (reason == "not approved") {
+    // Distinct 6-blink pattern: "waiting for admin approval"
+    Serial.println("[ALERT] Not yet approved by admin — waiting...");
+    ledBlink(6, 80, 80);
+  } else if (reason == "alert already active") {
+    // Solid LED already on — just log
+    Serial.println("[ALERT] Alert already active on Master");
+    digitalWrite(LED_PIN, LED_ON);
   } else {
-    Serial.println("[ALERT] FAILED to notify Master!");
+    // Generic failure: 4 fast blinks
+    Serial.printf("[ALERT] FAILED: %s\n", reason.c_str());
     ledBlink(4, 50, 50);
   }
 }
@@ -197,6 +221,20 @@ void loop() {
       }
     }
 
+    // Fallback: if no beacon received in 30s, try the default AP IP
+    static unsigned long beaconWaitStart = 0;
+    if (!masterDiscovered) {
+      if (beaconWaitStart == 0) beaconWaitStart = millis();
+      if (millis() - beaconWaitStart > 30000) {
+        Serial.println("[FALLBACK] No beacon found. Trying 192.168.4.1...");
+        masterURL = "http://192.168.4.1";
+        masterDiscovered = true;
+        doRegister();
+      }
+    } else {
+      beaconWaitStart = 0; // reset in case master goes offline and comes back
+    }
+
     if (millis() - lastHeartbeat > HEARTBEAT_MS) {
       lastHeartbeat = millis();
       doRegister();
@@ -205,14 +243,21 @@ void loop() {
 
   if (buttonPressed) {
     buttonPressed = false;
-    if (setupDone && masterDiscovered) {
-      doAlert();
-    } else if (!setupDone) {
+    if (!setupDone) {
       ledBlink(3, 100, 100);
       Serial.println("Action denied: Setup not complete.");
-    } else {
+    } else if (WiFi.status() != WL_CONNECTED) {
       ledBlink(2, 200, 200);
-      Serial.println("Action denied: Searching for Master...");
+      Serial.println("Action denied: Not connected to WiFi.");
+    } else if (!masterDiscovered) {
+      // Try fallback immediately when button is pressed
+      Serial.println("[ALERT] No beacon yet — using fallback 192.168.4.1");
+      masterURL = "http://192.168.4.1";
+      masterDiscovered = true;
+      doRegister();
+      doAlert();
+    } else {
+      doAlert();
     }
   }
 

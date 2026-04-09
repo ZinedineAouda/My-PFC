@@ -36,8 +36,8 @@ export function serveStatic(app: Express) {
   if (foundPath) {
     console.log(`[SUCCESS] Static assets located at: ${foundPath}`);
     app.use(express.static(foundPath));
-    app.get("*", (req, res, next) => {
-      if (req.path.startsWith("/api") || req.path.startsWith("/ws")) return next();
+    app.use((req, res, next) => {
+      if (req.method !== "GET" || req.path.startsWith("/api") || req.path.startsWith("/ws")) return next();
       res.sendFile(path.resolve(foundPath, "index.html"));
     });
   } else {

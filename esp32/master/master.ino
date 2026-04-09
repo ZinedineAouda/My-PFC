@@ -9,7 +9,7 @@
 
 // --- ONLINE MODE SETTINGS ------------------------
 // Pre-configure these before flashing the ESP32!
-const String serverURL = "https://my-pfc-production.up.railway.app/";
+const String serverURL = "https://my-pfc-production.up.railway.app"; // NO trailing slash
 const String deviceKey = "esp32";
 unsigned long lastHeartbeat = 0;
 bool cloudBusy = false;                        // Prevents overlapping HTTPS calls
@@ -565,5 +565,17 @@ void loop() {
       lastBeep = millis();
     }
   }
+
+  // Clear pending cloud flags when not in Mode 4 (no cloud connection)
+  if (wifiMode != 4) {
+    for (int i = 0; i < MAX_SLAVES; i++) {
+      if (slaves[i].used) {
+        slaves[i].pendingRegisterCloud = false;
+        slaves[i].pendingAlertCloud = false;
+      }
+    }
+    pendingMasterPingCloud = false;
+  }
+
   delay(10);
 }
