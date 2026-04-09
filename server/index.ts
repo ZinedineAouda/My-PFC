@@ -6,15 +6,20 @@ import { createServer } from "http";
 const app = express();
 app.set("trust proxy", 1);
 
-// --- EMERGENCY BOOTSTRAP HEALTHCHECK ---
-// This handles Railway probes immediately, even before the rest of the app boots.
-app.get("/health", (_req, res) => res.status(200).send("OK"));
-app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
+const httpServer = createServer();
 
-const httpServer = createServer(app);
+// --- THE ULTIMATE SURVIVAL HEALTHCHECK (Node.js Level) ---
+// This answers before Express even gets the request.
+httpServer.on("request", (req, res) => {
+  if (req.url === "/health" || req.url === "/api/health") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("OK");
+    return;
+  }
+});
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Attach Express to the same server
+httpServer.on("request", app);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -26,14 +31,16 @@ export function log(message: string, source = "express") {
 (async () => {
   const port = parseInt(process.env.PORT || "5000", 10);
   
-  // START LISTENING IMMEDIATELY
-  // This satisfies Railway healthchecks immediately.
+  // Binding early to pass Railway probes
   httpServer.listen(port, "0.0.0.0", () => {
-    log(`Server listening on port ${port} (0.0.0.0)`);
+    log(`[SYNC] LAST BUILD: ${new Date().toISOString()}`);
+    log(`[SYNC] Listening on port ${port}`);
   });
 
   try {
-    log("Initializing routes and static files...");
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: false }));
+
     await registerRoutes(httpServer, app);
 
     if (process.env.NODE_ENV === "production") {
@@ -42,14 +49,12 @@ export function log(message: string, source = "express") {
       const { setupVite } = await import("./vite");
       await setupVite(httpServer, app);
     }
-    log("App initialization complete.");
+    log("System initialized successfully.");
   } catch (err) {
-    console.error("CRITICAL BOOT ERROR:", err);
-    // Still keep the server alive so we can see logs
+    console.error("FATAL STARTUP ERROR:", err);
   }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    res.status(status).json({ message: err.message || "Internal Server Error" });
+    res.status(err.status || 500).json({ message: err.message || "Internal Server Error" });
   });
 })();
