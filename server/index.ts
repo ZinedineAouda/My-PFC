@@ -5,6 +5,11 @@ import { createServer } from "http";
 
 const app = express();
 app.set("trust proxy", 1);
+
+// EMERGENCY ROOT HEALTHCHECK - Must be at the very top for Railway/Deployment probes
+app.get("/health", (_req, res) => res.status(200).send("OK"));
+app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
+
 const httpServer = createServer(app);
 
 declare module "http" {

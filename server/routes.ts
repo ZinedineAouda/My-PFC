@@ -50,6 +50,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  log("Starting route registration...");
   initWss(httpServer);
 
   // Allow the ESP32 to hit the API routes without CORS blocking it.
