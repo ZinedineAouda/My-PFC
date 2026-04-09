@@ -6,20 +6,14 @@ import { createServer } from "http";
 const app = express();
 app.set("trust proxy", 1);
 
-const httpServer = createServer();
+// --- PRIORITY 1: HEALTHCHECKS (Before any middleware) ---
+app.get("/health", (_req, res) => res.status(200).send("OK"));
+app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
+app.get("/api/status", (_req, res) => res.status(200).json({ status: "ok", mode: 4 }));
 
-// --- THE ULTIMATE SURVIVAL HEALTHCHECK (Node.js Level) ---
-// This answers before Express even gets the request.
-httpServer.on("request", (req, res) => {
-  if (req.url === "/health" || req.url === "/api/health" || req.url === "/api/status") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", mode: 4 }));
-    return;
-  }
-});
-
-// Attach Express to the same server
-httpServer.on("request", app);
+// --- PRIORITY 2: ESSENTIAL MIDDLEWARE ---
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -28,31 +22,39 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+const httpServer = createServer(app);
+
 (async () => {
   const port = parseInt(process.env.PORT || "5000", 10);
   
-  // Binding early to pass Railway probes
+  // Start server early for Railway
   httpServer.listen(port, "0.0.0.0", () => {
-    log(`[SYNC] LAST BUILD: ${new Date().toISOString()}`);
-    log(`[SYNC] Listening on port ${port}`);
+    log(`[BOOT] Server listening on port ${port}`);
   });
 
   try {
-    app.use(express.json());
-    app.use(express.urlencoded({ extended: false }));
-
+    log("[BOOT] Registering routes...");
     await registerRoutes(httpServer, app);
 
-    if (process.env.NODE_ENV === "production") {
+    // Default to production if not specified
+    const isProd = process.env.NODE_ENV === "production" || !process.env.NODE_ENV;
+    
+    if (isProd) {
+      log("[BOOT] Mode: Production. Serving static files.");
       serveStatic(app);
     } else {
+      log("[BOOT] Mode: Development. Starting Vite.");
       const { setupVite } = await import("./vite");
       await setupVite(httpServer, app);
     }
-    log("System initialized successfully.");
   } catch (err) {
-    console.error("FATAL STARTUP ERROR:", err);
+    console.error("[BOOT] CRITICAL ERROR:", err);
   }
+
+  // Last-resort fallback if static serving fails
+  app.get("/", (_req, res) => {
+    res.send("<h1>Hospital Alarm System</h1><p>The dashboard is loading. Please refresh in a moment.</p>");
+  });
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     res.status(err.status || 500).json({ message: err.message || "Internal Server Error" });
