@@ -73,6 +73,9 @@ export async function registerRoutes(
     })
   );
 
+  app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
+  app.get("/health", (_req, res) => res.status(200).send("OK"));
+
   app.post("/api/admin/login", (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (username === "admin" && password === "admin1234") {
