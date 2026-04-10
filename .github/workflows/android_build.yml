@@ -33,6 +33,8 @@ jobs:
 
       - name: Build Web Project
         run: npm run build
+        env:
+          VITE_API_URL: https://my-pfc-production.up.railway.app
 
       - name: Sync Capacitor
         run: npx cap sync android
