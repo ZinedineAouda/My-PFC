@@ -145,12 +145,14 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
+function AdminPanel({ isAuthenticated: initialAuth }: { isAuthenticated: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [approveSlaveData, setApproveSlaveData] = useState<Slave | null>(null);
   const [editSlaveData, setEditSlaveData] = useState<Slave | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [localAuth, setLocalAuth] = useState(initialAuth);
+  const isAuthenticated = initialAuth || localAuth;
 
   const requireAuth = (callback: () => void) => {
     if (!isAuthenticated) {
@@ -378,7 +380,8 @@ function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
       <Dialog open={showLogin} onOpenChange={setShowLogin}>
         <DialogContent className="bg-transparent border-none p-0 max-w-md shadow-none">
           <LoginForm onLogin={() => { 
-            setShowLogin(false); 
+            setShowLogin(false);
+            setLocalAuth(true);
             queryClient.invalidateQueries({ queryKey: ["/api/admin/session"] }); 
           }} />
         </DialogContent>
@@ -465,6 +468,7 @@ export default function AdminPage() {
   const { data: session, isLoading } = useQuery<{ authenticated: boolean } | null>({
     queryKey: ["/api/admin/session"],
     queryFn: getQueryFn({ on401: "returnNull" }),
+    staleTime: 0,  // Override Infinity — allow invalidation after login
   });
 
   if (isLoading) return <div className="min-h-screen bg-[#070b14] flex items-center justify-center text-emerald-500 font-mono">STABILIZING_HANDSHAKE...</div>;
