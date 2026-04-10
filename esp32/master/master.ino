@@ -54,8 +54,15 @@ void handleBuzzer();
 void loadSettings() {
     prefs.begin("master_cfg", false);
     setupDone = prefs.getBool("setupDone", false);
+    currentMode = (WiFiOpMode)prefs.getInt("mode", (int)MODE_AP);
+
+    // If it was previously in Cloud Mode, force the setup portal to appear on boot.
+    // This also fixes the issue for devices that had setupDone=true saved from older versions.
+    if (currentMode == MODE_ONLINE) {
+        setupDone = false;
+    }
+
     if (setupDone) {
-        currentMode = (WiFiOpMode)prefs.getInt("mode", (int)MODE_AP);
         String apS = prefs.getString("apSSID", AP_SSID_DEFAULT);
         String apP = prefs.getString("apPass", "");
         String staS = prefs.getString("staSSID", "");
