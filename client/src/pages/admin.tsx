@@ -184,6 +184,7 @@ function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
       if (!res.ok) throw new Error("Status sync failed");
       return res.json();
     },
+    refetchInterval: 10000,  // Poll every 10s for master connectivity status
   });
 
   const clearAlertMutation = useMutation({

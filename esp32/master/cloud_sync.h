@@ -1,6 +1,7 @@
 /*
  * ══════════════════════════════════════════════════════════════
  *  Cloud Sync — HTTPS-based sync with Railway server (Mode 4)
+ *  Persistent TLS session for reliable connectivity
  * ══════════════════════════════════════════════════════════════
  */
 #ifndef CLOUD_SYNC_H
@@ -16,13 +17,34 @@
 class CloudSync {
 public:
     CloudSync(DeviceRegistry& reg)
-        : _registry(reg), _lastSync(0), _busy(false), _forceSyncPending(false) {}
+        : _registry(reg), _lastSync(0), _lastPing(0),
+          _busy(false), _forceSyncPending(false),
+          _consecutiveFails(0) {
+        _client = nullptr;
+    }
+
+    ~CloudSync() {
+        if (_client) {
+            delete _client;
+            _client = nullptr;
+        }
+    }
 
     void handle() {
         if (WiFi.status() != WL_CONNECTED) return;
         if (_busy) return;
 
         unsigned long now = millis();
+
+        // ── Lightweight heartbeat ping every 15s ────────────
+        // This keeps the "Master Online" indicator alive on the
+        // cloud dashboard even if full syncs occasionally fail.
+        if (now - _lastPing >= CLOUD_PING_INTERVAL) {
+            _lastPing = now;
+            _sendPing();
+        }
+
+        // ── Full state sync ─────────────────────────────────
         if (_forceSyncPending || (now - _lastSync >= CLOUD_SYNC_INTERVAL)) {
             _forceSyncPending = false;
             _lastSync = now;
@@ -37,30 +59,79 @@ public:
     }
 
 private:
-    DeviceRegistry& _registry;
-    unsigned long    _lastSync;
-    bool             _busy;
-    bool             _forceSyncPending;
+    DeviceRegistry&   _registry;
+    unsigned long     _lastSync;
+    unsigned long     _lastPing;
+    bool              _busy;
+    bool              _forceSyncPending;
+    int               _consecutiveFails;
+    WiFiClientSecure* _client;
 
+    // ── Ensure persistent TLS client exists ─────────────────
+    WiFiClientSecure& _ensureClient() {
+        if (!_client) {
+            _client = new WiFiClientSecure();
+            _client->setInsecure();
+            _client->setHandshakeTimeout(8);  // 8s — generous for Railway cold starts
+            Serial.println("[CLOUD] TLS client created");
+        }
+        return *_client;
+    }
+
+    // ── Reset the TLS client (after repeated failures) ──────
+    void _resetClient() {
+        if (_client) {
+            _client->stop();
+            delete _client;
+            _client = nullptr;
+            Serial.println("[CLOUD] TLS client reset");
+        }
+    }
+
+    // ── Lightweight ping to keep heartbeat alive ────────────
+    void _sendPing() {
+        WiFiClientSecure& client = _ensureClient();
+        HTTPClient http;
+        http.setTimeout(CLOUD_HTTP_TIMEOUT);
+
+        String url = String(CLOUD_SERVER_URL) + "/api/master-ping";
+        if (!http.begin(client, url)) {
+            Serial.println("[CLOUD] Ping connection failed");
+            return;
+        }
+
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("x-device-key", CLOUD_DEVICE_KEY);
+
+        int httpCode = http.POST("{}");
+        if (httpCode == 200) {
+            Serial.println("[CLOUD] Ping OK");
+        } else {
+            Serial.printf("[CLOUD] Ping failed: HTTP %d\n", httpCode);
+        }
+        http.end();
+    }
+
+    // ── Full bidirectional state sync ───────────────────────
     void _syncToCloud() {
         _busy = true;
 
-        WiFiClientSecure client;
-        client.setInsecure(); // Skip cert verification (production: use CA cert)
-        client.setHandshakeTimeout(3);
-
+        WiFiClientSecure& client = _ensureClient();
         HTTPClient http;
         http.setTimeout(CLOUD_HTTP_TIMEOUT);
+        http.setReuse(true);  // Enable HTTP keep-alive
 
         String url = String(CLOUD_SERVER_URL) + "/api/master-sync";
         if (!http.begin(client, url)) {
             Serial.println("[CLOUD] Connection failed");
+            _handleFailure();
             _busy = false;
             return;
         }
 
         http.addHeader("Content-Type", "application/json");
         http.addHeader("x-device-key", CLOUD_DEVICE_KEY);
+        http.addHeader("Connection", "keep-alive");
 
         // ── Build sync payload ──────────────────────────────
         JsonDocument sendDoc;
@@ -83,6 +154,7 @@ private:
         // ── POST to cloud ───────────────────────────────────
         int httpCode = http.POST(payload);
         if (httpCode == 200) {
+            _consecutiveFails = 0;  // Reset failure counter
             String response = http.getString();
             JsonDocument recvDoc;
             if (deserializeJson(recvDoc, response) == DeserializationError::Ok) {
@@ -94,10 +166,24 @@ private:
             Serial.println("[CLOUD] Sync OK");
         } else {
             Serial.printf("[CLOUD] Sync failed: HTTP %d\n", httpCode);
+            _handleFailure();
         }
 
         http.end();
         _busy = false;
+    }
+
+    // ── Handle consecutive failures ─────────────────────────
+    void _handleFailure() {
+        _consecutiveFails++;
+        Serial.printf("[CLOUD] Consecutive failures: %d\n", _consecutiveFails);
+
+        // After 3 consecutive failures, destroy and recreate the TLS client
+        // This fixes cases where the TLS session became stale or corrupted
+        if (_consecutiveFails >= 3) {
+            _resetClient();
+            _consecutiveFails = 0;
+        }
     }
 };
 

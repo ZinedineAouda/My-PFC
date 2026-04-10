@@ -162,7 +162,8 @@ export class MemStorage implements IStorage {
 
   isMasterOnline(): boolean {
     if (!this.masterLastSeen) return false;
-    return Date.now() - this.masterLastSeen < 30000;
+    // 60s window — tolerates intermittent TLS handshake failures
+    return Date.now() - this.masterLastSeen < 60000;
   }
 
   // ── Bidirectional sync from ESP32 master ──────────────────
