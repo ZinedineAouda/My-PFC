@@ -110,7 +110,11 @@ public:
 
     // ── Initiate STA connection (from web setup) ────────────
     void connectSTA(const char* ssid, const char* pass) {
+        if (WiFi.getMode() == WIFI_AP) {
+            WiFi.mode(WIFI_AP_STA);
+        }
         setSTACredentials(ssid, pass);
+        WiFi.disconnect();
         WiFi.begin(_staSSID, _staPass);
         Serial.printf("[WIFI] Initiating connection to: %s\n", _staSSID);
     }

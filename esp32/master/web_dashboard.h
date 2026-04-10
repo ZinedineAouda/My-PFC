@@ -69,6 +69,13 @@ public:
             req->send(200, "application/json", out);
         });
 
+        // ── API: WiFi Connection Status ─────────────────────
+        _server.on("/api/wifi-status", HTTP_GET, [](AsyncWebServerRequest* req) {
+            int status = WiFi.status();
+            String json = "{\"status\":" + String(status) + "}";
+            req->send(200, "application/json", json);
+        });
+
         // ── API: WiFi scan ──────────────────────────────────
         _server.on("/api/scan", HTTP_GET, [](AsyncWebServerRequest* req) {
             int n = WiFi.scanComplete();

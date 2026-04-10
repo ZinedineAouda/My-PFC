@@ -140,12 +140,14 @@ function doConnect(){
   fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selSSID,password:p})})
     .then(r=>r.json())
     .then(d=>{
-      if(d.success){
-        s.innerHTML='<div class="status-msg ok">Connected! Applying offline settings...</div>';
-        setTimeout(finishSetup, 1000);
-      } else {
-        s.innerHTML='<div class="status-msg error">Failed: '+d.message+'</div>';
-      }
+      if(!d.success){s.innerHTML='<div class="status-msg error">'+d.message+'</div>';return;}
+      let a=0, i=setInterval(()=>{
+        fetch('/api/wifi-status').then(r=>r.json()).then(st=>{
+          a++;
+          if(st.status===3){clearInterval(i);s.innerHTML='<div class="status-msg ok">Connected successfully! Applying...</div>';setTimeout(finishSetup,1000);}
+          else if(st.status===4||st.status===1||a>=15){clearInterval(i);s.innerHTML='<div class="status-msg error">Incorrect password or network unreachable.</div>';}
+        }).catch(()=>{a++;if(a>=15){clearInterval(i);s.innerHTML='<div class="status-msg error">Timeout connecting.</div>';}});
+      },1000);
     });
 }
 function finishSetup(){
