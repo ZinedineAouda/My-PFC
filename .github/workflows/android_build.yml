@@ -28,6 +28,7 @@ jobs:
       - name: Install Mobile Dependencies
         working-directory: mobile
         run: |
+          rm -f package-lock.json
           npm install
           npx expo install --fix
 
