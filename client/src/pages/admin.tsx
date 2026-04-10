@@ -310,7 +310,7 @@ function AdminPanel() {
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_0%_0%,rgba(16,185,129,0.05)_0%,transparent_40%)]" />
 
       {/* ── Header ── */}
-      <header className="bg-[rgba(7,11,20,0.8)] backdrop-blur-2xl border-b border-white/5 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+      <header className="bg-[rgba(7,11,20,0.8)] backdrop-blur-xl border-b border-white/5 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-[rgba(15,23,42,0.8)] border border-white/10 rounded-2xl flex items-center justify-center">
             <Shield className="w-6 h-6 text-emerald-500" />

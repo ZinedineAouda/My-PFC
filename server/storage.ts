@@ -180,6 +180,19 @@ export class MemStorage implements IStorage {
   }>): void {
     this.updateMasterHeartbeat();
 
+    // ── Reconciliation: Handle deletions ───────────────────
+    // If a slave exists in the cloud but is missing from the master's
+    // incoming list, it means the master deleted it locally.
+    const incomingIds = new Set(incoming.map(s => s.slaveId));
+    
+    // Only perform reconciliation if we have slaves or if the master 
+    // has been online long enough to have fully initialized.
+    for (const slaveId of this.slaves.keys()) {
+      if (!incomingIds.has(slaveId)) {
+        this.slaves.delete(slaveId);
+      }
+    }
+
     for (const remote of incoming) {
       const local = this.slaves.get(remote.slaveId);
       if (local) {

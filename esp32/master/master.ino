@@ -191,7 +191,8 @@ void onDeviceChange(const String& deviceId, const char* eventType) {
         if (strcmp(eventType, "alert") == 0) {
             cloudSync.alertToCloud(deviceId);
         } else if (strcmp(eventType, "approve") == 0 ||
-                   strcmp(eventType, "clear") == 0) {
+                   strcmp(eventType, "clear") == 0 ||
+                   strcmp(eventType, "delete") == 0) {
             cloudSync.syncNow();
         }
     }
