@@ -19,13 +19,17 @@ import { C, API_BASE, WS_URL, type Slave, type StatusData, type WsMessage } from
 import SlaveModal from './SlaveModal';
 
 // ── Configure notification handler ──
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch (e) {
+  // Suppress missing native module errors gracefully inside Expo Go
+}
 
 type Props = { onLogout: () => void };
 
@@ -93,10 +97,14 @@ export default function DashboardScreen({ onLogout }: Props) {
   // ── Notification permissions ──
   useEffect(() => {
     const setup = async () => {
-      if (!Device.isDevice) return;
-      const { status: existing } = await Notifications.getPermissionsAsync();
-      if (existing !== 'granted') {
-        await Notifications.requestPermissionsAsync();
+      try {
+        if (!Device.isDevice) return;
+        const { status: existing } = await Notifications.getPermissionsAsync();
+        if (existing !== 'granted') {
+          await Notifications.requestPermissionsAsync();
+        }
+      } catch (e) {
+        console.log('Skipping push notifications setup in Expo Go', e);
       }
     };
     setup();

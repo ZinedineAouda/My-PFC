@@ -30,7 +30,9 @@
         {
           "sounds": []
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-font"
     ]
   }
 }
