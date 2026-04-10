@@ -27,6 +27,7 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <EEPROM.h>
 #include "config.h"
 
 // ─── Conditional: Setup portal (disable for minimal builds) ─────────
@@ -44,6 +45,16 @@ String topicHeartbeat;
 String topicStatus;
 String topicCommand;
 
+// ─── Config Persistence ─────────────────────────────────────────────
+struct SlaveConfig {
+    uint32_t magic;
+    bool setupDone;
+    char ssid[64];
+    char pass[64];
+    char mqtt[32];
+};
+const uint32_t CONFIG_MAGIC = 0xAA55CC33;
+
 // ─── State ──────────────────────────────────────────────────────────
 bool setupDone       = USE_HARDCODED_WIFI;
 bool mqttConnected   = false;
@@ -60,6 +71,32 @@ unsigned long alertLedTime    = 0;
 char wifiSSID[64] = DEFAULT_WIFI_SSID;
 char wifiPass[64] = DEFAULT_WIFI_PASS;
 char mqttIP[32]   = MQTT_BROKER_IP;
+
+void loadSlaveConfig() {
+    EEPROM.begin(sizeof(SlaveConfig));
+    SlaveConfig cfg;
+    EEPROM.get(0, cfg);
+    if (cfg.magic == CONFIG_MAGIC) {
+        setupDone = cfg.setupDone;
+        strncpy(wifiSSID, cfg.ssid, sizeof(wifiSSID));
+        strncpy(wifiPass, cfg.pass, sizeof(wifiPass));
+        strncpy(mqttIP, cfg.mqtt, sizeof(mqttIP));
+        Serial.println("[EEPROM] Loaded saved configuration");
+    }
+}
+
+void saveSlaveConfig() {
+    SlaveConfig cfg;
+    cfg.magic = CONFIG_MAGIC;
+    cfg.setupDone = setupDone;
+    strncpy(cfg.ssid, wifiSSID, sizeof(cfg.ssid));
+    strncpy(cfg.pass, wifiPass, sizeof(cfg.pass));
+    strncpy(cfg.mqtt, mqttIP, sizeof(cfg.mqtt));
+    EEPROM.begin(sizeof(SlaveConfig));
+    EEPROM.put(0, cfg);
+    EEPROM.commit();
+    Serial.println("[EEPROM] Configuration saved");
+}
 
 // ─── Network Objects ────────────────────────────────────────────────
 WiFiClient   espClient;
@@ -305,9 +342,18 @@ function save(){
         [](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t, size_t) {
             JsonDocument doc;
             deserializeJson(doc, data, len);
+            
             strncpy(wifiSSID, doc["ssid"] | "HospitalAlarm", sizeof(wifiSSID) - 1);
+            wifiSSID[sizeof(wifiSSID) - 1] = '\0';
+            
             strncpy(wifiPass, doc["password"] | "", sizeof(wifiPass) - 1);
+            wifiPass[sizeof(wifiPass) - 1] = '\0';
+            
             strncpy(mqttIP,   doc["mqtt"] | MQTT_BROKER_IP, sizeof(mqttIP) - 1);
+            mqttIP[sizeof(mqttIP) - 1] = '\0';
+            
+            saveSlaveConfig();
+            
             connectPending = true;
             req->send(200, "application/json", "{\"success\":true}");
         });
@@ -322,6 +368,9 @@ function save(){
 void setup() {
     Serial.begin(115200);
     delay(200);
+
+    // ── Load Config ─────────────────────────────────────────
+    loadSlaveConfig();
 
     // ── Hardware ────────────────────────────────────────────
     pinMode(BUTTON_PIN, INPUT_PULLUP);

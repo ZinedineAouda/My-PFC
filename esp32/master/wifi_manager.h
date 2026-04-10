@@ -96,12 +96,16 @@ public:
     // ── Setters ─────────────────────────────────────────────
     void setAPCredentials(const char* ssid, const char* pass) {
         strncpy(_apSSID, ssid, sizeof(_apSSID) - 1);
+        _apSSID[sizeof(_apSSID) - 1] = '\0';
         strncpy(_apPass, pass, sizeof(_apPass) - 1);
+        _apPass[sizeof(_apPass) - 1] = '\0';
     }
 
     void setSTACredentials(const char* ssid, const char* pass) {
         strncpy(_staSSID, ssid, sizeof(_staSSID) - 1);
+        _staSSID[sizeof(_staSSID) - 1] = '\0';
         strncpy(_staPass, pass, sizeof(_staPass) - 1);
+        _staPass[sizeof(_staPass) - 1] = '\0';
     }
 
     // ── Initiate STA connection (from web setup) ────────────

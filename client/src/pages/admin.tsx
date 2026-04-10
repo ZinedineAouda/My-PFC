@@ -195,6 +195,7 @@ function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
       queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
       toast({ title: "System Ready", description: "Alert state cleared." });
     },
+    onError: (err) => toast({ title: "Link Failed", description: err.message, variant: "destructive" })
   });
 
   const deleteMutation = useMutation({
@@ -206,6 +207,7 @@ function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
       queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
       toast({ title: "Node Decommissioned", description: "Device link severed." });
     },
+    onError: (err) => toast({ title: "Decommission Failed", description: err.message, variant: "destructive" })
   });
 
   const logoutMutation = useMutation({
@@ -213,10 +215,12 @@ function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
       await apiRequest("POST", "/api/admin/logout");
     },
     onSuccess: () => window.location.reload(),
+    onError: (err) => toast({ title: "Logout Failed", description: err.message, variant: "destructive" })
   });
 
-  const pendingDevices = slaves?.filter((s) => !s.approved) ?? [];
-  const approvedDevices = slaves?.filter((s) => s.approved) ?? [];
+  const safeSlaves = Array.isArray(slaves) ? slaves : [];
+  const pendingDevices = safeSlaves.filter((s) => !s.approved);
+  const approvedDevices = safeSlaves.filter((s) => s.approved);
   const activeAlerts = approvedDevices.filter((s) => s.alertActive).length;
   const isMasterOnline = status?.isMasterOnline ?? false;
 

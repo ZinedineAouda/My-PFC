@@ -16,29 +16,31 @@
 class CloudSync {
 public:
     CloudSync(DeviceRegistry& reg)
-        : _registry(reg), _lastSync(0), _busy(false) {}
+        : _registry(reg), _lastSync(0), _busy(false), _forceSyncPending(false) {}
 
     void handle() {
         if (WiFi.status() != WL_CONNECTED) return;
         if (_busy) return;
 
         unsigned long now = millis();
-        if (now - _lastSync < CLOUD_SYNC_INTERVAL) return;
-        _lastSync = now;
-
-        _syncToCloud();
+        if (_forceSyncPending || (now - _lastSync >= CLOUD_SYNC_INTERVAL)) {
+            _forceSyncPending = false;
+            _lastSync = now;
+            _syncToCloud();
+        }
     }
 
-    // Force an immediate sync (called after important events)
+    // Force an immediate sync
+    // Non-blocking: flags for execution on the next loop iteration
     void syncNow() {
-        if (WiFi.status() != WL_CONNECTED || _busy) return;
-        _syncToCloud();
+        _forceSyncPending = true;
     }
 
 private:
     DeviceRegistry& _registry;
     unsigned long    _lastSync;
     bool             _busy;
+    bool             _forceSyncPending;
 
     void _syncToCloud() {
         _busy = true;
