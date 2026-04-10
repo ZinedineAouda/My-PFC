@@ -72,7 +72,12 @@ void loadSettings() {
 
 void saveSettings() {
     prefs.begin("master_cfg", false);
-    prefs.putBool("setupDone", setupDone);
+    // Don't persist setupDone in Cloud Mode, so the setup page appears on next boot
+    if (currentMode == MODE_ONLINE) {
+        prefs.putBool("setupDone", false);
+    } else {
+        prefs.putBool("setupDone", setupDone);
+    }
     prefs.putInt("mode", (int)currentMode);
     prefs.putString("apSSID", wifiMgr.apSSID());
     prefs.putString("apPass", wifiMgr.apPass());

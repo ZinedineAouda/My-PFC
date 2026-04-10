@@ -43,8 +43,12 @@ public:
             }
         });
 
-        _server.on("/setup", HTTP_GET, [](AsyncWebServerRequest* req) {
-            req->send_P(200, "text/html", SETUP_HTML);
+        _server.on("/setup", HTTP_GET, [this](AsyncWebServerRequest* req) {
+            if (_setupDone && _mode == MODE_ONLINE) {
+                req->redirect("/");
+            } else {
+                req->send_P(200, "text/html", SETUP_HTML);
+            }
         });
 
         _server.on("/admin", HTTP_GET, [](AsyncWebServerRequest* req) {

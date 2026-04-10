@@ -242,9 +242,9 @@ function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
             </div>
             
             <div className="flex items-center gap-2 flex-wrap">
-              <div className={`px-4 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 ${isMasterOnline ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-900 border-white/5 text-slate-500'}`}>
-                <RefreshCw className={`w-3 h-3 ${isMasterOnline ? 'animate-spin-slow' : ''}`} />
-                {isMasterOnline ? 'HUB LINKED' : 'LATENCY ERR'}
+              <div className={`px-4 py-2 rounded-xl border text-sm font-black flex items-center gap-2 shadow-lg tracking-wide ${isMasterOnline ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 shadow-emerald-500/10' : 'bg-red-500/10 border-red-500/20 text-red-500 shadow-red-500/10'}`}>
+                <RefreshCw className={`w-4 h-4 ${isMasterOnline ? 'animate-spin-slow text-emerald-400' : 'text-red-500'}`} />
+                {isMasterOnline ? 'ESP32 MASTER: CONNECTED' : 'ESP32 MASTER: OFFLINE'}
               </div>
 
               {isAuthenticated ? (
