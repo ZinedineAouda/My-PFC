@@ -227,10 +227,10 @@ void publishAlert() {
         return;
     }
 
+    // We now allow alerts even if not yet approved so that 
+    // emergency signals are never lost.
     if (!isApproved) {
-        Serial.println("[ALERT] Not approved by admin");
-        ledBlink(6, 80, 80); // "Waiting for approval" pattern
-        return;
+        Serial.println("[ALERT] Warning: device not yet approved (sending anyway)");
     }
 
     if (alertActive) {
@@ -246,8 +246,8 @@ void publishAlert() {
     serializeJson(doc, payload);
 
     // Localized cooldown: prevent re-triggering within 2s of a remote clear
-    if (millis() - lastClearTime < 2000) {
-        Serial.println("[ALERT] Suppressed: recently cleared");
+    if (lastClearTime > 0 && millis() - lastClearTime < 2000) {
+        Serial.println("[ALERT] Suppressed: recently cleared (re-arm delay)");
         return;
     }
 

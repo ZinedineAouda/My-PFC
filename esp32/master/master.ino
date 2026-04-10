@@ -113,6 +113,7 @@ void setup() {
     // ── Load Config & WiFi ──────────────────────────────────
     loadSettings();
     WiFi.setSleep(WIFI_PS_NONE); // Disable power saving for maximum responsiveness
+    WiFi.setTxPower(WIFI_POWER_20dBm); // Force maximum transmission power
     if (!setupDone) {
         wifiMgr.beginSetup();
         WiFi.scanNetworks(true); // Start background scan
@@ -146,6 +147,9 @@ void loop() {
 
     // ── MQTT broker processing ──────────────────────────────
     mqttHandler.handle();
+
+    // ── Local hardware feedback (Buzzer/LED) ───────────────
+    handleHardwareFeedback();
 
     // ── WebSocket client cleanup ────────────────────────────
     dashboard.handle();
@@ -195,6 +199,45 @@ void onDeviceChange(const String& deviceId, const char* eventType) {
                    strcmp(eventType, "clear") == 0 ||
                    strcmp(eventType, "delete") == 0) {
             cloudSync.syncNow();
+        }
+    }
+}
+
+// ─── Hardware Feedback Logic ────────────────────────────────────────
+void handleHardwareFeedback() {
+    static unsigned long lastToggle = 0;
+    static bool ledState = false;
+    unsigned long now = millis();
+
+    // 1. Check if any device has an active alert
+    bool anyAlert = false;
+    for (auto const& [id, dev] : registry.devices()) {
+        if (dev.alertActive) {
+            anyAlert = true;
+            break;
+        }
+    }
+
+    // 2. Drive Buzzer
+    digitalWrite(BUZZER_PIN, anyAlert ? HIGH : LOW);
+
+    // 3. Drive Status LED
+    if (anyAlert) {
+        // Fast blink during emergency
+        if (now - lastToggle > 150) {
+            lastToggle = now;
+            ledState = !ledState;
+            digitalWrite(STATUS_LED_PIN, ledState);
+        }
+    } else if (!setupDone) {
+        // Solid for unconfigured AP mode
+        digitalWrite(STATUS_LED_PIN, HIGH);
+    } else {
+        // Slow pulsing heartbeat for normal operation
+        if (now - lastToggle > 1000) {
+            lastToggle = now;
+            ledState = !ledState;
+            digitalWrite(STATUS_LED_PIN, ledState);
         }
     }
 }

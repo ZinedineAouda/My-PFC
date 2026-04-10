@@ -18,7 +18,7 @@
 class CloudSync {
 public:
     CloudSync(DeviceRegistry& reg)
-        : _registry(reg), _lastSync(0), _lastPing(0),
+        : _registry(reg), _lastSync(0), _lastPing(0), _lastOpTime(0),
           _busy(false), _forceSyncPending(false),
           _consecutiveFails(0) {
         _client = nullptr;
@@ -36,23 +36,31 @@ public:
         if (_busy) return;
 
         unsigned long now = millis();
+        // Global throttle: max 1 cloud operation per second to prevent TLS storm
+        if (now - _lastOpTime < 1000) return;
 
-        // ── Process pending alert queue ─────────────────────
-        _processAlertQueue();
-
-        // ── Lightweight heartbeat ping every 15s ────────────
-        // This keeps the "Master Online" indicator alive on the
-        // cloud dashboard even if full syncs occasionally fail.
-        if (now - _lastPing >= CLOUD_PING_INTERVAL) {
-            _lastPing = now;
-            _sendPing();
+        // ── 1. Process pending alert queue (highest priority) ─
+        if (!_alertQueue.empty()) {
+            _lastOpTime = now;
+            _processAlertQueue();
+            return; // Only one operation per loop
         }
 
-        // ── Full state sync ─────────────────────────────────
+        // ── 2. Lightweight heartbeat ping every 10s ──────────
+        if (now - _lastPing >= CLOUD_PING_INTERVAL) {
+            _lastPing = now;
+            _lastOpTime = now;
+            _sendPing();
+            return;
+        }
+
+        // ── 3. Full state sync ───────────────────────────────
         if (_forceSyncPending || (now - _lastSync >= CLOUD_SYNC_INTERVAL)) {
             _forceSyncPending = false;
             _lastSync = now;
+            _lastOpTime = now;
             _syncToCloud();
+            return;
         }
     }
 
@@ -68,6 +76,11 @@ public:
         for (const auto& id : _alertQueue) {
             if (id == slaveId) return;
         }
+        // Memory safety: limit queue size to 20 pending alerts
+        if (_alertQueue.size() >= 20) {
+            Serial.println("[CLOUD] Queue FULL, dropping oldest alert");
+            _alertQueue.erase(_alertQueue.begin());
+        }
         _alertQueue.push_back(slaveId);
         Serial.printf("[CLOUD] Alert queued: %s (Queue size: %d)\n", 
                       slaveId.c_str(), _alertQueue.size());
@@ -77,6 +90,7 @@ private:
     DeviceRegistry&   _registry;
     unsigned long     _lastSync;
     unsigned long     _lastPing;
+    unsigned long     _lastOpTime;
     bool              _busy;
     bool              _forceSyncPending;
     int               _consecutiveFails;
@@ -98,7 +112,7 @@ private:
         if (!_client) {
             _client = new WiFiClientSecure();
             _client->setInsecure();
-            _client->setHandshakeTimeout(8);  // 8s — generous for Railway cold starts
+            _client->setHandshakeTimeout(12); // 12s handshake for stability
             Serial.println("[CLOUD] TLS client created");
         }
         return *_client;
@@ -114,54 +128,67 @@ private:
         }
     }
 
-    // ── Lightweight ping to keep heartbeat alive ────────────
-    void _sendPing() {
+    // ── Internal POST helper with auto-recovery for -1 ──────
+    int _postWithRetry(const String& path, const String& payload) {
+        int code = _executePost(path, payload);
+        
+        // If it failed with -1 (connection lost), reset and try once more
+        if (code == -1) {
+            Serial.println("[CLOUD] Connection lost (-1), retrying fresh socket...");
+            _resetClient();
+            code = _executePost(path, payload);
+        }
+        return code;
+    }
+
+    int _executePost(const String& path, const String& payload) {
         WiFiClientSecure& client = _ensureClient();
         HTTPClient http;
         http.setTimeout(CLOUD_HTTP_TIMEOUT);
+        http.setReuse(true);
 
-        String url = String(CLOUD_SERVER_URL) + "/api/master-ping";
-        if (!http.begin(client, url)) {
-            Serial.println("[CLOUD] Ping connection failed");
-            return;
-        }
+        String url = String(CLOUD_SERVER_URL) + path;
+        if (!http.begin(client, url)) return -2; // Connection init error
 
         http.addHeader("Content-Type", "application/json");
         http.addHeader("x-device-key", CLOUD_DEVICE_KEY);
+        http.addHeader("Connection", "keep-alive");
 
-        int httpCode = http.POST("{}");
-        if (httpCode == 200) {
-            Serial.println("[CLOUD] Ping OK");
-        } else {
-            Serial.printf("[CLOUD] Ping failed: HTTP %d\n", httpCode);
+        int code = http.POST(payload);
+        if (code == 200 && path == "/api/master-sync") {
+            String response = http.getString();
+            JsonDocument recvDoc;
+            if (deserializeJson(recvDoc, response) == DeserializationError::Ok) {
+                JsonArray remoteSlaves = recvDoc["slaves"];
+                if (!remoteSlaves.isNull()) {
+                    _registry.mergeFromCloud(remoteSlaves);
+                }
+            }
         }
         http.end();
+        return code;
+    }
+
+    // ── Lightweight ping ────────────────────────────────────
+    void _sendPing() {
+        int code = _postWithRetry("/api/master-ping", "{}");
+        if (code == 200) {
+            Serial.println("[CLOUD] Ping OK");
+        } else {
+            Serial.printf("[CLOUD] Ping failed: HTTP %d\n", code);
+        }
     }
 
     // ── Send alert to cloud ────────────────────────────────
     bool _sendAlertToCloud(const String& slaveId) {
-        WiFiClientSecure& client = _ensureClient();
-        HTTPClient http;
-        http.setTimeout(CLOUD_HTTP_TIMEOUT);
-
-        String url = String(CLOUD_SERVER_URL) + "/api/alert";
-        if (!http.begin(client, url)) {
-            Serial.println("[CLOUD] Alert connection failed");
-            return false;
-        }
-
-        http.addHeader("Content-Type", "application/json");
-        http.addHeader("x-device-key", CLOUD_DEVICE_KEY);
-
         String payload = "{\"slaveId\":\"" + slaveId + "\"}";
-        int httpCode = http.POST(payload);
-        http.end();
+        int code = _postWithRetry("/api/alert", payload);
 
-        if (httpCode == 200) {
+        if (code == 200) {
             Serial.printf("[CLOUD] Alert sent: %s\n", slaveId.c_str());
             return true;
         } else {
-            Serial.printf("[CLOUD] Alert failed: HTTP %d\n", httpCode);
+            Serial.printf("[CLOUD] Alert failed: HTTP %d\n", code);
             _handleFailure();
             return false;
         }
@@ -170,23 +197,6 @@ private:
     // ── Full bidirectional state sync ───────────────────────
     void _syncToCloud() {
         _busy = true;
-
-        WiFiClientSecure& client = _ensureClient();
-        HTTPClient http;
-        http.setTimeout(CLOUD_HTTP_TIMEOUT);
-        http.setReuse(true);  // Enable HTTP keep-alive
-
-        String url = String(CLOUD_SERVER_URL) + "/api/master-sync";
-        if (!http.begin(client, url)) {
-            Serial.println("[CLOUD] Connection failed");
-            _handleFailure();
-            _busy = false;
-            return;
-        }
-
-        http.addHeader("Content-Type", "application/json");
-        http.addHeader("x-device-key", CLOUD_DEVICE_KEY);
-        http.addHeader("Connection", "keep-alive");
 
         // ── Build sync payload ──────────────────────────────
         JsonDocument sendDoc;
@@ -206,25 +216,17 @@ private:
         String payload;
         serializeJson(sendDoc, payload);
 
-        // ── POST to cloud ───────────────────────────────────
-        int httpCode = http.POST(payload);
-        if (httpCode == 200) {
-            _consecutiveFails = 0;  // Reset failure counter
-            String response = http.getString();
-            JsonDocument recvDoc;
-            if (deserializeJson(recvDoc, response) == DeserializationError::Ok) {
-                JsonArray remoteSlaves = recvDoc["slaves"];
-                if (!remoteSlaves.isNull()) {
-                    _registry.mergeFromCloud(remoteSlaves);
-                }
-            }
+        // ── POST to cloud via retry handler ─────────────────
+        int code = _postWithRetry("/api/master-sync", payload);
+
+        if (code == 200) {
+            _consecutiveFails = 0;
             Serial.println("[CLOUD] Sync OK");
         } else {
-            Serial.printf("[CLOUD] Sync failed: HTTP %d\n", httpCode);
+            Serial.printf("[CLOUD] Sync failed: HTTP %d\n", code);
             _handleFailure();
         }
 
-        http.end();
         _busy = false;
     }
 

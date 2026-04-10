@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PFC Hospital Alarm</string>
+    <string name="title_activity_main">PFC Hospital Alarm</string>
+    <string name="package_name">com.pfc.alarm</string>
+    <string name="custom_url_scheme">com.pfc.alarm</string>
+</resources>

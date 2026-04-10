@@ -82,11 +82,11 @@ public:
     bool triggerAlert(const String& id) {
         auto it = _devices.find(id);
         if (it == _devices.end()) return false;
-        if (!it->second.approved) return false;
+        // Removed !approved requirement: emergency alerts should always go through
         if (it->second.alertActive) return false;
 
         // Skip if alert was cleared very recently (cooldown to prevent hardware bounce)
-        if (millis() - it->second.lastClearTime < 3000) {
+        if (it->second.lastClearTime > 0 && millis() - it->second.lastClearTime < 2000) {
             Serial.printf("[ALERT] Suppressed (cooldown): %s\n", id.c_str());
             return false;
         }

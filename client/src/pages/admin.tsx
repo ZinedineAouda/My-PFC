@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Slave } from "@shared/schema";
 import { apiRequest, apiUrl } from "@/lib/queryClient";
-import { getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWebsocket } from "@/hooks/use-websocket";
-import { Shield, RefreshCw, LogIn, LogOut, Wifi, Trash2, Pencil, BellOff } from "lucide-react";
+import { Shield, RefreshCw, LogIn, LogOut, Wifi, Trash2, Pencil, BellOff, Volume2, VolumeX } from "lucide-react";
+import { LocalNotifications } from "@capacitor/local-notifications";
+import { Haptics } from "@capacitor/haptics";
 
 // ═══════════════════════════════════════════════════════════════
 //  LOGIN FORM — Shown before admin access
@@ -185,13 +186,78 @@ function AdminPanel() {
   const queryClient = useQueryClient();
   const [modalSlave, setModalSlave] = useState<Slave | null>(null);
   const [modalMode, setModalMode] = useState<"approve" | "edit">("approve");
+  const sirenRef = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize Siren and Permissions
+  useEffect(() => {
+    // Siren setup - using a robust medical siren sound
+    sirenRef.current = new Audio("https://raw.githubusercontent.com/Anis-Aouda/Zinedine-Audio/main/siren.mp3");
+    sirenRef.current.loop = true;
+
+    // Request Notification Permissions for APK
+    const requestPerms = async () => {
+      try {
+        const status = await LocalNotifications.checkPermissions();
+        if (status.display !== 'granted') {
+          await LocalNotifications.requestPermissions();
+        }
+      } catch (err) {
+        console.log("Capacitor not detected - running in browser mode");
+      }
+    };
+    requestPerms();
+    
+    return () => {
+      if (sirenRef.current) {
+        sirenRef.current.pause();
+        sirenRef.current = null;
+      }
+    };
+  }, []);
 
   // ── WebSocket for live updates ──
   useWebsocket((msg) => {
     queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
     queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+    
     if (msg.type === "REGISTER") {
       toast({ title: "Signal Detected", description: "New hardware discovered." });
+    }
+
+    if (msg.type === "ALERT") {
+      // 1. Play Siren
+      if (sirenRef.current) {
+        sirenRef.current.play().catch(e => console.log("Audio play blocked: tap UI first"));
+      }
+
+      // 2. Vibrate Phone (Haptics)
+      Haptics.vibrate({ duration: 1000 }).catch(() => {});
+
+      // 3. Show System Notification
+      LocalNotifications.schedule({
+        notifications: [{
+          title: "🚨 EMERGENCY ALERT",
+          body: `Patient Alert from ${msg.deviceId}`,
+          id: Math.floor(Math.random() * 10000),
+          sound: 'siren.wav', // Only works if file exists in android/app/src/main/res/raw
+          actionTypeId: "",
+          extra: null
+        }]
+      }).catch(() => {});
+
+      toast({ 
+        title: "EMERGENCY", 
+        description: `Alert from ${msg.deviceId}`,
+        variant: "destructive" 
+      });
+    }
+
+    if (msg.type === "CLEAR") {
+      // Stop the siren when the alert is cleared
+      if (sirenRef.current) {
+        sirenRef.current.pause();
+        sirenRef.current.currentTime = 0;
+      }
     }
   });
 

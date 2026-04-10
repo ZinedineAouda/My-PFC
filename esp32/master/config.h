@@ -33,7 +33,7 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 #define CLOUD_DEVICE_KEY      "esp32_master_super_secure_key_123"
 #define CLOUD_SYNC_INTERVAL   15000   // Full sync every 15s
 #define CLOUD_PING_INTERVAL   10000   // Lightweight heartbeat ping every 10s
-#define CLOUD_HTTP_TIMEOUT    8000    // HTTP request timeout (generous for Railway)
+#define CLOUD_HTTP_TIMEOUT    10000   // 10s timeout for better reliability
 
 // ─── Hardware Pins ──────────────────────────────────────────
 #define BUZZER_PIN            4
