@@ -134,8 +134,32 @@ function goStep2(){showStep('stepAP')}
 function goStepWiFi(){if(selMode===1){finishSetup();return}showStep('stepWiFi');scanWiFi()}
 function scanWiFi(){const l=document.getElementById('scan-list');l.innerHTML='<div class="scanning"><div class="spinner"></div>Scanning...</div>';fetch('/api/scan').then(r=>r.json()).then(nets=>{let h='';nets.forEach(n=>{h+=`<div class="wi" onclick="pickWiFi(this,'${n.ssid}')"><span>${n.ssid}</span><span class="wi-rssi">${n.rssi}dBm</span></div>`});l.innerHTML=h||'<div class="scanning">No networks found</div>'})}
 function pickWiFi(el,ssid){selSSID=ssid;document.querySelectorAll('.wi').forEach(i=>i.classList.remove('selected'));el.classList.add('selected');document.getElementById('connectBtn').disabled=false}
-function doConnect(){const p=document.getElementById('wifi-pass').value,s=document.getElementById('setup-status');s.innerHTML='<div class="status-msg info"><div class="spinner"></div> Connecting to '+selSSID+'...</div>';fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selSSID,password:p})}).then(r=>r.json()).then(d=>{if(d.success){s.innerHTML='<div class="status-msg ok">Connected! Applying settings...</div>';setTimeout(finishSetup,800)}else{s.innerHTML='<div class="status-msg error">Failed: '+d.message+'</div>'}})}
-function finishSetup(){const as=document.getElementById('ap-ssid').value||'HospitalAlarm',ap=document.getElementById('ap-pass').value;fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:selMode,apSSID:as,apPass:ap})}).then(r=>r.json()).then(()=>{const info=document.getElementById('done-info');const modes=['','AP Mode (Standalone)','STA Mode (Router)','AP+STA (Hybrid)','Online (Cloud Sync)'];info.textContent='Mode: '+modes[selMode]+'. Dashboard is ready.';showStep('stepDone')})}
+function doConnect(){
+  const p=document.getElementById('wifi-pass').value, s=document.getElementById('setup-status');
+  s.innerHTML='<div class="status-msg info"><div class="spinner"></div> Connecting to '+selSSID+'...</div>';
+  fetch('/api/connect-wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selSSID,password:p})})
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.success){
+        s.innerHTML='<div class="status-msg ok">Connected! Applying offline settings...</div>';
+        setTimeout(finishSetup, 1000);
+      } else {
+        s.innerHTML='<div class="status-msg error">Failed: '+d.message+'</div>';
+      }
+    });
+}
+function finishSetup(){
+  const as=document.getElementById('ap-ssid').value||'HospitalAlarm', ap=document.getElementById('ap-pass').value;
+  document.getElementById('setup-status').innerHTML='<div class="status-msg info"><div class="spinner"></div> Starting Dashboard... Please wait.</div>';
+  
+  // Send the request, but don't wait for the response because the ESP32 resets its AP interface!
+  fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:selMode,apSSID:as,apPass:ap})}).catch(()=>console.log("Expected disconnect"));
+  
+  // Force a redirect after 4 seconds to allow the AP to restart and the phone to reconnect
+  setTimeout(() => {
+    window.location.href = '/';
+  }, 4000);
+}
 </script>
 </body>
 </html>

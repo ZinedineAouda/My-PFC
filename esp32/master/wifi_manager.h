@@ -116,6 +116,9 @@ public:
     bool           staConnected() const { return _staConnected; }
     const String&  staIP()        const { return _staIP; }
     const char*    apSSID()       const { return _apSSID; }
+    const char*    apPass()       const { return _apPass; }
+    const char*    staSSID()      const { return _staSSID; }
+    const char*    staPass()      const { return _staPass; }
     String masterIP() const {
         if (_staConnected) return _staIP;
         return WiFi.softAPIP().toString();

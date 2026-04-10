@@ -21,6 +21,7 @@
  */
 
 #include <WiFi.h>
+#include <Preferences.h>
 #include "config.h"
 #include "device_registry.h"
 #include "wifi_manager.h"
@@ -31,6 +32,7 @@
 // ─── Global State ───────────────────────────────────────────────────
 WiFiOpMode   currentMode = MODE_NONE;
 bool         setupDone   = false;
+Preferences  prefs;
 
 // ─── Module Instances ───────────────────────────────────────────────
 DeviceRegistry registry;
@@ -49,6 +51,37 @@ void onWifiConnect(const char* ssid, const char* pass);
 void onSetup(int mode, const char* apSSID, const char* apPass);
 void handleBuzzer();
 
+void loadSettings() {
+    prefs.begin("master_cfg", false);
+    setupDone = prefs.getBool("setupDone", false);
+    if (setupDone) {
+        currentMode = (WiFiOpMode)prefs.getInt("mode", (int)MODE_AP);
+        String apS = prefs.getString("apSSID", AP_SSID_DEFAULT);
+        String apP = prefs.getString("apPass", "");
+        String staS = prefs.getString("staSSID", "");
+        String staP = prefs.getString("staPass", "");
+        
+        wifiMgr.setAPCredentials(apS.c_str(), apP.c_str());
+        if (staS.length() > 0) {
+            wifiMgr.setSTACredentials(staS.c_str(), staP.c_str());
+        }
+        Serial.println("[PREFS] Loaded saved configuration.");
+    }
+    prefs.end();
+}
+
+void saveSettings() {
+    prefs.begin("master_cfg", false);
+    prefs.putBool("setupDone", setupDone);
+    prefs.putInt("mode", (int)currentMode);
+    prefs.putString("apSSID", wifiMgr.apSSID());
+    prefs.putString("apPass", wifiMgr.apPass());
+    prefs.putString("staSSID", wifiMgr.staSSID());
+    prefs.putString("staPass", wifiMgr.staPass());
+    prefs.end();
+    Serial.println("[PREFS] Configuration saved.");
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  SETUP
 // ═══════════════════════════════════════════════════════════════════
@@ -65,9 +98,14 @@ void setup() {
     pinMode(BUZZER_PIN, OUTPUT);
     digitalWrite(BUZZER_PIN, LOW);
 
-    // ── WiFi: Start in AP mode for initial setup ────────────
-    wifiMgr.beginSetup();
-    WiFi.scanNetworks(true); // Start background scan
+    // ── Load Config & WiFi ──────────────────────────────────
+    loadSettings();
+    if (!setupDone) {
+        wifiMgr.beginSetup();
+        WiFi.scanNetworks(true); // Start background scan
+    } else {
+        wifiMgr.applyMode(currentMode);
+    }
 
     // ── Device Registry: wire change callback ───────────────
     registry.onDeviceChange(onDeviceChange);
@@ -149,6 +187,7 @@ void onDeviceChange(const String& deviceId, const char* eventType) {
 // Called by setup page: connect to WiFi
 void onWifiConnect(const char* ssid, const char* pass) {
     wifiMgr.connectSTA(ssid, pass);
+    saveSettings(); // Save STA credentials immediately
 }
 
 // Called by setup page: finalize mode selection
@@ -160,6 +199,9 @@ void onSetup(int mode, const char* apSSID, const char* apPass) {
     if (strlen(apSSID) > 0) {
         wifiMgr.setAPCredentials(apSSID, apPass);
     }
+
+    // Save to Non-Volatile Storage so configuration survives reboots!
+    saveSettings();
 
     // Apply WiFi mode
     wifiMgr.applyMode(currentMode);

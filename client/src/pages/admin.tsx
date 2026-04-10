@@ -83,15 +83,15 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   });
 
   return (
-    <div className="min-h-screen bg-[#070b14] flex items-center justify-center p-4 font-['Outfit']">
+    <div className="w-full font-['Outfit'] relative">
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_50%,rgba(16,185,129,0.05)_0%,transparent_50%)]" />
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md relative"
+        className="w-full relative"
       >
         <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-2xl blur opacity-20" />
-        <Card className="bg-[#0f172a]/80 border-white/10 backdrop-blur-2xl relative">
+        <Card className="bg-[#0f172a]/80 border-white/10 backdrop-blur-2xl relative shadow-2xl">
           <CardContent className="pt-8 px-8 pb-10">
             <div className="flex flex-col items-center mb-10">
               <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/20 flex items-center justify-center mb-4">
@@ -145,11 +145,20 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-function AdminPanel() {
+function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [approveSlaveData, setApproveSlaveData] = useState<Slave | null>(null);
   const [editSlaveData, setEditSlaveData] = useState<Slave | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+
+  const requireAuth = (callback: () => void) => {
+    if (!isAuthenticated) {
+      setShowLogin(true);
+      return;
+    }
+    callback();
+  };
 
   useWebsocket((msg) => {
     queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
@@ -234,9 +243,11 @@ function AdminPanel() {
                 {isMasterOnline ? 'HUB LINKED' : 'LATENCY ERR'}
               </div>
 
-              <a href="/"><Button variant="secondary" size="sm" className="bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-xl"><Activity className="w-4 h-4 mr-2" /> Live Dashboard</Button></a>
-              <a href="/setup"><Button variant="secondary" size="sm" className="bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-xl"><Settings className="w-4 h-4 mr-2" /> Global Config</Button></a>
-              <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()} className="text-slate-500 hover:text-red-400"><LogOut className="w-4 h-4 mr-2" /> Exit</Button>
+              {isAuthenticated ? (
+                <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()} className="text-slate-500 hover:text-red-400"><LogOut className="w-4 h-4 mr-2" /> Exit</Button>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={() => setShowLogin(true)} className="text-emerald-500 hover:text-emerald-400"><LogIn className="w-4 h-4 mr-2" /> Login</Button>
+              )}
             </div>
           </div>
         </div>
@@ -272,8 +283,8 @@ function AdminPanel() {
                         </div>
                       </div>
                       <div className="flex gap-2 mt-6">
-                        <Button className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl" onClick={() => setApproveSlaveData(slave)}>Authorize</Button>
-                        <Button variant="ghost" className="text-slate-500 hover:text-red-400" onClick={() => deleteMutation.mutate(slave.slaveId)}><Trash2 className="w-4 h-4" /></Button>
+                        <Button className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl" onClick={() => requireAuth(() => setApproveSlaveData(slave))}>Authorize</Button>
+                        <Button variant="ghost" className="text-slate-500 hover:text-red-400" onClick={() => requireAuth(() => deleteMutation.mutate(slave.slaveId))}><Trash2 className="w-4 h-4" /></Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -324,13 +335,13 @@ function AdminPanel() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {slave.alertActive && <Button size="sm" className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg" onClick={() => clearAlertMutation.mutate(slave.slaveId)}>Silence</Button>}
-                        <Button size="sm" variant="secondary" className="flex-1 bg-white/5 text-slate-300 rounded-lg hover:bg-white/10" onClick={() => setEditSlaveData(slave)}><Pencil className="w-3 h-3 mr-2" /> Modify</Button>
+                        {slave.alertActive && <Button size="sm" className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg" onClick={() => requireAuth(() => clearAlertMutation.mutate(slave.slaveId))}>Silence</Button>}
+                        <Button size="sm" variant="secondary" className="flex-1 bg-white/5 text-slate-300 rounded-lg hover:bg-white/10" onClick={() => requireAuth(() => setEditSlaveData(slave))}><Pencil className="w-3 h-3 mr-2" /> Modify</Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild><Button size="sm" variant="ghost" className="text-slate-600 hover:text-red-400"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
                           <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
                             <AlertDialogHeader><AlertDialogTitle>Confirm Purge</AlertDialogTitle><AlertDialogDescription className="text-slate-400">Sever all links with {slave.patientName}? Critical alert capability will be lost.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel className="bg-white/5 text-white border-none">Abort</AlertDialogCancel><AlertDialogAction onClick={() => deleteMutation.mutate(slave.slaveId)} className="bg-red-500 hover:bg-red-600">Execute Delete</AlertDialogAction></AlertDialogFooter>
+                            <AlertDialogFooter><AlertDialogCancel className="bg-white/5 text-white border-none">Abort</AlertDialogCancel><AlertDialogAction onClick={() => requireAuth(() => deleteMutation.mutate(slave.slaveId))} className="bg-red-500 hover:bg-red-600">Execute Delete</AlertDialogAction></AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
                       </div>
@@ -354,6 +365,15 @@ function AdminPanel() {
         <DialogContent className="bg-[#0f172a] border-white/10 text-white font-['Outfit'] sm:max-w-md">
           <DialogHeader><DialogTitle className="text-xl font-bold">Modify Infrastructure</DialogTitle></DialogHeader>
           {editSlaveData && <EditForm slave={editSlaveData} onComplete={() => setEditSlaveData(null)} />}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showLogin} onOpenChange={setShowLogin}>
+        <DialogContent className="bg-transparent border-none p-0 max-w-md shadow-none">
+          <LoginForm onLogin={() => { 
+            setShowLogin(false); 
+            queryClient.invalidateQueries({ queryKey: ["/api/admin/session"] }); 
+          }} />
         </DialogContent>
       </Dialog>
     </div>
@@ -441,7 +461,6 @@ export default function AdminPage() {
   });
 
   if (isLoading) return <div className="min-h-screen bg-[#070b14] flex items-center justify-center text-emerald-500 font-mono">STABILIZING_HANDSHAKE...</div>;
-  if (!session?.authenticated) return <LoginForm onLogin={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/session"] })} />;
 
-  return <AdminPanel />;
+  return <AdminPanel isAuthenticated={!!session?.authenticated} />;
 }
