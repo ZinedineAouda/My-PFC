@@ -175,6 +175,7 @@ function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
       if (!res.ok) throw new Error("Sync failed");
       return res.json();
     },
+    staleTime: 0,  // Override Infinity default — allow WebSocket invalidation to trigger refetch
   });
 
   const { data: status } = useQuery<{ mode: number; setup: boolean; isMasterOnline?: boolean }>({
@@ -184,7 +185,8 @@ function AdminPanel({ isAuthenticated }: { isAuthenticated: boolean }) {
       if (!res.ok) throw new Error("Status sync failed");
       return res.json();
     },
-    refetchInterval: 10000,  // Poll every 10s for master connectivity status
+    staleTime: 0,             // Override Infinity default — always refetch when invalidated
+    refetchInterval: 8000,    // Poll every 8s as a backstop for master connectivity
   });
 
   const clearAlertMutation = useMutation({
