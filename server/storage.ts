@@ -190,9 +190,13 @@ export class MemStorage implements IStorage {
             local.alertActive = true;
             local.lastAlertTime = new Date().toISOString();
           } else if (!remote.alertActive && local.alertActive) {
-            // Only clear if cloud didn't set it
             local.alertActive = false;
           }
+        }
+
+        // Accept approval from master (bidirectional: local dashboard can approve)
+        if (remote.approved && !local.approved) {
+          local.approved = true;
         }
 
         // Update metadata if provided by master
