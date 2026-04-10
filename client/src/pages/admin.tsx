@@ -306,7 +306,7 @@ function AdminPanel() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 font-['Segoe_UI',system-ui,sans-serif]">
+    <div className="min-h-screen bg-[#070b14] text-slate-100 font-['Segoe_UI',system-ui,-apple-system,sans-serif]">
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_0%_0%,rgba(16,185,129,0.05)_0%,transparent_40%)]" />
 
       {/* ── Header ── */}
@@ -347,7 +347,7 @@ function AdminPanel() {
           { icon: "🚨", val: alerts, lbl: "Alerts", cls: "bg-red-500/10" },
           { icon: "⏳", val: pending.length, lbl: "Pending", cls: "bg-amber-500/10" },
         ].map((s) => (
-          <div key={s.lbl} className="bg-[rgba(15,23,42,0.4)] backdrop-blur-xl border border-white/5 rounded-[14px] px-4 py-3.5 flex items-center gap-3">
+          <div key={s.lbl} className="bg-[rgba(15,23,42,0.8)] backdrop-blur-2xl border border-white/10 rounded-[14px] px-4 py-3.5 flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${s.cls}`}>{s.icon}</div>
             <div>
               <div className="text-xl font-extrabold text-white">{s.val}</div>
@@ -415,8 +415,8 @@ function AdminPanel() {
               return (
                 <div
                   key={d.slaveId}
-                  className={`bg-[rgba(15,23,42,0.4)] border border-white/5 rounded-2xl p-5 relative overflow-hidden backdrop-blur-xl transition-all hover:border-emerald-500/15 ${
-                    d.alertActive ? "border-red-500/30 bg-red-500/[0.03]" : ""
+                  className={`bg-[rgba(15,23,42,0.8)] border border-white/10 rounded-2xl p-5 relative overflow-hidden backdrop-blur-2xl transition-all hover:border-emerald-500/20 ${
+                    d.alertActive ? "border-red-500/40 bg-red-500/[0.05]" : ""
                   } ${!d.online && !d.alertActive ? "opacity-50" : ""}`}
                 >
                   {d.alertActive && <div className="absolute inset-0 bg-red-500/[0.04] animate-pulse pointer-events-none" />}

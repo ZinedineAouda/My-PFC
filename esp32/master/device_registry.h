@@ -22,6 +22,7 @@ struct SlaveDevice {
     bool   approved      = false;
     bool   online        = false;
     unsigned long lastAlertTime = 0;
+    unsigned long lastClearTime = 0;
     unsigned long lastSeen      = 0;
 };
 
@@ -84,6 +85,12 @@ public:
         if (!it->second.approved) return false;
         if (it->second.alertActive) return false;
 
+        // Skip if alert was cleared very recently (cooldown to prevent hardware bounce)
+        if (millis() - it->second.lastClearTime < 10000) {
+            Serial.printf("[ALERT] Suppressed (cooldown): %s\n", id.c_str());
+            return false;
+        }
+
         it->second.alertActive = true;
         it->second.lastAlertTime = millis();
         it->second.lastSeen = millis();
@@ -99,6 +106,7 @@ public:
         auto it = _devices.find(id);
         if (it == _devices.end()) return false;
         it->second.alertActive = false;
+        it->second.lastClearTime = millis();
         Serial.printf("[ALERT] Cleared: %s\n", id.c_str());
         _notify(id, "clear");
         return true;
@@ -244,6 +252,7 @@ public:
                     bool rAlert = remote["alertActive"] | false;
                     if (!rAlert && it->second.alertActive) {
                         it->second.alertActive = false;
+                        it->second.lastClearTime = millis();
                         _notify(rid, "clear");
                     }
                 }

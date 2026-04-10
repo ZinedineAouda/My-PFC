@@ -195,7 +195,7 @@ header{background:rgba(7,11,20,.8);backdrop-filter:blur(16px);border-bottom:1px 
 
 /* ── Stats ── */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px 24px;position:relative;z-index:1}
-.stat{background:var(--surface);backdrop-filter:blur(12px);border:1px solid var(--glass);border-radius:14px;padding:16px;display:flex;align-items:center;gap:12px}
+.stat{background:rgba(15,23,42,0.8);backdrop-filter:blur(16px);border:1px solid var(--glass2);border-radius:14px;padding:16px;display:flex;align-items:center;gap:12px}
 .stat-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .stat-icon.em{background:rgba(16,185,129,.1)}
 .stat-icon.rd{background:rgba(239,68,68,.1)}
@@ -218,8 +218,8 @@ main{padding:0 24px 32px;flex:1;position:relative;z-index:1}
 
 /* ── Device Grid ── */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
-.dev{background:var(--surface);border:1px solid var(--glass);border-radius:16px;padding:20px;position:relative;overflow:hidden;backdrop-filter:blur(12px);transition:all .2s}
-.dev:hover{border-color:rgba(16,185,129,.15)}
+.dev{background:rgba(15,23,42,0.8);border:1px solid var(--glass2);border-radius:16px;padding:20px;position:relative;overflow:hidden;backdrop-filter:blur(16px);transition:all .2s}
+.dev:hover{border-color:rgba(16,185,129,.2)}
 .dev.alert{border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.03)}
 .dev.alert::before{content:'';position:absolute;inset:0;background:rgba(239,68,68,.04);animation:pulse 2s infinite;pointer-events:none}
 @keyframes pulse{0%,100%{opacity:.2}50%{opacity:.8}}
