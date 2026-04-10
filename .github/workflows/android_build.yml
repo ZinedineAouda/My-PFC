@@ -27,18 +27,20 @@ jobs:
 
       - name: Install Mobile Dependencies
         working-directory: mobile
-        run: npm install
+        run: |
+          npm install
+          npx expo install --fix
 
       - name: Generate Android Project
         working-directory: mobile
-        run: npx expo prebuild --platform android
+        run: npx expo prebuild --platform android --clean
 
       - name: Grant Execute Permission for Gradlew
         run: chmod +x mobile/android/gradlew
 
       - name: Build Debug APK
         working-directory: mobile/android
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
