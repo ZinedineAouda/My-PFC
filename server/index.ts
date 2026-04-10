@@ -9,7 +9,6 @@ app.set("trust proxy", 1);
 // ─── PRIORITY 1: Health checks (before any middleware) ──────────────
 app.get("/health", (_req, res) => res.status(200).send("OK"));
 app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
-app.get("/api/status", (_req, res) => res.status(200).json({ status: "ok", mode: 4 }));
 
 // ─── PRIORITY 2: Body parsers ──────────────────────────────────────
 app.use(express.json());
