@@ -209,14 +209,14 @@ public:
         _server.addHandler(loginHandler);
 
         // ── API: Approve slave ──────────────────────────────
-        auto* approveHandler = new AsyncCallbackJsonWebHandler("/api/approve/",
+        auto* approveHandler = new AsyncCallbackJsonWebHandler("/api/approve",
             [this](AsyncWebServerRequest* req, JsonVariant& json) {
                 if (!_checkAuth(req)) {
                     req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
                     return;
                 }
-                String slaveId = _extractLastSegment(req->url());
                 JsonObject obj = json.as<JsonObject>();
+                String slaveId = obj["slaveId"] | "";
                 bool ok = _registry.approveDevice(slaveId,
                     obj["patientName"] | "", obj["bed"] | "", obj["room"] | "");
                 if (!ok) {
@@ -228,16 +228,15 @@ public:
             });
         _server.addHandler(approveHandler);
 
-        // ── API: Update slave (PUT) ─────────────────────────
-        auto* updateHandler = new AsyncCallbackJsonWebHandler("/api/slaves/",
+        // ── API: Update slave ───────────────────────────────
+        auto* updateHandler = new AsyncCallbackJsonWebHandler("/api/update",
             [this](AsyncWebServerRequest* req, JsonVariant& json) {
-                if (req->method() != HTTP_PUT) return;
                 if (!_checkAuth(req)) {
                     req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
                     return;
                 }
-                String slaveId = _extractLastSegment(req->url());
                 JsonObject obj = json.as<JsonObject>();
+                String slaveId = obj["slaveId"] | "";
                 bool ok = _registry.updateDevice(slaveId,
                     obj["patientName"] | "", obj["bed"] | "", obj["room"] | "");
                 if (!ok) {
@@ -250,36 +249,40 @@ public:
         _server.addHandler(updateHandler);
 
         // ── API: Clear alert ────────────────────────────────
-        auto* clearHandler = new AsyncCallbackJsonWebHandler("/api/clearAlert/",
+        auto* clearHandler = new AsyncCallbackJsonWebHandler("/api/clearAlert",
             [this](AsyncWebServerRequest* req, JsonVariant& json) {
                 if (!_checkAuth(req)) {
                     req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
                     return;
                 }
-                String slaveId = _extractLastSegment(req->url());
+                JsonObject obj = json.as<JsonObject>();
+                String slaveId = obj["slaveId"] | "";
                 _registry.clearAlert(slaveId);
                 broadcastDeviceUpdate(slaveId);
                 req->send(200, "application/json", "{\"success\":true}");
             });
         _server.addHandler(clearHandler);
 
-        // ── Catch-all: DELETE + OPTIONS + 404 ───────────────
-        _server.onNotFound([this](AsyncWebServerRequest* req) {
-            String url = req->url();
-            if (req->method() == HTTP_DELETE && url.startsWith("/api/slaves/")) {
+        // ── API: Delete slave ───────────────────────────────
+        auto* deleteHandler = new AsyncCallbackJsonWebHandler("/api/delete-slave",
+            [this](AsyncWebServerRequest* req, JsonVariant& json) {
                 if (!_checkAuth(req)) {
                     req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
                     return;
                 }
-                String id = url.substring(12);
-                if (_registry.deleteDevice(id)) {
-                    broadcastDelete(id);
+                JsonObject obj = json.as<JsonObject>();
+                String slaveId = obj["slaveId"] | "";
+                if (_registry.deleteDevice(slaveId)) {
+                    broadcastDelete(slaveId);
                     req->send(200, "application/json", "{\"success\":true}");
                 } else {
                     req->send(404, "application/json", "{\"message\":\"Not found\"}");
                 }
-                return;
-            }
+            });
+        _server.addHandler(deleteHandler);
+
+        // ── Catch-all: DELETE + OPTIONS + 404 ───────────────
+        _server.onNotFound([this](AsyncWebServerRequest* req) {
             if (req->method() == HTTP_OPTIONS) {
                 req->send(200);
                 return;

@@ -437,10 +437,10 @@ function closeModal(){document.getElementById('modal').style.display='none'}
 function submitModal(){
   const n=document.getElementById('m-name').value,b=document.getElementById('m-bed').value,r=document.getElementById('m-room').value;
   if(!n||!b||!r){alert('All fields required');return}
-  fetch('/api/approve/'+modalId,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':AUTH},body:JSON.stringify({patientName:n,bed:b,room:r})}).then(()=>{closeModal();fetch('/api/slaves?all=1').then(r=>r.json()).then(list=>{devices={};list.forEach(d=>devices[d.slaveId]=d);render()})});
+  fetch('/api/approve',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':AUTH},body:JSON.stringify({slaveId:modalId,patientName:n,bed:b,room:r})}).then(()=>{closeModal();fetch('/api/slaves?all=1').then(r=>r.json()).then(list=>{devices={};list.forEach(d=>devices[d.slaveId]=d);render()})});
 }
 function clearAlert(id){
-  fetch('/api/clearAlert/'+id,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':AUTH},body:'{}'}).then(()=>{if(devices[id])devices[id].alertActive=false;render()});
+  fetch('/api/clearAlert',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':AUTH},body:JSON.stringify({slaveId:id})}).then(()=>{if(devices[id])devices[id].alertActive=false;render()});
 }
 
 /* ── Keep time displays updated ── */
@@ -553,11 +553,10 @@ function openEdit(id,n,b,r){editId=id;editMode='edit';document.getElementById('m
 function closeModal(){document.getElementById('modal').style.display='none'}
 function submitModal(){
   const n=document.getElementById('m-name').value,b=document.getElementById('m-bed').value,r=document.getElementById('m-room').value;
-  const url=editMode==='approve'?'/api/approve/'+editId:'/api/slaves/'+editId;
-  const method=editMode==='approve'?'POST':'PUT';
-  fetch(url,{method,headers:{'Content-Type':'application/json','X-Auth-Token':AUTH},body:JSON.stringify({patientName:n,bed:b,room:r})}).then(()=>{closeModal();refresh()});
+  const url=editMode==='approve'?'/api/approve':'/api/update';
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':AUTH},body:JSON.stringify({slaveId:editId,patientName:n,bed:b,room:r})}).then(()=>{closeModal();refresh()});
 }
-function delDev(id){if(!confirm('Delete '+id+'?'))return;fetch('/api/slaves/'+id,{method:'DELETE',headers:{'X-Auth-Token':AUTH}}).then(()=>refresh())}
+function delDev(id){if(!confirm('Delete '+id+'?'))return;fetch('/api/delete-slave',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':AUTH},body:JSON.stringify({slaveId:id})}).then(()=>refresh())}
 refresh();
 </script>
 </body>
