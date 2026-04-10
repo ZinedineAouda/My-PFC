@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21'
+          java-version: '17'
           cache: 'gradle'
 
       - name: Install Mobile Dependencies
@@ -31,7 +31,7 @@ jobs:
 
       - name: Generate Android Project
         working-directory: mobile
-        run: npx expo prebuild --platform android --no-install
+        run: npx expo prebuild --platform android
 
       - name: Grant Execute Permission for Gradlew
         run: chmod +x mobile/android/gradlew
