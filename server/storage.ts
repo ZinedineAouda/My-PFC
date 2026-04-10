@@ -156,6 +156,8 @@ export class MemStorage implements IStorage {
     return this.setupComplete;
   }
 
+  private alertClearedLocally: Set<string> = new Set();
+
   updateMasterHeartbeat(): void {
     this.masterLastSeen = Date.now();
   }
@@ -184,14 +186,18 @@ export class MemStorage implements IStorage {
         // Update online/alert state from master
         if (remote.online !== undefined) local.online = remote.online;
 
-        // Accept alert state from master (master is source of truth for alerts)
+        // ── Alert sync: CLEARS flow bidirectionally, activations DON'T ──
+        // New alerts reach the cloud via the /api/alert endpoint.
+        // Sync only propagates clears to prevent the loop:
+        //   cloud clears → ESP32 re-sends true → cloud re-activates → forever
         if (remote.alertActive !== undefined) {
-          if (remote.alertActive && !local.alertActive) {
-            local.alertActive = true;
-            local.lastAlertTime = new Date().toISOString();
-          } else if (!remote.alertActive && local.alertActive) {
+          if (!remote.alertActive && local.alertActive) {
+            // ESP32 cleared an alert → clear on cloud too
             local.alertActive = false;
+            this.alertClearedLocally.delete(remote.slaveId);
           }
+          // If master says alert active BUT cloud already cleared it: ignore
+          // The cloud response will tell the ESP32 to clear on next sync
         }
 
         // Accept approval from master (bidirectional: local dashboard can approve)

@@ -188,9 +188,10 @@ void onDeviceChange(const String& deviceId, const char* eventType) {
 
     // Force immediate cloud sync on important events
     if (currentMode == MODE_ONLINE && wifiMgr.staConnected()) {
-        if (strcmp(eventType, "alert") == 0 ||
-            strcmp(eventType, "approve") == 0 ||
-            strcmp(eventType, "clear") == 0) {
+        if (strcmp(eventType, "alert") == 0) {
+            cloudSync.alertToCloud(deviceId);
+        } else if (strcmp(eventType, "approve") == 0 ||
+                   strcmp(eventType, "clear") == 0) {
             cloudSync.syncNow();
         }
     }

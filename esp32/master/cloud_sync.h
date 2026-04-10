@@ -36,6 +36,12 @@ public:
 
         unsigned long now = millis();
 
+        // ── Send pending alert to cloud (dedicated endpoint) ─
+        if (_pendingAlertId.length() > 0) {
+            _sendAlertToCloud(_pendingAlertId);
+            _pendingAlertId = "";
+        }
+
         // ── Lightweight heartbeat ping every 15s ────────────
         // This keeps the "Master Online" indicator alive on the
         // cloud dashboard even if full syncs occasionally fail.
@@ -58,6 +64,13 @@ public:
         _forceSyncPending = true;
     }
 
+    // Send a specific alert to the cloud (called when slave triggers alert)
+    // This uses the dedicated /api/alert endpoint so the cloud can distinguish
+    // new alerts from stale sync state.
+    void alertToCloud(const String& slaveId) {
+        _pendingAlertId = slaveId;
+    }
+
 private:
     DeviceRegistry&   _registry;
     unsigned long     _lastSync;
@@ -66,6 +79,7 @@ private:
     bool              _forceSyncPending;
     int               _consecutiveFails;
     WiFiClientSecure* _client;
+    String            _pendingAlertId;
 
     // ── Ensure persistent TLS client exists ─────────────────
     WiFiClientSecure& _ensureClient() {
@@ -108,6 +122,31 @@ private:
             Serial.println("[CLOUD] Ping OK");
         } else {
             Serial.printf("[CLOUD] Ping failed: HTTP %d\n", httpCode);
+        }
+        http.end();
+    }
+
+    // ── Send alert to cloud via dedicated endpoint ──────────
+    void _sendAlertToCloud(const String& slaveId) {
+        WiFiClientSecure& client = _ensureClient();
+        HTTPClient http;
+        http.setTimeout(CLOUD_HTTP_TIMEOUT);
+
+        String url = String(CLOUD_SERVER_URL) + "/api/alert";
+        if (!http.begin(client, url)) {
+            Serial.println("[CLOUD] Alert connection failed");
+            return;
+        }
+
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("x-device-key", CLOUD_DEVICE_KEY);
+
+        String payload = "{\"slaveId\":\"" + slaveId + "\"}";
+        int httpCode = http.POST(payload);
+        if (httpCode == 200) {
+            Serial.printf("[CLOUD] Alert sent: %s\n", slaveId.c_str());
+        } else {
+            Serial.printf("[CLOUD] Alert failed: HTTP %d\n", httpCode);
         }
         http.end();
     }
