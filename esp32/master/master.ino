@@ -112,6 +112,7 @@ void setup() {
 
     // ── Load Config & WiFi ──────────────────────────────────
     loadSettings();
+    WiFi.setSleep(WIFI_PS_NONE); // Disable power saving for maximum responsiveness
     if (!setupDone) {
         wifiMgr.beginSetup();
         WiFi.scanNetworks(true); // Start background scan

@@ -66,6 +66,7 @@ unsigned long lastButtonTime  = 0;
 unsigned long lastHeartbeat   = 0;
 unsigned long lastReconnect   = 0;
 unsigned long alertLedTime    = 0;
+unsigned long lastClearTime   = 0;  // Localized cooldown after master clear
 
 // ─── WiFi Credentials ──────────────────────────────────────────────
 char wifiSSID[64] = DEFAULT_WIFI_SSID;
@@ -163,6 +164,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         const char* action = doc["action"] | "";
         if (strcmp(action, "clear_alert") == 0) {
             alertActive = false;
+            lastClearTime = millis();
             digitalWrite(LED_PIN, LED_OFF);
             Serial.println("[CMD] Alert cleared by master");
         }
@@ -243,7 +245,14 @@ void publishAlert() {
     String payload;
     serializeJson(doc, payload);
 
-    // Publish with QoS 1 (at-least-once delivery)
+    // Localized cooldown: prevent re-triggering within 2s of a remote clear
+    if (millis() - lastClearTime < 2000) {
+        Serial.println("[ALERT] Suppressed: recently cleared");
+        return;
+    }
+
+    // Publish with QoS 0 (at-most-once delivery)
+    // Note: PubSubClient publish() is QoS 0 by default.Master handles the state.
     if (mqtt.publish(topicAlert.c_str(), payload.c_str(), false)) {
         alertActive = true;
         alertLedTime = millis();

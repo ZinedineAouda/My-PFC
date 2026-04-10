@@ -86,7 +86,7 @@ public:
         if (it->second.alertActive) return false;
 
         // Skip if alert was cleared very recently (cooldown to prevent hardware bounce)
-        if (millis() - it->second.lastClearTime < 10000) {
+        if (millis() - it->second.lastClearTime < 3000) {
             Serial.printf("[ALERT] Suppressed (cooldown): %s\n", id.c_str());
             return false;
         }

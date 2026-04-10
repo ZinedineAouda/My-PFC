@@ -11,6 +11,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <vector>
 #include "config.h"
 #include "device_registry.h"
 
@@ -36,11 +37,8 @@ public:
 
         unsigned long now = millis();
 
-        // ── Send pending alert to cloud (dedicated endpoint) ─
-        if (_pendingAlertId.length() > 0) {
-            _sendAlertToCloud(_pendingAlertId);
-            _pendingAlertId = "";
-        }
+        // ── Process pending alert queue ─────────────────────
+        _processAlertQueue();
 
         // ── Lightweight heartbeat ping every 15s ────────────
         // This keeps the "Master Online" indicator alive on the
@@ -65,10 +63,14 @@ public:
     }
 
     // Send a specific alert to the cloud (called when slave triggers alert)
-    // This uses the dedicated /api/alert endpoint so the cloud can distinguish
-    // new alerts from stale sync state.
     void alertToCloud(const String& slaveId) {
-        _pendingAlertId = slaveId;
+        // Only queue if not already pending to avoid spamming
+        for (const auto& id : _alertQueue) {
+            if (id == slaveId) return;
+        }
+        _alertQueue.push_back(slaveId);
+        Serial.printf("[CLOUD] Alert queued: %s (Queue size: %d)\n", 
+                      slaveId.c_str(), _alertQueue.size());
     }
 
 private:
@@ -79,7 +81,17 @@ private:
     bool              _forceSyncPending;
     int               _consecutiveFails;
     WiFiClientSecure* _client;
-    String            _pendingAlertId;
+    std::vector<String> _alertQueue;
+
+    void _processAlertQueue() {
+        if (_alertQueue.empty()) return;
+
+        // Process only one per loop to keep it non-blocking
+        String slaveId = _alertQueue[0];
+        if (_sendAlertToCloud(slaveId)) {
+            _alertQueue.erase(_alertQueue.begin());
+        }
+    }
 
     // ── Ensure persistent TLS client exists ─────────────────
     WiFiClientSecure& _ensureClient() {
@@ -126,8 +138,8 @@ private:
         http.end();
     }
 
-    // ── Send alert to cloud via dedicated endpoint ──────────
-    void _sendAlertToCloud(const String& slaveId) {
+    // ── Send alert to cloud ────────────────────────────────
+    bool _sendAlertToCloud(const String& slaveId) {
         WiFiClientSecure& client = _ensureClient();
         HTTPClient http;
         http.setTimeout(CLOUD_HTTP_TIMEOUT);
@@ -135,7 +147,7 @@ private:
         String url = String(CLOUD_SERVER_URL) + "/api/alert";
         if (!http.begin(client, url)) {
             Serial.println("[CLOUD] Alert connection failed");
-            return;
+            return false;
         }
 
         http.addHeader("Content-Type", "application/json");
@@ -143,12 +155,16 @@ private:
 
         String payload = "{\"slaveId\":\"" + slaveId + "\"}";
         int httpCode = http.POST(payload);
+        http.end();
+
         if (httpCode == 200) {
             Serial.printf("[CLOUD] Alert sent: %s\n", slaveId.c_str());
+            return true;
         } else {
             Serial.printf("[CLOUD] Alert failed: HTTP %d\n", httpCode);
+            _handleFailure();
+            return false;
         }
-        http.end();
     }
 
     // ── Full bidirectional state sync ───────────────────────
