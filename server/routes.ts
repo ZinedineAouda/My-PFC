@@ -17,6 +17,11 @@ import {
   masterSyncSchema,
 } from "@shared/schema";
 
+// ─── Utility: Async Error Wrapper ─────────────────────────────────────
+const asyncHandler = (fn: any) => (req: Request, res: Response, next: NextFunction) => {
+  return Promise.resolve(fn(req, res, next)).catch(next);
+};
+
 declare module "express-session" {
   interface SessionData {
     isAdmin: boolean;
@@ -98,27 +103,32 @@ export async function registerRoutes(
   //  AUTHENTICATION
   // ═════════════════════════════════════════════════════════════
   app.post("/api/admin/login", (req: Request, res: Response) => {
-    const usernameInput = (req.body.username || "").toString().trim().toLowerCase();
-    const passwordInput = (req.body.password || "").toString().trim();
+    try {
+      const usernameInput = (req.body.username || "").toString().trim().toLowerCase();
+      const passwordInput = (req.body.password || "").toString().trim();
 
-    console.log(`[AUTH] Login attempt — User: "${usernameInput}"`);
+      console.log(`[AUTH] Incoming login request for user: "${usernameInput}"`);
 
-    // Hardcoded credentials: admin / admin1234
-    if (usernameInput === "admin" && passwordInput === "admin1234") {
-      req.session.isAdmin = true;
-      req.session.save((err) => {
-        if (err) {
-          console.error("[AUTH] Session Save Error:", err);
-          return res.status(500).json({ message: "Internal Session Error" });
-        }
-        console.log("[AUTH] Success: Session started for Admin.");
-        res.json({ success: true });
-      });
-      return;
+      if (usernameInput === "admin" && passwordInput === "admin1234") {
+        console.log("[AUTH] Credentials verified. Initializing session...");
+        
+        req.session.isAdmin = true;
+        req.session.save((err) => {
+          if (err) {
+            console.error("[AUTH] FATAL: Session persistence failure:", err);
+            return res.status(500).json({ success: false, message: "Internal Session Error" });
+          }
+          console.log("[AUTH] Success: Session committed. Returning 200 OK.");
+          return res.json({ success: true });
+        });
+      } else {
+        console.warn(`[AUTH] Denied: Invalid password for user "${usernameInput}"`);
+        return res.status(401).json({ success: false, message: "Invalid Credentials" });
+      }
+    } catch (crash) {
+      console.error("[AUTH] Crash during login handler:", crash);
+      return res.status(500).json({ success: false, message: "Critical Auth Error" });
     }
-
-    console.warn(`[AUTH] Rejection: Provided "${usernameInput}" / "${passwordInput.length} chars"`);
-    return res.status(401).json({ message: "Access Denied: Invalid Credentials" });
   });
 
   app.post("/api/admin/logout", (req: Request, res: Response) => {
@@ -128,7 +138,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/session", (req: Request, res: Response) => {
-    if (req.session?.isAdmin) {
+    const isAdmin = !!req.session?.isAdmin;
+    console.log(`[AUTH] Session verification check: ${isAdmin ? "LOGGED IN" : "ANONYMOUS"}`);
+    if (isAdmin) {
       return res.json({ authenticated: true });
     }
     return res.status(401).json({ authenticated: false });
@@ -137,7 +149,7 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   //  SYSTEM STATUS
   // ═════════════════════════════════════════════════════════════
-  app.get("/api/status", async (_req: Request, res: Response) => {
+  app.get("/api/status", asyncHandler(async (_req: Request, res: Response) => {
     const all = await storage.getAllSlaves();
     return res.json({
       mode: await storage.getMode(),
@@ -149,22 +161,22 @@ export async function registerRoutes(
       pending: all.filter((s) => !s.approved).length,
       isMasterOnline: await storage.isMasterOnline(),
     });
-  });
+  }));
 
-  app.post("/api/setup", async (req: Request, res: Response) => {
+  app.post("/api/setup", asyncHandler(async (req: Request, res: Response) => {
     const parsed = setupSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid mode" });
     }
     await storage.setMode(parsed.data.mode);
     return res.json({ success: true, mode: parsed.data.mode });
-  });
+  }));
 
-  app.post("/api/reset", requireAdmin, async (_req: Request, res: Response) => {
+  app.post("/api/reset", requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
     await storage.reset();
     broadcastAllDevices();
     return res.json({ success: true, message: "System reset successful" });
-  });
+  }));
 
   // ═════════════════════════════════════════════════════════════
   //  WIFI SCAN (mock for cloud dashboard)
@@ -188,14 +200,14 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   //  SLAVE MANAGEMENT
   // ═════════════════════════════════════════════════════════════
-  app.get("/api/slaves", async (req: Request, res: Response) => {
+  app.get("/api/slaves", asyncHandler(async (req: Request, res: Response) => {
     if (req.query.all === "1" || req.query.all === "") {
       return res.json(await storage.getAllSlaves());
     }
     return res.json(await storage.getApprovedSlaves());
-  });
+  }));
 
-  app.post("/api/slaves", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/slaves", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const parsed = insertSlaveSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
@@ -207,9 +219,9 @@ export async function registerRoutes(
     } catch (err: any) {
       return res.status(409).json({ message: err.message });
     }
-  });
+  }));
 
-  app.put("/api/slaves/:slaveId", requireAdmin, async (req: Request, res: Response) => {
+  app.put("/api/slaves/:slaveId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const parsed = updateSlaveSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
@@ -220,21 +232,21 @@ export async function registerRoutes(
     }
     broadcast({ type: "UPDATE", payload: slave });
     return res.json({ success: true, slave });
-  });
+  }));
 
-  app.delete("/api/slaves/:slaveId", requireAdmin, async (req: Request, res: Response) => {
+  app.delete("/api/slaves/:slaveId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const deleted = await storage.deleteSlave(req.params.slaveId as string);
     if (!deleted) {
       return res.status(404).json({ message: "Slave not found" });
     }
     broadcast({ type: "DELETE", payload: { slaveId: req.params.slaveId as string } });
     return res.json({ success: true, message: "Deleted" });
-  });
+  }));
 
   // ═════════════════════════════════════════════════════════════
   //  DEVICE REGISTRATION & ALERTS (from ESP32 master)
   // ═════════════════════════════════════════════════════════════
-  app.post("/api/register", requireDeviceKey, async (req: Request, res: Response) => {
+  app.post("/api/register", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
     const parsed = registerRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid body" });
@@ -245,9 +257,9 @@ export async function registerRoutes(
       success: true,
       message: slave.approved ? "Registered" : "Pending approval",
     });
-  });
+  }));
 
-  app.post("/api/alert", requireDeviceKey, async (req: Request, res: Response) => {
+  app.post("/api/alert", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
     const parsed = alertRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid body" });
@@ -259,9 +271,9 @@ export async function registerRoutes(
     broadcast({ type: "ALERT", payload: { slaveId: parsed.data.slaveId } });
     broadcastDeviceUpdate(parsed.data.slaveId);
     return res.json({ success: true });
-  });
+  }));
 
-  app.post("/api/heartbeat", requireDeviceKey, async (req: Request, res: Response) => {
+  app.post("/api/heartbeat", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
     const parsed = registerRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid body" });
@@ -272,12 +284,12 @@ export async function registerRoutes(
       approved: slave.approved,
       alertActive: slave.alertActive,
     });
-  });
+  }));
 
   // ═════════════════════════════════════════════════════════════
   //  MASTER SYNC (bidirectional state exchange)
   // ═════════════════════════════════════════════════════════════
-  app.post("/api/master-sync", requireDeviceKey, async (req: Request, res: Response) => {
+  app.post("/api/master-sync", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
     const parsed = masterSyncSchema.safeParse(req.body);
     if (!parsed.success) {
       await storage.updateMasterHeartbeat();
@@ -296,18 +308,18 @@ export async function registerRoutes(
       mode: await storage.getMode(),
       slaves: await storage.getAllSlaves(),
     });
-  });
+  }));
 
-  app.post("/api/master-ping", requireDeviceKey, async (_req: Request, res: Response) => {
+  app.post("/api/master-ping", requireDeviceKey, asyncHandler(async (_req: Request, res: Response) => {
     await storage.updateMasterHeartbeat();
     broadcast({ type: "MASTER_STATUS", payload: { online: true } });
     return res.json({ success: true });
-  });
+  }));
 
   // ═════════════════════════════════════════════════════════════
   //  ADMIN ACTIONS (approve, clear alerts)
   // ═════════════════════════════════════════════════════════════
-  app.post("/api/approve/:slaveId", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/approve/:slaveId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const parsed = approveSlaveSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
@@ -318,16 +330,16 @@ export async function registerRoutes(
     }
     broadcast({ type: "UPDATE", payload: slave });
     return res.json({ success: true, slave });
-  });
+  }));
 
-  app.post("/api/clearAlert/:slaveId", requireAdminOrDevice, async (req: Request, res: Response) => {
+  app.post("/api/clearAlert/:slaveId", requireAdminOrDevice, asyncHandler(async (req: Request, res: Response) => {
     const cleared = await storage.clearAlert(req.params.slaveId as string);
     if (!cleared) {
       return res.status(404).json({ message: "Slave not found" });
     }
     await broadcastDeviceUpdate(req.params.slaveId as string);
     return res.json({ success: true, message: "Alert cleared" });
-  });
+  }));
 
   return httpServer;
 }

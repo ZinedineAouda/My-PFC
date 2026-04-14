@@ -61,6 +61,23 @@ const httpServer = createServer(app);
 
   // ── Global error handler ──
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    res.status(err.status || 500).json({ message: err.message || "Internal Server Error" });
+    console.error("[EXPRESS] Error Handler:", err);
+    res.status(err.status || 500).json({ 
+      message: err.message || "Internal Server Error",
+      success: false 
+    });
   });
+
+  // ── Process-level safety guards (Prevent 502/Crashes on Railway) ──
+  process.on("unhandledRejection", (reason, promise) => {
+    console.error("[FATAL] Unhandled Rejection at:", promise, "reason:", reason);
+    // On Railway, we stay alive but log the error for diagnostics
+  });
+
+  process.on("uncaughtException", (err) => {
+    console.error("[FATAL] Uncaught Exception:", err);
+    // We log but don't exit(1) unless it's a non-recoverable system error
+    // express-session or DB failures shouldn't kill the dashboard
+  });
+
 })();
