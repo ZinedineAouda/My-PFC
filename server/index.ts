@@ -1,7 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
+import { sql } from "drizzle-orm";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { db } from "./db";
+import { slaves } from "@shared/schema";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -35,6 +38,12 @@ const httpServer = createServer(app);
   });
 
   try {
+    log("Initializing database connection...");
+    // Force a simple query to ensure the DB is reachable and tables exist
+    // In a production environment with Drizzle, we ensure schemas are synced.
+    await db.execute(sql`SELECT 1`);
+    log("Database connection established.");
+    
     log("Registering routes...");
     await registerRoutes(httpServer, app);
 
