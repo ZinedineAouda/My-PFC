@@ -56,12 +56,7 @@ void loadSettings() {
     setupDone = prefs.getBool("setupDone", false);
     currentMode = (WiFiOpMode)prefs.getInt("mode", (int)MODE_AP);
 
-    // If it was previously in Cloud Mode, force the setup portal to appear on boot.
-    // This also fixes the issue for devices that had setupDone=true saved from older versions.
-    if (currentMode == MODE_ONLINE) {
-        setupDone = false;
-    }
-
+    // Configuration survives reboots correctly now.
     if (setupDone) {
         String apS = prefs.getString("apSSID", AP_SSID_DEFAULT);
         String apP = prefs.getString("apPass", "");
@@ -79,12 +74,7 @@ void loadSettings() {
 
 void saveSettings() {
     prefs.begin("master_cfg", false);
-    // Don't persist setupDone in Cloud Mode, so the setup page appears on next boot
-    if (currentMode == MODE_ONLINE) {
-        prefs.putBool("setupDone", false);
-    } else {
-        prefs.putBool("setupDone", setupDone);
-    }
+    prefs.putBool("setupDone", setupDone);
     prefs.putInt("mode", (int)currentMode);
     prefs.putString("apSSID", wifiMgr.apSSID());
     prefs.putString("apPass", wifiMgr.apPass());

@@ -1,6 +1,22 @@
 import { z } from "zod";
+import { pgTable, text, boolean, integer, timestamp } from "drizzle-orm/pg-core";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
-// ─── Slave Device Schema ────────────────────────────────────────────
+// ─── Drizzle Database Table ─────────────────────────────────────────
+export const slaves = pgTable("slaves", {
+  slaveId: text("slave_id").primaryKey(),
+  patientName: text("patient_name").notNull().default(""),
+  bed: text("bed").notNull().default(""),
+  room: text("room").notNull().default(""),
+  alertActive: boolean("alert_active").notNull().default(false),
+  lastAlertTime: text("last_alert_time"),
+  registered: boolean("registered").notNull().default(false),
+  approved: boolean("approved").notNull().default(false),
+  online: boolean("online").notNull().default(false),
+  lastSeen: integer("last_seen"),
+});
+
+// ─── Slave Device Schema (Zod) ──────────────────────────────────────
 export const slaveSchema = z.object({
   slaveId: z.string().min(1),
   patientName: z.string().default(""),

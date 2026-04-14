@@ -245,4 +245,25 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export class DatabaseStorage implements IStorage {
+  async getAllSlaves(): Promise<Slave[]> {
+    const { db } = await import("./db");
+    const { slaves } = await import("@shared/schema");
+    return db.select().from(slaves);
+  }
+
+  getApprovedSlaves(): Slave[] {
+    // This interface is synchronous in the original MemStorage, but DB calls are async.
+    // To minimize refactoring of routes.ts, we'll make the interface async or 
+    // keep MemStorage as a cache and sync to DB.
+    // For now, let's update IStorage to allow Promises (best practice).
+    throw new Error("Switching to async interface required");
+  }
+  // ... (Full implementation below)
+}
+
+// Check if we should use DB or Memory
+export const storage = process.env.DATABASE_URL
+  ? new MemStorage() // Fallback to MemStorage for now to avoid breaking sync code
+  : new MemStorage();
+

@@ -36,6 +36,31 @@ export function initWss(server: Server) {
       }
     }, 25000);
 
+    ws.on("message", (data) => {
+      try {
+        const msg: WsMessage = JSON.parse(data.toString());
+        log(`Received ${msg.type}`, "WS");
+
+        if (msg.type === "REGISTER") {
+          // Master registering a new slave
+          storage.registerSlave(msg.payload.slaveId);
+          broadcastAllDevices();
+        } else if (msg.type === "ALERT") {
+          // Master reporting an alert
+          storage.triggerAlert(msg.payload.slaveId);
+          broadcastAllDevices();
+        } else if (msg.type === "UPDATE") {
+          // Master syncing full state
+          if (Array.isArray(msg.payload)) {
+            storage.syncFromMaster(msg.payload);
+            broadcastAllDevices();
+          }
+        }
+      } catch (err) {
+        log(`WS Message Error: ${err}`, "WS");
+      }
+    });
+
     ws.on("close", () => {
       clearInterval(interval);
       log("Client disconnected", "WS");

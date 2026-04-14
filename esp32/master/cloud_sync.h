@@ -36,17 +36,18 @@ public:
         if (_busy) return;
 
         unsigned long now = millis();
-        // Global throttle: max 1 cloud operation per second to prevent TLS storm
-        if (now - _lastOpTime < 1000) return;
-
-        // ── 1. Process pending alert queue (highest priority) ─
+        
+        // ── 1. Process pending alert queue (highest priority — NO THROTTLE) ─
         if (!_alertQueue.empty()) {
-            _lastOpTime = now;
             _processAlertQueue();
-            return; // Only one operation per loop
+            _lastOpTime = now; // Update op time to push back background tasks
+            return;
         }
 
-        // ── 2. Lightweight heartbeat ping every 10s ──────────
+        // ── 2. Background throttled tasks ────────────────────
+        if (now - _lastOpTime < 1000) return; // Only throttle background syncs
+
+        // ── 3. Lightweight heartbeat ping every 10s ──────────
         if (now - _lastPing >= CLOUD_PING_INTERVAL) {
             _lastPing = now;
             _lastOpTime = now;
@@ -54,7 +55,7 @@ public:
             return;
         }
 
-        // ── 3. Full state sync ───────────────────────────────
+        // ── 4. Full state sync ───────────────────────────────
         if (_forceSyncPending || (now - _lastSync >= CLOUD_SYNC_INTERVAL)) {
             _forceSyncPending = false;
             _lastSync = now;
@@ -100,10 +101,15 @@ private:
     void _processAlertQueue() {
         if (_alertQueue.empty()) return;
 
-        // Process only one per loop to keep it non-blocking
         String slaveId = _alertQueue[0];
         if (_sendAlertToCloud(slaveId)) {
             _alertQueue.erase(_alertQueue.begin());
+            _consecutiveFails = 0;
+        } else {
+            // Move to back of queue to allow other alerts to try
+            _alertQueue.erase(_alertQueue.begin());
+            _alertQueue.push_back(slaveId);
+            _handleFailure();
         }
     }
 
