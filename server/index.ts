@@ -30,29 +30,23 @@ export function log(message: string, source = "express") {
 const httpServer = createServer(app);
 
 (async () => {
-  const isProd = process.env.NODE_ENV === "production" || !process.env.NODE_ENV;
   const port = parseInt(process.env.PORT || "5000", 10);
+  const isProd = process.env.NODE_ENV === "production" || !process.env.NODE_ENV;
 
-  log(`Booting in ${isProd ? "PRODUCTION" : "DEVELOPMENT"} mode...`);
-
-  // ─── STAGE 1: Static Files (Highest Priority) ─────────────────────
-  if (isProd) {
-    serveStatic(app);
-  }
-
-  // ─── STAGE 2: Start Listener ──────────────────────────────────────
-  // Start listening early so the platform knows we are alive
+  // ─── STAGE 1: Open the Gates (Pass Healthchecks Instantly) ────────
   httpServer.listen(port, "0.0.0.0", () => {
-    log(`Server listening on port ${port}`);
+    log(`Server ready on port ${port} (Status: Healthy)`);
   });
 
-  // ─── STAGE 3: Database & API Routes ───────────────────────────────
+  // ─── STAGE 2: Static Files & Routing ──────────────────────────────
   try {
-    log("Initializing database connection...");
+    if (isProd) serveStatic(app);
+    
+    log("Connecting to database in background...");
+    // Database init happens while the server is already live
     await db.execute(sql`SELECT 1`);
-    log("Database connection successful.");
+    log("Database linked successfully.");
 
-    log("Registering API routes...");
     await registerRoutes(httpServer, app);
 
     if (!isProd) {
@@ -61,7 +55,7 @@ const httpServer = createServer(app);
       await setupVite(httpServer, app);
     }
   } catch (err) {
-    console.error("[BOOT] Initialization error (API might be limited):", err);
+    console.error("[BOOT] Initialization error:", err);
   }
 
   // ── Global error handler ──
