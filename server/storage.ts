@@ -66,13 +66,14 @@ export class DatabaseStorage implements IStorage {
       registered: false,
       approved: false,
       online: false,
+      lastUpdatedAt: Date.now(),
     }).returning();
     return slave;
   }
 
   async approveSlave(slaveId: string, data: ApproveSlave): Promise<Slave | undefined> {
     const [slave] = await db.update(slaves)
-      .set({ ...data, approved: true })
+      .set({ ...data, approved: true, lastUpdatedAt: Date.now() })
       .where(eq(slaves.slaveId, slaveId))
       .returning();
     return slave;
@@ -80,7 +81,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateSlave(slaveId: string, data: UpdateSlave): Promise<Slave | undefined> {
     const [slave] = await db.update(slaves)
-      .set(data)
+      .set({ ...data, lastUpdatedAt: Date.now() })
       .where(eq(slaves.slaveId, slaveId))
       .returning();
     return slave;
@@ -110,6 +111,7 @@ export class DatabaseStorage implements IStorage {
       room: "",
       alertActive: false,
       approved: false,
+      lastUpdatedAt: Date.now(),
     }).returning();
     return inserted;
   }
@@ -125,7 +127,8 @@ export class DatabaseStorage implements IStorage {
         alertActive: true, 
         lastAlertTime: new Date().toISOString(),
         lastSeen: Date.now(),
-        online: true
+        online: true,
+        lastUpdatedAt: Date.now()
       })
       .where(eq(slaves.slaveId, slaveId))
       .returning();
@@ -134,7 +137,7 @@ export class DatabaseStorage implements IStorage {
 
   async clearAlert(slaveId: string): Promise<boolean> {
     const [updated] = await db.update(slaves)
-      .set({ alertActive: false })
+      .set({ alertActive: false, lastUpdatedAt: Date.now() })
       .where(eq(slaves.slaveId, slaveId))
       .returning();
     return !!updated;
@@ -187,17 +190,32 @@ export class DatabaseStorage implements IStorage {
       const [existing] = await db.select().from(slaves).where(eq(slaves.slaveId, remote.slaveId));
       
       if (existing) {
-        await db.update(slaves)
-          .set({
-            online: true,
-            alertActive: remote.alertActive !== undefined ? (remote.alertActive && existing.alertActive) || remote.alertActive : existing.alertActive,
-            approved: remote.approved || existing.approved,
-            patientName: remote.patientName || existing.patientName,
-            bed: remote.bed || existing.bed,
-            room: remote.room || existing.room,
-            lastSeen: Date.now()
-          })
-          .where(eq(slaves.slaveId, remote.slaveId));
+        const tRemote = remote.lastUpdatedAt || 0;
+        const tLocal = existing.lastUpdatedAt || 0;
+
+        if (tRemote >= tLocal) {
+          // Master wins (or timestamps equal = trust master as authoritative source)
+          await db.update(slaves)
+            .set({
+              online: true,
+              alertActive: remote.alertActive !== undefined ? remote.alertActive : existing.alertActive,
+              approved: remote.approved !== undefined ? remote.approved : existing.approved,
+              patientName: remote.patientName || existing.patientName,
+              bed: remote.bed || existing.bed,
+              room: remote.room || existing.room,
+              lastSeen: Date.now(),
+              lastUpdatedAt: tRemote > 0 ? tRemote : tLocal
+            })
+            .where(eq(slaves.slaveId, remote.slaveId));
+        } else {
+          // Local DB has a newer manual change (e.g. admin just clicked 'clear')
+          await db.update(slaves)
+            .set({
+              online: true,
+              lastSeen: Date.now()
+            })
+            .where(eq(slaves.slaveId, remote.slaveId));
+        }
       } else {
         await db.insert(slaves).values({
           slaveId: remote.slaveId,
@@ -209,6 +227,7 @@ export class DatabaseStorage implements IStorage {
           online: true,
           registered: true,
           lastSeen: Date.now(),
+          lastUpdatedAt: remote.lastUpdatedAt || Date.now()
         });
       }
     }

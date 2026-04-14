@@ -20,7 +20,7 @@ public:
     CloudSync(DeviceRegistry& reg)
         : _registry(reg), _lastSync(0), _lastPing(0), _lastOpTime(0),
           _busy(false), _forceSyncPending(false),
-          _consecutiveFails(0) {
+          _consecutiveFails(0), _timeOffset(0) {
         _client = nullptr;
     }
 
@@ -95,8 +95,13 @@ private:
     bool              _busy;
     bool              _forceSyncPending;
     int               _consecutiveFails;
+    uint64_t          _timeOffset;
     WiFiClientSecure* _client;
     std::vector<String> _alertQueue;
+
+    uint64_t _getCurrentTime() {
+        return _timeOffset > 0 ? (millis() + _timeOffset) : 0;
+    }
 
     void _processAlertQueue() {
         if (_alertQueue.empty()) return;
@@ -160,7 +165,7 @@ private:
 
         http.addHeader("Content-Type", "application/json");
         http.addHeader("x-device-key", CLOUD_DEVICE_KEY);
-        http.addHeader("Connection", "keep-alive");
+        http.addHeader("Connection", "close"); // Use close rather than keep-alive for strict reliability with proxy load balancers
 
         int code = http.POST(payload);
         
@@ -171,13 +176,22 @@ private:
             }
         }
 
-        if (code == 200 && path == "/api/master-sync") {
+        if (code == 200) {
             String response = http.getString();
             JsonDocument recvDoc;
             if (deserializeJson(recvDoc, response) == DeserializationError::Ok) {
-                JsonArray remoteSlaves = recvDoc["slaves"];
-                if (!remoteSlaves.isNull()) {
-                    _registry.mergeFromCloud(remoteSlaves);
+                // If the response contains a server time, synchronize our logical clock
+                if (!recvDoc["serverTime"].isNull()) {
+                    uint64_t sTime = recvDoc["serverTime"].as<uint64_t>();
+                    _timeOffset = sTime - (uint64_t)millis();
+                    _registry.updateTimeOffset(_timeOffset);
+                }
+
+                if (path == "/api/master-sync") {
+                    JsonArray remoteSlaves = recvDoc["slaves"];
+                    if (!remoteSlaves.isNull()) {
+                        _registry.mergeFromCloud(remoteSlaves);
+                    }
                 }
             }
         }
@@ -227,6 +241,9 @@ private:
             obj["alertActive"] = d.alertActive;
             obj["approved"]    = d.approved;
             obj["online"]      = d.online;
+            if (d.lastUpdatedAt > 0) {
+                obj["lastUpdatedAt"] = d.lastUpdatedAt;
+            }
         }
 
         String payload;

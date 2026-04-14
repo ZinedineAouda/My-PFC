@@ -57,18 +57,18 @@ void checkNewFlash() {
     prefs.begin("sys_info", false);
     String lastBuild = prefs.getString("build_id", "");
     
-    if (lastBuild.length() > 0 && lastBuild != currentBuild) {
+    // If lastBuild is empty, it means this is a fresh flash of THIS code
+    // If lastBuild != currentBuild, it means it's a new update
+    if (lastBuild != currentBuild) {
         Serial.println("╔═════════════════════════════════════════════════════╗");
-        Serial.println("║  [NEW FLASH] New firmware detected!                 ║");
+        Serial.println("║  [NEW FLASH] Clean firmware detected!               ║");
         Serial.println("║  Performing automatic factory reset to ensure clean  ║");
-        Serial.println("║  setup as requested.                                ║");
+        Serial.println("║  slate as requested.                                ║");
         Serial.println("╚═════════════════════════════════════════════════════╝");
         prefs.putString("build_id", currentBuild);
         prefs.end();
         onFactoryReset(); // This restarts the device
     }
-    
-    prefs.putString("build_id", currentBuild);
     prefs.end();
 }
 
@@ -150,9 +150,12 @@ void setup() {
     dashboard.onReset(onFactoryReset);
     dashboard.begin(setupDone, currentMode);
 
-    Serial.println("[BOOT] System ready");
-    Serial.println("[BOOT] Dashboard: http://192.168.4.1");
-    Serial.println("[BOOT] MQTT Broker: 192.168.4.1:1883");
+    if (setupDone) {
+        Serial.println("[BOOT] System ready");
+        Serial.println("[BOOT] Dashboard: http://192.168.4.1");
+    } else {
+        Serial.println("[BOOT] Awaiting initial configuration...");
+    }
     Serial.printf("[BOOT] Free heap: %d bytes\n", ESP.getFreeHeap());
 }
 
@@ -176,8 +179,15 @@ void loop() {
     registry.checkTimeouts();
 
     // ── Cloud sync (Mode 4 only) ────────────────────────────
-    if (currentMode == MODE_ONLINE && wifiMgr.staConnected()) {
+    if (setupDone && currentMode == MODE_ONLINE && wifiMgr.staConnected()) {
         cloudSync.handle();
+    }
+
+    // ── Periodic reminder if setup is pending ───────────────
+    static unsigned long lastSetupRemind = 0;
+    if (!setupDone && (millis() - lastSetupRemind > 10000)) {
+        lastSetupRemind = millis();
+        Serial.println("[SYSTEM] Waiting for setup... Connect to 'HospitalAlarm' WiFi and go to http://192.168.4.1");
     }
 
     // ── Buzzer for active alerts (non-blocking) ─────────────

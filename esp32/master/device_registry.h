@@ -25,6 +25,7 @@ struct SlaveDevice {
     unsigned long lastAlertTime = 0;
     unsigned long lastClearTime = 0;
     unsigned long lastSeen      = 0;
+    uint64_t      lastUpdatedAt = 0;
 };
 
 // ─── Callback type for change notifications ─────────────────
@@ -33,7 +34,7 @@ typedef void (*RegistryChangeCallback)(const String& deviceId, const char* event
 // ─── Device Registry Class ──────────────────────────────────
 class DeviceRegistry {
 public:
-    DeviceRegistry() : _lastTimeoutCheck(0), _changeCallback(nullptr) {}
+    DeviceRegistry() : _lastTimeoutCheck(0), _changeCallback(nullptr), _timeOffset(0) {}
 
     void begin() {
         load();
@@ -41,6 +42,14 @@ public:
 
     void onDeviceChange(RegistryChangeCallback cb) {
         _changeCallback = cb;
+    }
+
+    void updateTimeOffset(uint64_t offset) {
+        _timeOffset = offset;
+    }
+
+    uint64_t getCurrentTime() {
+        return _timeOffset > 0 ? (millis() + _timeOffset) : 0;
     }
 
     void load() {
@@ -154,6 +163,7 @@ public:
         it->second.lastAlertTime = millis();
         it->second.lastSeen = millis();
         it->second.online = true;
+        it->second.lastUpdatedAt = getCurrentTime();
 
         Serial.printf("[ALERT] Active: %s\n", id.c_str());
         _notify(id, "alert");
@@ -165,6 +175,7 @@ public:
         if (it == _devices.end()) return false;
         it->second.alertActive = false;
         it->second.lastClearTime = millis();
+        it->second.lastUpdatedAt = getCurrentTime();
         _notify(id, "clear");
         return true;
     }
@@ -177,6 +188,7 @@ public:
         it->second.bed = bed;
         it->second.room = room;
         it->second.approved = true;
+        it->second.lastUpdatedAt = getCurrentTime();
         save();
         _notify(id, "approve");
         return true;
@@ -189,6 +201,7 @@ public:
         if (name.length()) it->second.patientName = name;
         if (bed.length())  it->second.bed = bed;
         if (room.length()) it->second.room = room;
+        it->second.lastUpdatedAt = getCurrentTime();
         save();
         _notify(id, "update");
         return true;
@@ -272,23 +285,37 @@ public:
 
             auto it = _devices.find(rid);
             if (it != _devices.end()) {
-                if (remote.containsKey("approved")) {
-                    bool newApp = remote["approved"] | false;
-                    if (newApp != it->second.approved) {
-                        it->second.approved = newApp;
-                        it->second.patientName = remote["patientName"] | "";
-                        it->second.bed = remote["bed"] | "";
-                        it->second.room = remote["room"] | "";
-                        changed = true;
-                        _notify(rid, "approve");
+                uint64_t tRemote = remote["lastUpdatedAt"].isNull() ? 0 : remote["lastUpdatedAt"].as<uint64_t>();
+                uint64_t tLocal = it->second.lastUpdatedAt;
+
+                if (tRemote >= tLocal || tLocal == 0) {
+                    if (remote.containsKey("approved")) {
+                        bool newApp = remote["approved"] | false;
+                        if (newApp != it->second.approved) {
+                            it->second.approved = newApp;
+                            it->second.patientName = remote["patientName"] | "";
+                            it->second.bed = remote["bed"] | "";
+                            it->second.room = remote["room"] | "";
+                            changed = true;
+                            _notify(rid, "approve");
+                        }
                     }
-                }
-                if (remote.containsKey("alertActive")) {
-                    bool rAlert = remote["alertActive"] | false;
-                    if (!rAlert && it->second.alertActive) {
-                        it->second.alertActive = false;
-                        it->second.lastClearTime = millis();
-                        _notify(rid, "clear");
+                    if (remote.containsKey("alertActive")) {
+                        bool rAlert = remote["alertActive"] | false;
+                        if (!rAlert && it->second.alertActive) {
+                            it->second.alertActive = false;
+                            it->second.lastClearTime = millis();
+                            _notify(rid, "clear");
+                            changed = true;
+                        } else if (rAlert && !it->second.alertActive) {
+                            it->second.alertActive = true;
+                            it->second.lastAlertTime = millis();
+                            _notify(rid, "alert");
+                            changed = true;
+                        }
+                    }
+                    if (tRemote > 0) {
+                        it->second.lastUpdatedAt = tRemote;
                     }
                 }
             } else {
@@ -300,6 +327,7 @@ public:
                     dev.room        = remote["room"] | "";
                     dev.approved    = remote["approved"] | false;
                     dev.registered  = true;
+                    dev.lastUpdatedAt = remote["lastUpdatedAt"].isNull() ? getCurrentTime() : remote["lastUpdatedAt"].as<uint64_t>();
                     _devices[rid]   = dev;
                     changed = true;
                     _notify(rid, "register");
@@ -315,6 +343,7 @@ private:
     std::map<String, SlaveDevice> _devices;
     unsigned long _lastTimeoutCheck;
     RegistryChangeCallback _changeCallback;
+    uint64_t _timeOffset;
 
     void _notify(const String& id, const char* event) const {
         if (_changeCallback) _changeCallback(id, event);
@@ -330,6 +359,9 @@ private:
         obj["approved"]      = d.approved;
         obj["online"]        = d.online;
         obj["lastSeen"]      = d.lastSeen;
+        if (d.lastUpdatedAt > 0) {
+            obj["lastUpdatedAt"] = d.lastUpdatedAt;
+        }
     }
 };
 

@@ -12,7 +12,7 @@
 #include <ArduinoJson.h>
 #include "config.h"
 #include "device_registry.h"
-#include "dashboard.h"
+#include "dashboard_static.h"
 
 // Forward declarations — the MqttHandler reference is set from master.ino
 class MqttHandler;
@@ -36,23 +36,21 @@ public:
 
         // ── Page routes ─────────────────────────────────────
         _server.on("/", HTTP_GET, [this](AsyncWebServerRequest* req) {
-            if (!_setupDone) {
-                req->redirect("/setup");
-            } else {
-                req->send_P(200, "text/html", DASHBOARD_HTML);
-            }
+            AsyncWebServerResponse *response = req->beginResponse_P(200, "text/html", react_index_html_gz, react_index_html_gz_len);
+            response->addHeader("Content-Encoding", "gzip");
+            req->send(response);
         });
 
         _server.on("/setup", HTTP_GET, [this](AsyncWebServerRequest* req) {
-            if (_setupDone && _mode == MODE_ONLINE) {
-                req->redirect("/");
-            } else {
-                req->send_P(200, "text/html", SETUP_HTML);
-            }
+            AsyncWebServerResponse *response = req->beginResponse_P(200, "text/html", react_index_html_gz, react_index_html_gz_len);
+            response->addHeader("Content-Encoding", "gzip");
+            req->send(response);
         });
 
         _server.on("/admin", HTTP_GET, [](AsyncWebServerRequest* req) {
-            req->send_P(200, "text/html", ADMIN_HTML);
+            AsyncWebServerResponse *response = req->beginResponse_P(200, "text/html", react_index_html_gz, react_index_html_gz_len);
+            response->addHeader("Content-Encoding", "gzip");
+            req->send(response);
         });
 
         // ── API: Status ─────────────────────────────────────

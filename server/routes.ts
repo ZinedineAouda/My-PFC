@@ -314,7 +314,7 @@ export async function registerRoutes(
     await storage.updateMasterHeartbeat();
     console.log(`[MASTER] Heartbeat received at ${new Date().toISOString()}`);
     broadcast({ type: "MASTER_STATUS", payload: { online: true } });
-    return res.json({ success: true });
+    return res.json({ success: true, serverTime: Date.now() });
   }));
 
   // ═════════════════════════════════════════════════════════════

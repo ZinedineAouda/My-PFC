@@ -13,7 +13,8 @@ export const slaves = pgTable("slaves", {
   registered: boolean("registered").notNull().default(false),
   approved: boolean("approved").notNull().default(false),
   online: boolean("online").notNull().default(false),
-  lastSeen: integer("last_seen"),
+  lastSeen: bigint("last_seen", { mode: "number" }),
+  lastUpdatedAt: bigint("last_updated_at", { mode: "number" }),
 });
 
 // ─── System Settings Table (Global Persistence) ─────────────────────
@@ -35,6 +36,7 @@ export const slaveSchema = z.object({
   approved: z.boolean().default(false),
   online: z.boolean().default(false),
   lastSeen: z.number().nullable().default(null),
+  lastUpdatedAt: z.number().nullable().default(null),
 });
 
 export const insertSlaveSchema = z.object({
@@ -88,6 +90,7 @@ export const masterSyncSchema = z.object({
     alertActive: z.boolean().optional().default(false),
     approved: z.boolean().optional().default(false),
     online: z.boolean().optional().default(false),
+    lastUpdatedAt: z.number().optional(),
   })),
 });
 
