@@ -38,16 +38,17 @@ const httpServer = createServer(app);
     log(`Server ready on port ${port} (Status: Healthy)`);
   });
 
-  // ─── STAGE 2: Static Files & Routing ──────────────────────────────
+  // ─── STAGE 2: API & Admin Routes ──────────────────────────────────
   try {
-    if (isProd) serveStatic(app);
+    log("Registering API routes...");
+    await registerRoutes(httpServer, app);
     
+    log("Activating Frontend Dashboard...");
+    if (isProd) serveStatic(app);
+
     log("Connecting to database in background...");
-    // Database init happens while the server is already live
     await db.execute(sql`SELECT 1`);
     log("Database linked successfully.");
-
-    await registerRoutes(httpServer, app);
 
     if (!isProd) {
       log("Mode: Development — starting Vite");
