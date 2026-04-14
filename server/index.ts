@@ -56,6 +56,24 @@ const httpServer = createServer(app);
         new Promise((_, reject) => setTimeout(() => reject(new Error("DB Timeout")), 8000))
       ]);
       log("Database linked successfully.");
+
+      // ─── Auto-Migration: Ensure settings table exists ──────────
+      log("Verifying system schema...");
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS system_settings (
+          id INTEGER PRIMARY KEY DEFAULT 1,
+          master_last_seen BIGINT,
+          wifi_mode INTEGER NOT NULL DEFAULT 1
+        );
+      `);
+      // Ensure the singleton row exists
+      await db.execute(sql`
+        INSERT INTO system_settings (id) 
+        VALUES (1) 
+        ON CONFLICT (id) DO NOTHING;
+      `);
+      log("System schema verified.");
+      
     } catch (dbErr) {
       console.warn("[WARN] Database not ready yet, but server is UP. Will retry on next request.");
     }
