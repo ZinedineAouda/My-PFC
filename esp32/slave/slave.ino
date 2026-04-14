@@ -409,9 +409,12 @@ void setup() {
     // ── Attach button interrupt ─────────────────────────────
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
 
-    // ── WiFi setup ──────────────────────────────────────────
+    // ── WiFi setup & Power Management ───────────────────────
     WiFi.persistent(false);
-    WiFi.setSleepMode(WIFI_NONE_SLEEP);
+    
+    // Switch to Light Sleep: allows the CPU/Radio to pause between beacons
+    // This reduces idle current significantly without losing MQTT connection.
+    WiFi.setSleepMode(WIFI_LIGHT_SLEEP);
 
     if (USE_HARDCODED_WIFI) {
         // Direct connection mode — no setup portal
@@ -497,5 +500,9 @@ void loop() {
         Serial.println("[ALERT] LED timeout, turning off");
     }
 
-    yield(); // Critical for ESP8266 WiFi stack
+    // ── Power Management ────────────────────────────────────
+    // Small delay allows the ESP8266 SDK to enter Light Sleep
+    // while waiting for the next beacon or interrupt.
+    delay(10); 
+    yield(); 
 }

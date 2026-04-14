@@ -1,6 +1,6 @@
 /*
  * ══════════════════════════════════════════════════════════════
- *  Device Registry — tracks all slave devices
+ *  Device Registry — tracks all slave devices with NVS persistence
  * ══════════════════════════════════════════════════════════════
  */
 #ifndef DEVICE_REGISTRY_H
@@ -9,6 +9,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <map>
+#include <Preferences.h>
 #include "config.h"
 
 // ─── Slave Device Data ──────────────────────────────────────
@@ -34,8 +35,71 @@ class DeviceRegistry {
 public:
     DeviceRegistry() : _lastTimeoutCheck(0), _changeCallback(nullptr) {}
 
+    void begin() {
+        load();
+    }
+
     void onDeviceChange(RegistryChangeCallback cb) {
         _changeCallback = cb;
+    }
+
+    void load() {
+        Preferences prefs;
+        prefs.begin("registry", true);
+        String data = prefs.getString("slaves", "");
+        prefs.end();
+
+        if (data.length() > 0) {
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, data);
+            if (!error) {
+                JsonArray arr = doc.as<JsonArray>();
+                for (JsonObject obj : arr) {
+                    SlaveDevice dev;
+                    dev.slaveId = obj["id"] | "";
+                    if (dev.slaveId.isEmpty()) continue;
+                    dev.patientName = obj["n"] | "";
+                    dev.bed = obj["b"] | "";
+                    dev.room = obj["r"] | "";
+                    dev.approved = obj["a"] | false;
+                    dev.registered = true;
+                    dev.online = false; // Reset to false on reboot
+                    _devices[dev.slaveId] = dev;
+                }
+                Serial.printf("[REG] Loaded %d devices from storage\n", _devices.size());
+            }
+        }
+    }
+
+    void save() {
+        Preferences prefs;
+        prefs.begin("registry", false);
+        
+        JsonDocument doc;
+        JsonArray arr = doc.to<JsonArray>();
+        for (auto const& item : _devices) {
+            const SlaveDevice& d = item.second;
+            JsonObject obj = arr.add<JsonObject>();
+            obj["id"] = d.slaveId;
+            obj["n"]  = d.patientName;
+            obj["b"]  = d.bed;
+            obj["r"]  = d.room;
+            obj["a"]  = d.approved;
+        }
+        
+        String out;
+        serializeJson(doc, out);
+        prefs.putString("slaves", out);
+        prefs.end();
+    }
+
+    void factoryReset() {
+        Preferences prefs;
+        prefs.begin("registry", false);
+        prefs.clear();
+        prefs.end();
+        _devices.clear();
+        _notify("", "reset");
     }
 
     // ── Register / heartbeat (creates if new) ───────────────
@@ -56,40 +120,29 @@ public:
         dev.online     = true;
         _devices[id]   = dev;
 
-        Serial.printf("[REG] New slave: %s (pending approval)\n", id.c_str());
+        Serial.printf("[REG] New slave: %s\n", id.c_str());
+        save();
         _notify(id, "register");
         return &_devices[id];
     }
 
-    // ── Heartbeat update ────────────────────────────────────
     void heartbeat(const String& id) {
         auto it = _devices.find(id);
         if (it != _devices.end()) {
             it->second.lastSeen = millis();
             bool wasOffline = !it->second.online;
             it->second.online = true;
-            if (wasOffline) {
-                Serial.printf("[REG] %s back online\n", id.c_str());
-                _notify(id, "online");
-            }
+            if (wasOffline) _notify(id, "online");
         } else {
-            // Auto-register on first heartbeat
             registerDevice(id);
         }
     }
 
-    // ── Trigger alert ───────────────────────────────────────
     bool triggerAlert(const String& id) {
         auto it = _devices.find(id);
-        if (it == _devices.end()) return false;
-        // Removed !approved requirement: emergency alerts should always go through
-        if (it->second.alertActive) return false;
+        if (it == _devices.end() || it->second.alertActive) return false;
 
-        // Skip if alert was cleared very recently (cooldown to prevent hardware bounce)
-        if (it->second.lastClearTime > 0 && millis() - it->second.lastClearTime < 2000) {
-            Serial.printf("[ALERT] Suppressed (cooldown): %s\n", id.c_str());
-            return false;
-        }
+        if (it->second.lastClearTime > 0 && millis() - it->second.lastClearTime < 2000) return false;
 
         it->second.alertActive = true;
         it->second.lastAlertTime = millis();
@@ -101,18 +154,15 @@ public:
         return true;
     }
 
-    // ── Clear alert ─────────────────────────────────────────
     bool clearAlert(const String& id) {
         auto it = _devices.find(id);
         if (it == _devices.end()) return false;
         it->second.alertActive = false;
         it->second.lastClearTime = millis();
-        Serial.printf("[ALERT] Cleared: %s\n", id.c_str());
         _notify(id, "clear");
         return true;
     }
 
-    // ── Approve device ──────────────────────────────────────
     bool approveDevice(const String& id, const String& name,
                        const String& bed, const String& room) {
         auto it = _devices.find(id);
@@ -121,12 +171,11 @@ public:
         it->second.bed = bed;
         it->second.room = room;
         it->second.approved = true;
-        Serial.printf("[REG] Approved: %s → %s\n", id.c_str(), name.c_str());
+        save();
         _notify(id, "approve");
         return true;
     }
 
-    // ── Update device info ──────────────────────────────────
     bool updateDevice(const String& id, const String& name,
                       const String& bed, const String& room) {
         auto it = _devices.find(id);
@@ -134,74 +183,48 @@ public:
         if (name.length()) it->second.patientName = name;
         if (bed.length())  it->second.bed = bed;
         if (room.length()) it->second.room = room;
+        save();
         _notify(id, "update");
         return true;
     }
 
-    // ── Delete device ───────────────────────────────────────
     bool deleteDevice(const String& id) {
         auto it = _devices.find(id);
         if (it == _devices.end()) return false;
         _devices.erase(it);
-        Serial.printf("[REG] Deleted: %s\n", id.c_str());
+        save();
         _notify(id, "delete");
         return true;
     }
 
-    // ── Lookup ──────────────────────────────────────────────
     SlaveDevice* getDevice(const String& id) {
         auto it = _devices.find(id);
         return (it != _devices.end()) ? &it->second : nullptr;
     }
 
     size_t count() const { return _devices.size(); }
-
-    size_t approvedCount() const {
-        size_t n = 0;
-        for (auto& kv : _devices) if (kv.second.approved) n++;
-        return n;
-    }
-
-    size_t alertCount() const {
-        size_t n = 0;
-        for (auto& kv : _devices) if (kv.second.alertActive) n++;
-        return n;
-    }
-
-    size_t onlineCount() const {
-        size_t n = 0;
-        for (auto& kv : _devices) if (kv.second.online) n++;
-        return n;
-    }
-
     bool hasActiveAlerts() const {
-        for (auto& kv : _devices)
-            if (kv.second.alertActive) return true;
+        for (auto const& kv : _devices) if (kv.second.alertActive) return true;
         return false;
     }
 
-    // ── Timeout check (call from loop) ──────────────────────
     void checkTimeouts() {
         unsigned long now = millis();
         if (now - _lastTimeoutCheck < TIMEOUT_CHECK_MS) return;
         _lastTimeoutCheck = now;
 
         for (auto& kv : _devices) {
-            if (kv.second.online &&
-                (now - kv.second.lastSeen > HEARTBEAT_TIMEOUT_MS)) {
+            if (kv.second.online && (now - kv.second.lastSeen > HEARTBEAT_TIMEOUT_MS)) {
                 kv.second.online = false;
-                Serial.printf("[REG] %s timed out (offline)\n",
-                              kv.second.slaveId.c_str());
                 _notify(kv.second.slaveId, "offline");
             }
         }
     }
 
-    // ── JSON serialization ──────────────────────────────────
     String toJson(bool onlyApproved = false) const {
         JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
-        for (auto& kv : _devices) {
+        for (auto const& kv : _devices) {
             const SlaveDevice& d = kv.second;
             if (onlyApproved && !d.approved) continue;
             JsonObject obj = arr.add<JsonObject>();
@@ -212,42 +235,25 @@ public:
         return out;
     }
 
-    String deviceToJson(const String& id) const {
-        auto it = _devices.find(id);
-        if (it == _devices.end()) return "{}";
-        JsonDocument doc;
-        JsonObject obj = doc.to<JsonObject>();
-        _serializeDevice(it->second, obj);
-        String out;
-        serializeJson(doc, out);
-        return out;
-    }
-
-    // ── Iterate (for cloud sync, etc.) ──────────────────────
-    const std::map<String, SlaveDevice>& devices() const {
-        return _devices;
-    }
-
-    // ── Import from cloud response ──────────────────────────
     void mergeFromCloud(JsonArray& remoteSlaves) {
+        bool changed = false;
         for (JsonObject remote : remoteSlaves) {
             String rid = remote["slaveId"] | "";
             if (rid.isEmpty()) continue;
 
             auto it = _devices.find(rid);
             if (it != _devices.end()) {
-                // Merge approval status from cloud
                 if (remote.containsKey("approved")) {
-                    bool wasApproved = it->second.approved;
-                    it->second.approved = remote["approved"] | false;
-                    if (!wasApproved && it->second.approved) {
+                    bool newApp = remote["approved"] | false;
+                    if (newApp != it->second.approved) {
+                        it->second.approved = newApp;
                         it->second.patientName = remote["patientName"] | "";
                         it->second.bed = remote["bed"] | "";
                         it->second.room = remote["room"] | "";
+                        changed = true;
                         _notify(rid, "approve");
                     }
                 }
-                // Merge alert clear from cloud
                 if (remote.containsKey("alertActive")) {
                     bool rAlert = remote["alertActive"] | false;
                     if (!rAlert && it->second.alertActive) {
@@ -257,7 +263,6 @@ public:
                     }
                 }
             } else {
-                // New device from cloud
                 if (_devices.size() < MAX_SLAVES) {
                     SlaveDevice dev;
                     dev.slaveId     = rid;
@@ -267,11 +272,15 @@ public:
                     dev.approved    = remote["approved"] | false;
                     dev.registered  = true;
                     _devices[rid]   = dev;
+                    changed = true;
                     _notify(rid, "register");
                 }
             }
         }
+        if (changed) save();
     }
+
+    const std::map<String, SlaveDevice>& devices() const { return _devices; }
 
 private:
     std::map<String, SlaveDevice> _devices;
@@ -291,7 +300,6 @@ private:
         obj["registered"]    = d.registered;
         obj["approved"]      = d.approved;
         obj["online"]        = d.online;
-        obj["lastAlertTime"] = d.lastAlertTime;
         obj["lastSeen"]      = d.lastSeen;
     }
 };

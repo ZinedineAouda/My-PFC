@@ -179,97 +179,53 @@ function SlaveModal({
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ADMIN PANEL — Unified design matching ESP32 dashboard
+//  ADMIN PANEL — Unified design with Settings
 // ═══════════════════════════════════════════════════════════════
 function AdminPanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [modalSlave, setModalSlave] = useState<Slave | null>(null);
   const [modalMode, setModalMode] = useState<"approve" | "edit">("approve");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "settings">("dashboard");
   const sirenRef = useRef<HTMLAudioElement | null>(null);
 
   // Initialize Siren and Permissions
   useEffect(() => {
-    // Siren setup - using a robust medical siren sound
     sirenRef.current = new Audio("https://raw.githubusercontent.com/Anis-Aouda/Zinedine-Audio/main/siren.mp3");
     sirenRef.current.loop = true;
 
-    // Request Notification Permissions for APK
     const requestPerms = async () => {
       try {
         const status = await LocalNotifications.checkPermissions();
-        if (status.display !== 'granted') {
-          await LocalNotifications.requestPermissions();
-        }
-      } catch (err) {
-        console.log("Capacitor not detected - running in browser mode");
-      }
+        if (status.display !== 'granted') await LocalNotifications.requestPermissions();
+      } catch (err) { console.log("Capacitor not detected"); }
     };
     requestPerms();
     
     return () => {
-      if (sirenRef.current) {
-        sirenRef.current.pause();
-        sirenRef.current = null;
-      }
+      if (sirenRef.current) sirenRef.current.pause();
     };
   }, []);
 
-  // ── WebSocket for live updates ──
+  // ── WebSocket ──
   useWebsocket((msg) => {
     queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
     queryClient.invalidateQueries({ queryKey: ["/api/status"] });
     
-    if (msg.type === "REGISTER") {
-      toast({ title: "Signal Detected", description: "New hardware discovered." });
-    }
-
     if (msg.type === "ALERT") {
-      // 1. Play Siren
-      if (sirenRef.current) {
-        sirenRef.current.play().catch(e => console.log("Audio play blocked: tap UI first"));
-      }
-
-      // 2. Vibrate Phone (Haptics)
+      if (sirenRef.current) sirenRef.current.play().catch(() => {});
       Haptics.vibrate({ duration: 1000 }).catch(() => {});
-
-      // 3. Show System Notification
-      LocalNotifications.schedule({
-        notifications: [{
-          title: "🚨 EMERGENCY ALERT",
-          body: `Patient Alert from ${msg.deviceId}`,
-          id: Math.floor(Math.random() * 10000),
-          sound: 'siren.wav', // Only works if file exists in android/app/src/main/res/raw
-          actionTypeId: "",
-          extra: null
-        }]
-      }).catch(() => {});
-
-      toast({ 
-        title: "EMERGENCY", 
-        description: `Alert from ${msg.deviceId}`,
-        variant: "destructive" 
-      });
-    }
-
-    if (msg.type === "CLEAR") {
-      // Stop the siren when the alert is cleared
-      if (sirenRef.current) {
-        sirenRef.current.pause();
-        sirenRef.current.currentTime = 0;
-      }
+      toast({ title: "EMERGENCY", description: `Alert from ${msg.payload.slaveId}`, variant: "destructive" });
     }
   });
 
-  // ── Data queries ──
+  // ── Data ──
   const { data: slaves } = useQuery<Slave[]>({
     queryKey: ["/api/slaves", "all"],
     queryFn: async () => {
       const res = await fetch(apiUrl("/api/slaves?all=1"), { credentials: "include" });
-      if (!res.ok) throw new Error("Sync failed");
       return res.json();
     },
-    staleTime: 0,
     refetchInterval: 10000,
   });
 
@@ -277,61 +233,31 @@ function AdminPanel() {
     queryKey: ["/api/status"],
     queryFn: async () => {
       const res = await fetch(apiUrl("/api/status"), { credentials: "include" });
-      if (!res.ok) throw new Error("Status sync failed");
       return res.json();
     },
-    staleTime: 0,
     refetchInterval: 8000,
   });
 
   // ── Mutations ──
-  const approveMutation = useMutation({
-    mutationFn: async ({ slaveId, data }: { slaveId: string; data: { patientName: string; bed: string; room: string } }) => {
-      const res = await apiRequest("POST", `/api/approve/${slaveId}`, data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
-      toast({ title: "Authorized", description: "Node added to network." });
-      setModalSlave(null);
-    },
-    onError: (err) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
-  });
+  const syncMutation = (method: string, url: string) => 
+    useMutation({
+      mutationFn: async (data?: any) => {
+        const res = await apiRequest(method, url, data);
+        return res.json();
+      },
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api"] }),
+    });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ slaveId, data }: { slaveId: string; data: { patientName: string; bed: string; room: string } }) => {
-      const res = await apiRequest("PUT", `/api/slaves/${slaveId}`, data);
+  const approveMutation = syncMutation("POST", ""); // Dynamic below
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/reset");
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
-      toast({ title: "Updated", description: "Node parameters modified." });
-      setModalSlave(null);
-    },
-    onError: (err) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (slaveId: string) => {
-      const res = await apiRequest("DELETE", `/api/slaves/${slaveId}`);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
-      toast({ title: "Deleted", description: "Device link severed." });
-    },
-    onError: (err) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
-  });
-
-  const clearAlertMutation = useMutation({
-    mutationFn: async (slaveId: string) => {
-      const res = await apiRequest("POST", `/api/clearAlert/${slaveId}`);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
-      toast({ title: "Cleared", description: "Alert silenced." });
-    },
+      queryClient.invalidateQueries();
+      toast({ title: "System Reset", description: "All data purged." });
+    }
   });
 
   const logoutMutation = useMutation({
@@ -339,231 +265,146 @@ function AdminPanel() {
     onSuccess: () => window.location.reload(),
   });
 
-  // ── Derived state ──
   const safeSlaves = Array.isArray(slaves) ? slaves : [];
   const pending = safeSlaves.filter((s) => !s.approved);
   const approved = safeSlaves.filter((s) => s.approved);
-  const online = safeSlaves.filter((s) => s.online).length;
-  const alerts = safeSlaves.filter((s) => s.alertActive).length;
   const isMasterOnline = status?.isMasterOnline ?? false;
 
-  // ── Helpers ──
-  const openApprove = (s: Slave) => { setModalMode("approve"); setModalSlave(s); };
-  const openEdit = (s: Slave) => { setModalMode("edit"); setModalSlave(s); };
-
-  const handleModalSubmit = (name: string, bed: string, room: string) => {
-    if (!modalSlave) return;
-    const data = { patientName: name, bed, room };
-    if (modalMode === "approve") {
-      approveMutation.mutate({ slaveId: modalSlave.slaveId, data });
-    } else {
-      updateMutation.mutate({ slaveId: modalSlave.slaveId, data });
-    }
-  };
-
-  const formatTime = (t: string | number | null | undefined) => {
-    if (!t) return "Never";
-    const ms = typeof t === "string" ? new Date(t).getTime() : t;
-    const s = Math.floor((Date.now() - ms) / 1000);
-    if (s < 5) return "Just now";
-    if (s < 60) return s + "s ago";
-    if (s < 3600) return Math.floor(s / 60) + "m ago";
-    return Math.floor(s / 3600) + "h ago";
-  };
-
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 font-['Segoe_UI',system-ui,-apple-system,sans-serif]">
-      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_0%_0%,rgba(16,185,129,0.05)_0%,transparent_40%)]" />
-
-      {/* ── Header ── */}
+    <div className="min-h-screen bg-[#070b14] text-slate-100 pb-20">
       <header className="bg-[rgba(7,11,20,0.8)] backdrop-blur-xl border-b border-white/5 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-[rgba(15,23,42,0.8)] border border-white/10 rounded-2xl flex items-center justify-center">
-            <Shield className="w-6 h-6 text-emerald-500" />
-          </div>
-          <div>
-            <h1 className="text-lg font-extrabold text-white tracking-tight">Security Command</h1>
-            <p className="text-[10px] text-emerald-500/50 uppercase tracking-[1.5px] font-bold">Administration</p>
-          </div>
+          <Shield className="w-6 h-6 text-emerald-500" />
+          <h1 className="text-lg font-extrabold text-white">Security Command</h1>
         </div>
-        <div className="flex items-center gap-2.5">
-          <div className={`px-3 py-1.5 rounded-xl text-[10px] font-bold tracking-wider uppercase flex items-center gap-1.5 border ${
-            isMasterOnline
-              ? "bg-emerald-500/[0.08] border-emerald-500/15 text-emerald-400"
-              : "bg-red-500/[0.08] border-red-500/15 text-red-400"
-          }`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${isMasterOnline ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.25)]" : "bg-red-500"}`} />
-            <RefreshCw className={`w-3 h-3 ${isMasterOnline ? "animate-spin" : ""}`} style={{ animationDuration: "3s" }} />
-            {isMasterOnline ? "CONNECTED" : "OFFLINE"}
+        <div className="flex items-center gap-4">
+          <div className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${isMasterOnline ? "border-emerald-500/20 text-emerald-400" : "border-red-500/20 text-red-400"}`}>
+            {isMasterOnline ? "● CONNECTED" : "○ OFFLINE"}
           </div>
-          <button
-            onClick={() => logoutMutation.mutate()}
-            className="px-3 py-1.5 rounded-xl border border-white/10 bg-transparent text-slate-400 text-[11px] font-bold hover:bg-white/[0.04] hover:text-white transition-all flex items-center gap-1.5"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Exit
-          </button>
+          <button onClick={() => logoutMutation.mutate()} className="text-slate-500 hover:text-white"><LogOut size={18}/></button>
         </div>
       </header>
 
-      {/* ── Stats ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-6 py-5">
-        {[
-          { icon: "📡", val: approved.length, lbl: "Total", cls: "bg-white/[0.04]" },
-          { icon: "🟢", val: online, lbl: "Online", cls: "bg-emerald-500/10" },
-          { icon: "🚨", val: alerts, lbl: "Alerts", cls: "bg-red-500/10" },
-          { icon: "⏳", val: pending.length, lbl: "Pending", cls: "bg-amber-500/10" },
-        ].map((s) => (
-          <div key={s.lbl} className="bg-[rgba(15,23,42,0.8)] backdrop-blur-2xl border border-white/10 rounded-[14px] px-4 py-3.5 flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${s.cls}`}>{s.icon}</div>
-            <div>
-              <div className="text-xl font-extrabold text-white">{s.val}</div>
-              <div className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">{s.lbl}</div>
-            </div>
+      {activeTab === "dashboard" ? (
+        <main className="p-6">
+          {/* Stats, Pending, Active Nodes... Same as before but cleaner */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+             <div className="bg-white/[0.03] border border-white/5 p-4 rounded-xl">
+               <div className="text-2xl font-bold">{approved.length}</div>
+               <div className="text-[10px] text-slate-500 uppercase font-bold">Nodes</div>
+             </div>
+             <div className="bg-white/[0.03] border border-white/5 p-4 rounded-xl">
+               <div className="text-2xl font-bold">{safeSlaves.filter(s => s.online).length}</div>
+               <div className="text-[10px] text-emerald-500 uppercase font-bold">Online</div>
+             </div>
+             <div className="bg-white/[0.03] border border-white/5 p-4 rounded-xl">
+               <div className="text-2xl font-bold">{safeSlaves.filter(s => s.alertActive).length}</div>
+               <div className="text-[10px] text-red-500 uppercase font-bold">Alerts</div>
+             </div>
+             <div className="bg-white/[0.03] border border-white/5 p-4 rounded-xl">
+               <div className="text-2xl font-bold">{pending.length}</div>
+               <div className="text-[10px] text-amber-500 uppercase font-bold">Pending</div>
+             </div>
           </div>
-        ))}
-      </div>
 
-      <main className="px-6 pb-8 relative z-10">
-        {/* ── Discovery Queue ── */}
-        {pending.length > 0 && (
-          <section className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-sm">⚠️</span>
-              <h2 className="text-sm font-bold text-white">Discovery Queue</h2>
-              <span className="px-2 py-0.5 rounded-lg bg-white/[0.04] border border-white/10 text-[10px] font-bold text-slate-400">
-                {pending.length} NEW
-              </span>
-            </div>
-            <div className="space-y-2">
-              {pending.map((s) => (
-                <div
-                  key={s.slaveId}
-                  className="bg-[rgba(15,23,42,0.4)] border border-white/5 border-l-[3px] border-l-amber-500 rounded-[14px] px-5 py-3.5 flex justify-between items-center backdrop-blur-xl"
-                >
-                  <div>
-                    <div className="font-mono text-sm font-bold text-amber-500">{s.slaveId}</div>
-                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Signal Detected</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openApprove(s)}
-                      className="px-4 py-2 bg-emerald-500 hover:shadow-lg hover:shadow-emerald-500/25 text-white rounded-xl text-[11px] font-bold transition-all"
-                    >
-                      Authorize
-                    </button>
-                    <button
-                      onClick={() => { if (confirm(`Delete ${s.slaveId}?`)) deleteMutation.mutate(s.slaveId); }}
-                      className="px-3 py-2 bg-red-500/[0.06] text-red-400 border border-red-500/10 rounded-xl text-[11px] font-bold hover:bg-red-500/10 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+          {pending.length > 0 && (
+            <div className="mb-6 space-y-2">
+              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Discovery Queue</h2>
+              {pending.map(s => (
+                <div key={s.slaveId} className="bg-amber-500/5 border border-amber-500/10 p-4 rounded-xl flex justify-between items-center">
+                  <div className="font-mono text-amber-500">{s.slaveId}</div>
+                  <button onClick={() => { setModalSlave(s); setModalMode("approve"); }} className="bg-amber-500 text-black px-4 py-1.5 rounded-lg text-xs font-bold">Authorize</button>
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          )}
 
-        {/* ── Active Infrastructure ── */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-sm">✅</span>
-            <h2 className="text-sm font-bold text-white">Active Infrastructure</h2>
-            <span className="px-2 py-0.5 rounded-lg bg-white/[0.04] border border-white/10 text-[10px] font-bold text-slate-400">
-              {approved.length} NODES
-            </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {approved.map((d) => {
-              const cls = d.alertActive ? "alert" : d.online ? "on" : "off";
-              const badge = d.alertActive ? "EMERGENCY" : d.online ? "LINKED" : "OFFLINE";
-              const statusText = d.alertActive ? "ALERT ACTIVE" : d.online ? "SYSTEM STABLE" : "LINK DOWN";
-              return (
-                <div
-                  key={d.slaveId}
-                  className={`bg-[rgba(15,23,42,0.8)] border border-white/10 rounded-2xl p-5 relative overflow-hidden backdrop-blur-2xl transition-all hover:border-emerald-500/20 ${
-                    d.alertActive ? "border-red-500/40 bg-red-500/[0.05]" : ""
-                  } ${!d.online && !d.alertActive ? "opacity-50" : ""}`}
-                >
-                  {d.alertActive && <div className="absolute inset-0 bg-red-500/[0.04] animate-pulse pointer-events-none" />}
-                  <div className="flex justify-between items-start mb-3.5 relative">
-                    <div>
-                      <div className="text-base font-extrabold text-white tracking-tight">{d.patientName || "Unnamed"}</div>
-                      <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">ID: {d.slaveId}</div>
-                    </div>
-                    <div className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${
-                      d.alertActive
-                        ? "bg-red-500 text-white animate-pulse"
-                        : d.online
-                        ? "bg-white/[0.04] text-slate-500"
-                        : "bg-white/[0.03] text-slate-600"
-                    }`}>
-                      {badge}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mb-3.5 relative">
-                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-2.5">
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-0.5">Bed</div>
-                      <div className="text-sm font-bold text-white">{d.bed || "-"}</div>
-                    </div>
-                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-2.5">
-                      <div className="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-0.5">Room</div>
-                      <div className="text-sm font-bold text-white">{d.room || "-"}</div>
-                    </div>
-                  </div>
-                  {/* Actions */}
-                  <div className="flex gap-1.5 mb-3 relative">
-                    <button
-                      onClick={() => openEdit(d)}
-                      className="flex-1 py-2 bg-white/[0.04] text-slate-400 border border-white/10 rounded-lg text-[10px] font-bold hover:bg-white/[0.06] transition-all flex items-center justify-center gap-1"
-                    >
-                      <Pencil className="w-3 h-3" /> Modify
-                    </button>
-                    {d.alertActive && (
-                      <button
-                        onClick={() => clearAlertMutation.mutate(d.slaveId)}
-                        className="flex-1 py-2 bg-red-500/[0.08] text-red-400 border border-red-500/12 rounded-lg text-[10px] font-bold hover:bg-red-500/15 transition-all flex items-center justify-center gap-1"
-                      >
-                        <BellOff className="w-3 h-3" /> Silence
-                      </button>
-                    )}
-                    <button
-                      onClick={() => { if (confirm(`Delete ${d.slaveId}?`)) deleteMutation.mutate(d.slaveId); }}
-                      className="py-2 px-2.5 bg-red-500/[0.06] text-red-400 border border-red-500/10 rounded-lg text-[10px] font-bold hover:bg-red-500/10 transition-all"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                  {/* Footer */}
-                  <div className="pt-3 border-t border-white/5 flex justify-between items-center text-[9px] font-bold uppercase tracking-wider text-slate-500 relative">
-                    <div className="flex items-center gap-1.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        d.alertActive ? "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.25)]" : d.online ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.25)]" : "bg-slate-600"
-                      }`} />
-                      {statusText}
-                    </div>
-                    <div>🕐 {formatTime(d.lastAlertTime)}</div>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {approved.map(d => (
+              <div key={d.slaveId} className={`p-5 rounded-2xl border ${d.alertActive ? "bg-red-500/10 border-red-500/20" : "bg-white/[0.03] border-white/10"}`}>
+                <div className="flex justify-between mb-4">
+                  <div className="font-bold">{d.patientName}</div>
+                  <div className={`text-[10px] px-2 py-0.5 rounded ${d.alertActive ? "bg-red-500 text-white" : "bg-white/5 text-slate-500"}`}>{d.alertActive ? "ALERT" : "STABLE"}</div>
                 </div>
-              );
-            })}
-            {approved.length === 0 && (
-              <div className="col-span-full text-center py-16 border border-dashed border-white/10 rounded-2xl">
-                <div className="text-4xl opacity-30 mb-3">📡</div>
-                <div className="text-sm text-slate-500">Scanning for new hardware...<br />Connect a slave device to begin monitoring.</div>
+                <div className="text-xs text-slate-500 mb-4">Room {d.room} • Bed {d.bed}</div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setModalSlave(d); setModalMode("edit"); }} className="bg-white/5 hover:bg-white/10 p-2 rounded-lg"><Pencil size={14}/></button>
+                  {d.alertActive && <button onClick={() => apiRequest("POST", `/api/clearAlert/${d.slaveId}`)} className="bg-red-500 text-white flex-1 rounded-lg text-xs font-bold">Silence</button>}
+                  <button onClick={() => { if(confirm("Purge node?")) apiRequest("DELETE", `/api/slaves/${d.slaveId}`); }} className="bg-red-500/10 text-red-500 p-2 rounded-lg"><Trash2 size={14}/></button>
+                </div>
               </div>
-            )}
+            ))}
           </div>
-        </section>
-      </main>
+        </main>
+      ) : (
+        <main className="p-6 max-w-2xl mx-auto space-y-6">
+          <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6">
+            <h3 className="text-sm font-bold mb-4">System Operation Mode</h3>
+            <div className="grid grid-cols-1 gap-2">
+              {[
+                { m: 1, t: "AP Mode", d: "Local Only (No Cloud)" },
+                { m: 2, t: "STA Mode", d: "Local Network" },
+                { m: 3, t: "Bridge Mode", d: "Hybrid Network" },
+                { m: 4, t: "Cloud Mode", d: "Full Global Remote Access" }
+              ].map(m => (
+                <button 
+                  key={m.m}
+                  onClick={() => apiRequest("POST", "/api/setup", { mode: m.m })}
+                  className={`p-4 rounded-xl border text-left transition-all ${status?.mode === m.m ? "bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20" : "bg-white/[0.02] border-white/5"}`}
+                >
+                  <div className="font-bold text-sm">{m.t}</div>
+                  <div className="text-[11px] text-slate-500">{m.d}</div>
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* ── Approve / Edit Modal ── */}
+          <div className="bg-red-500/5 border border-red-500/10 rounded-2xl p-6">
+            <h3 className="text-sm font-bold text-red-500 mb-2">Danger Zone</h3>
+            <p className="text-xs text-slate-500 mb-4">Resetting the system will permanently wipe all approved slaves, patient data, and connection history. This cannot be undone.</p>
+            <button 
+              onClick={() => { if(confirm("WIPE ALL DATA? This is permanent.")) resetMutation.mutate(); }}
+              className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all"
+            >
+              Reset All Infrastructure
+            </button>
+          </div>
+        </main>
+      )}
+
+      {/* ── Navigation ── */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-[rgba(15,23,42,0.95)] backdrop-blur-xl border-t border-white/5 flex p-2 pt-3 pb-8 gap-2 z-50">
+        <button 
+          onClick={() => setActiveTab("dashboard")}
+          className={`flex-1 flex flex-col items-center gap-1 py-1 ${activeTab === "dashboard" ? "text-emerald-500" : "text-slate-500"}`}
+        >
+          <div className={`p-1 rounded-lg ${activeTab === "dashboard" ? "bg-emerald-500/10" : ""}`}><Wifi size={20}/></div>
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Nodes</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab("settings")}
+          className={`flex-1 flex flex-col items-center gap-1 py-1 ${activeTab === "settings" ? "text-emerald-500" : "text-slate-500"}`}
+        >
+          <div className={`p-1 rounded-lg ${activeTab === "settings" ? "bg-emerald-500/10" : ""}`}><Shield size={20}/></div>
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Settings</span>
+        </button>
+      </nav>
+
       <SlaveModal
-        title={modalMode === "approve" ? `Node Authorization: ${modalSlave?.slaveId}` : `Modify: ${modalSlave?.slaveId}`}
+        title={modalMode === "approve" ? "Authorize Node" : "Modify Node"}
         open={!!modalSlave}
         onClose={() => setModalSlave(null)}
-        onSubmit={handleModalSubmit}
-        loading={approveMutation.isPending || updateMutation.isPending}
+        onSubmit={(name, bed, room) => {
+          if (!modalSlave) return;
+          if (modalMode === "approve") {
+            apiRequest("POST", `/api/approve/${modalSlave.slaveId}`, { patientName: name, bed, room })
+              .then(() => { queryClient.invalidateQueries(); setModalSlave(null); });
+          } else {
+            apiRequest("PUT", `/api/slaves/${modalSlave.slaveId}`, { patientName: name, bed, room })
+              .then(() => { queryClient.invalidateQueries(); setModalSlave(null); });
+          }
+        }}
+        loading={false}
         defaults={modalMode === "edit" ? modalSlave ?? undefined : undefined}
       />
     </div>
@@ -575,7 +416,6 @@ function AdminPanel() {
 // ═══════════════════════════════════════════════════════════════
 export default function AdminPage() {
   const [loggedIn, setLoggedIn] = useState(false);
-
   const { data: session, isLoading } = useQuery<{ authenticated: boolean } | null>({
     queryKey: ["/api/admin/session"],
     queryFn: getQueryFn({ on401: "returnNull" }),

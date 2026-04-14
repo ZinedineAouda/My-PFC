@@ -457,7 +457,7 @@ const char ADMIN_HTML[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Admin — Hospital Alarm</title>
+<title>Admin — Security Command</title>
 <style>
 :root{--bg:#070b14;--surface:rgba(15,23,42,.4);--emerald:#10b981;--emerald-g:rgba(16,185,129,.25);--red:#ef4444;--amber:#f59e0b;--white:#fff;--s100:#f1f5f9;--s400:#94a3b8;--s500:#64748b;--s600:#475569;--glass:rgba(255,255,255,.05);--glass2:rgba(255,255,255,.1)}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -472,6 +472,14 @@ header h1{font-size:18px;font-weight:800;color:var(--white)}
 header .hdr-sub{font-size:10px;color:rgba(16,185,129,.5);font-weight:700;text-transform:uppercase;letter-spacing:1.5px}
 header a{color:var(--emerald);text-decoration:none;font-size:12px;font-weight:700;padding:8px 16px;border-radius:10px;border:1px solid rgba(16,185,129,.15);transition:all .15s}
 header a:hover{background:rgba(16,185,129,.06)}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,.03);padding:4px;border-radius:12px;margin-bottom:24px;border:1px solid var(--glass)}
+.tab{flex:1;padding:10px;border:none;border-radius:8px;background:transparent;color:var(--s500);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.tab:hover{background:rgba(255,255,255,.03);color:var(--s100)}
+.tab.active{background:rgba(16,185,129,.1);color:var(--emerald)}
+.tab-content{display:none}.tab-content.active{display:block}
+
 .sec-title{font-size:13px;font-weight:700;color:var(--white);margin-bottom:12px;margin-top:24px;display:flex;align-items:center;gap:8px}
 .sec-title .cnt{padding:2px 8px;border-radius:8px;background:rgba(255,255,255,.04);border:1px solid var(--glass2);font-size:10px;font-weight:700;color:var(--s400)}
 .dev{background:var(--surface);border:1px solid var(--glass);border-radius:14px;padding:16px 20px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;backdrop-filter:blur(12px);transition:all .15s}
@@ -485,6 +493,19 @@ header a:hover{background:rgba(16,185,129,.06)}
 .btn-em{background:var(--emerald);color:var(--white);box-shadow:0 2px 8px var(--emerald-g)}
 .btn-edit{background:rgba(255,255,255,.04);color:var(--s400);border:1px solid var(--glass2)}
 .btn-del{background:rgba(239,68,68,.06);color:var(--red);border:1px solid rgba(239,68,68,.1)}
+
+/* ── Settings Items ── */
+.card{background:var(--surface);border:1px solid var(--glass);border-radius:16px;padding:24px;backdrop-filter:blur(16px)}
+.s-item{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid var(--glass)}
+.s-item:last-child{border-bottom:none}
+.s-info h4{font-size:14px;color:var(--white);margin-bottom:4px}
+.s-info p{font-size:11px;color:var(--s500)}
+.s-ctrl select{background:rgba(0,0,0,.3);border:1px solid var(--glass2);color:var(--white);padding:6px 12px;border-radius:8px;outline:none}
+
+.danger-box{border:1px solid rgba(239,68,68,.2);background:rgba(239,68,68,.03);padding:16px;border-radius:12px;margin-top:20px}
+.danger-box h5{color:var(--red);font-size:13px;margin-bottom:4px}
+.danger-box p{font-size:11px;color:rgba(239,68,68,.6);margin-bottom:12px}
+
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;z-index:999}
 .modal{background:rgba(15,23,42,.95);border:1px solid var(--glass2);border-radius:20px;padding:28px;width:100%;max-width:380px}
 .modal h2{margin-bottom:18px;font-size:17px;font-weight:800;color:var(--white)}
@@ -506,10 +527,44 @@ header a:hover{background:rgba(16,185,129,.06)}
     </div>
     <a href="/">&larr; Dashboard</a>
   </header>
-  <div class="sec-title">&#9888;&#65039; Discovery Queue <span class="cnt" id="p-cnt">0</span></div>
-  <div id="pending"></div>
-  <div class="sec-title">&#9989; Active Infrastructure <span class="cnt" id="a-cnt">0</span></div>
-  <div id="approved"></div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('devices')" id="t-devices">&#128225; Units</button>
+    <button class="tab" onclick="showTab('settings')" id="t-settings">&#9881;&#65039; Preferences</button>
+  </div>
+
+  <div id="tab-devices" class="tab-content active">
+    <div class="sec-title">&#9888;&#65039; Discovery Queue <span class="cnt" id="p-cnt">0</span></div>
+    <div id="pending"></div>
+    <div class="sec-title">&#9989; Active Infrastructure <span class="cnt" id="a-cnt">0</span></div>
+    <div id="approved"></div>
+  </div>
+
+  <div id="tab-settings" class="tab-content">
+    <div class="card">
+      <div class="s-item">
+        <div class="s-info"><h4>Operating Mode</h4><p>Define system network architecture</p></div>
+        <div class="s-ctrl">
+          <select id="sys-mode" onchange="changeMode()">
+            <option value="1">AP Standalone</option>
+            <option value="2">STA Client</option>
+            <option value="3">AP+STA Hybrid</option>
+            <option value="4">Cloud Sync</option>
+          </select>
+        </div>
+      </div>
+      <div class="s-item">
+        <div class="s-info"><h4>Firmware Version</h4><p>v4.2.0-stable</p></div>
+        <div class="s-ctrl"><span style="font-size:10px;color:var(--s600);font-weight:700">UP TO DATE</span></div>
+      </div>
+      
+      <div class="danger-box">
+        <h5>Danger Zone</h5>
+        <p>Permanently delete all data, WiFi credentials, and registered units. This action cannot be undone.</p>
+        <button class="btn btn-del" style="width:100%" onclick="factoryReset()">Factory Reset System</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="modal-bg" id="modal">
@@ -528,6 +583,39 @@ header a:hover{background:rgba(16,185,129,.06)}
 <script>
 let editId=null,editMode='approve';
 const AUTH='admin1234';
+
+function showTab(t){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('t-'+t).classList.add('active');
+  document.getElementById('tab-'+t).classList.add('active');
+  if(t==='settings')loadSettings();
+}
+
+function loadSettings(){
+  fetch('/api/status').then(r=>r.json()).then(s=>{
+    document.getElementById('sys-mode').value = s.mode;
+  });
+}
+
+function changeMode(){
+  const m = document.getElementById('sys-mode').value;
+  if(!confirm('Apply mode change? System will restart.')) return;
+  fetch('/api/system/mode', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Auth-Token':AUTH},
+    body:JSON.stringify({mode:parseInt(m)})
+  }).then(()=>alert('Settings applied. ESP32 is restarting...'));
+}
+
+function factoryReset(){
+  if(!confirm('FATAL: This will wipe EVERYTHING. Are you 100% sure?')) return;
+  fetch('/api/system/reset', {
+    method:'POST',
+    headers:{'X-Auth-Token':AUTH}
+  }).then(()=>alert('System wiped. Restarting to Setup...'));
+}
+
 function refresh(){
   fetch('/api/slaves?all=1').then(r=>r.json()).then(devs=>{
     const pen=document.getElementById('pending'),app=document.getElementById('approved');

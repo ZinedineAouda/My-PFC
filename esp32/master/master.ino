@@ -46,9 +46,9 @@ unsigned long lastBuzzerToggle = 0;
 bool          buzzerState      = false;
 
 // ─── Forward Declarations ───────────────────────────────────────────
-void onDeviceChange(const String& deviceId, const char* eventType);
 void onWifiConnect(const char* ssid, const char* pass);
 void onSetup(int mode, const char* apSSID, const char* apPass);
+void onFactoryReset();
 void handleBuzzer();
 
 void loadSettings() {
@@ -111,7 +111,8 @@ void setup() {
         wifiMgr.applyMode(currentMode);
     }
 
-    // ── Device Registry: wire change callback ───────────────
+    // ─── Initialize Registry ───
+    registry.begin();
     registry.onDeviceChange(onDeviceChange);
 
     // ── MQTT Broker: start on port 1883 ─────────────────────
@@ -120,6 +121,7 @@ void setup() {
     // ── Web Dashboard: start with setup page ────────────────
     dashboard.onConnect(onWifiConnect);
     dashboard.onSetup(onSetup);
+    dashboard.onReset(onFactoryReset);
     dashboard.begin(setupDone, currentMode);
 
     Serial.println("[BOOT] System ready");
@@ -284,4 +286,22 @@ void handleBuzzer() {
         digitalWrite(BUZZER_PIN, LOW);
         buzzerState = false;
     }
+}
+
+// Called by setup or admin page: full wipe
+void onFactoryReset() {
+    Serial.println("[RESET] Factory reset triggered! Wiping all data...");
+    
+    // 1. Clear Master Config (WiFi, Mode)
+    Preferences pcfg;
+    pcfg.begin("master_cfg", false);
+    pcfg.clear();
+    pcfg.end();
+    
+    // 2. Clear Device Registry
+    registry.factoryReset();
+    
+    Serial.println("[RESET] Data wiped. Restarting...");
+    delay(1000);
+    ESP.restart();
 }

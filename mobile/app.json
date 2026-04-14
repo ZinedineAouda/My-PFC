@@ -12,6 +12,7 @@
     },
     "android": {
       "package": "com.pfc.alarm",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#070b14"
@@ -28,6 +29,8 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/icon.png",
+          "color": "#10b981",
           "sounds": []
         }
       ],

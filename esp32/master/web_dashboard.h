@@ -281,6 +281,33 @@ public:
             });
         _server.addHandler(deleteHandler);
 
+        // ── API: System Mode Change ──────────────────────────
+        auto* modeHandler = new AsyncCallbackJsonWebHandler("/api/system/mode",
+            [this](AsyncWebServerRequest* req, JsonVariant& json) {
+                if (!_checkAuth(req)) {
+                    req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
+                    return;
+                }
+                int mode = json["mode"] | (int)_mode;
+                if (mode >= 1 && mode <= 4) {
+                    if (_setupCallback) _setupCallback(mode, "", "");
+                    req->send(200, "application/json", "{\"success\":true}");
+                } else {
+                    req->send(400, "application/json", "{\"message\":\"Invalid mode\"}");
+                }
+            });
+        _server.addHandler(modeHandler);
+
+        // ── API: Factory Reset ───────────────────────────────
+        _server.on("/api/system/reset", HTTP_POST, [this](AsyncWebServerRequest* req) {
+            if (!_checkAuth(req)) {
+                req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
+                return;
+            }
+            if (_resetCallback) _resetCallback();
+            req->send(200, "application/json", "{\"success\":true}");
+        });
+
         // ── Catch-all: DELETE + OPTIONS + 404 ───────────────
         _server.onNotFound([this](AsyncWebServerRequest* req) {
             if (req->method() == HTTP_OPTIONS) {
@@ -326,9 +353,11 @@ public:
     // ── Callbacks for master.ino to wire up ─────────────────
     typedef void (*ConnectCallback)(const char* ssid, const char* pass);
     typedef void (*SetupCallback)(int mode, const char* apSSID, const char* apPass);
+    typedef void (*ResetCallback)();
 
     void onConnect(ConnectCallback cb) { _connectCallback = cb; }
     void onSetup(SetupCallback cb)     { _setupCallback = cb; }
+    void onReset(ResetCallback cb)     { _resetCallback = cb; }
 
     void setSetupDone(bool done) { _setupDone = done; }
     void setMode(WiFiOpMode m)   { _mode = m; }
@@ -341,6 +370,7 @@ private:
     WiFiOpMode      _mode = MODE_NONE;
     ConnectCallback _connectCallback = nullptr;
     SetupCallback   _setupCallback = nullptr;
+    ResetCallback   _resetCallback = nullptr;
 
     // ── Auth check ──────────────────────────────────────────
     static bool _checkAuth(AsyncWebServerRequest* req) {

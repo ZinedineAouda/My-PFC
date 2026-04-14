@@ -9,28 +9,28 @@ import { API_BASE, C } from './src/constants';
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [baseUrl, setBaseUrl] = useState(API_BASE);
 
   // Check existing session on mount
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/admin/session`, {
+        const res = await fetch(`${baseUrl}/api/admin/session`, {
+          headers: { 'X-Admin-Token': 'admin1234' },
           credentials: 'include',
         });
         if (res.ok) {
           const data = await res.json();
-          if (data.authenticated) {
-            setLoggedIn(true);
-          }
+          if (data.authenticated) setLoggedIn(true);
         }
-      } catch {
-        // Session check failed — show login
+      } catch (e) {
+        console.log('Session check failed', e);
       } finally {
         setChecking(false);
       }
     };
     checkSession();
-  }, []);
+  }, [baseUrl]);
 
   if (checking) {
     return (
@@ -41,13 +41,21 @@ export default function App() {
     );
   }
 
+  const handleLogin = (url: string) => {
+    setBaseUrl(url);
+    setLoggedIn(true);
+  };
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" backgroundColor={C.bg} />
       {loggedIn ? (
-        <DashboardScreen onLogout={() => setLoggedIn(false)} />
+        <DashboardScreen 
+          baseUrl={baseUrl} 
+          onLogout={() => setLoggedIn(false)} 
+        />
       ) : (
-        <LoginScreen onLogin={() => setLoggedIn(true)} />
+        <LoginScreen onLogin={handleLogin} />
       )}
     </SafeAreaProvider>
   );

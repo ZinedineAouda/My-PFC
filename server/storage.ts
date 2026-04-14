@@ -1,21 +1,24 @@
 import type { Slave, InsertSlave, UpdateSlave, ApproveSlave } from "@shared/schema";
+import { slaves } from "@shared/schema";
+import { db } from "./db";
+import { eq, sql } from "drizzle-orm";
 
 export interface IStorage {
-  getAllSlaves(): Slave[];
-  getApprovedSlaves(): Slave[];
-  getSlave(slaveId: string): Slave | undefined;
-  addSlave(data: InsertSlave): Slave;
-  approveSlave(slaveId: string, data: ApproveSlave): Slave | undefined;
-  updateSlave(slaveId: string, data: UpdateSlave): Slave | undefined;
-  deleteSlave(slaveId: string): boolean;
-  registerSlave(slaveId: string): Slave;
-  triggerAlert(slaveId: string): { success: boolean; slave?: Slave; reason?: string };
-  clearAlert(slaveId: string): boolean;
-  getMode(): number;
-  setMode(mode: number): void;
-  isSetupDone(): boolean;
-  updateMasterHeartbeat(): void;
-  isMasterOnline(): boolean;
+  getAllSlaves(): Promise<Slave[]>;
+  getApprovedSlaves(): Promise<Slave[]>;
+  getSlave(slaveId: string): Promise<Slave | undefined>;
+  addSlave(data: InsertSlave): Promise<Slave>;
+  approveSlave(slaveId: string, data: ApproveSlave): Promise<Slave | undefined>;
+  updateSlave(slaveId: string, data: UpdateSlave): Promise<Slave | undefined>;
+  deleteSlave(slaveId: string): Promise<boolean>;
+  registerSlave(slaveId: string): Promise<Slave>;
+  triggerAlert(slaveId: string): Promise<{ success: boolean; slave?: Slave; reason?: string }>;
+  clearAlert(slaveId: string): Promise<boolean>;
+  getMode(): Promise<number>;
+  setMode(mode: number): Promise<void>;
+  isSetupDone(): Promise<boolean>;
+  updateMasterHeartbeat(): Promise<void>;
+  isMasterOnline(): Promise<boolean>;
   syncFromMaster(slaves: Array<{
     slaveId: string;
     patientName?: string;
@@ -24,246 +27,173 @@ export interface IStorage {
     alertActive?: boolean;
     approved?: boolean;
     online?: boolean;
-  }>): void;
+  }>): Promise<void>;
+  reset(): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
-  private slaves: Map<string, Slave>;
-  private wifiMode: number;
-  private setupComplete: boolean;
-  private masterLastSeen: number | null;
+export class DatabaseStorage implements IStorage {
+  private masterLastSeen: number | null = null;
+  private wifiMode: number = 0;
 
-  constructor() {
-    this.slaves = new Map();
-    this.wifiMode = 0;
-    this.setupComplete = false;
-    this.masterLastSeen = null;
+  async getAllSlaves(): Promise<Slave[]> {
+    return await db.select().from(slaves);
   }
 
-  getAllSlaves(): Slave[] {
-    return Array.from(this.slaves.values());
+  async getApprovedSlaves(): Promise<Slave[]> {
+    return await db.select().from(slaves).where(eq(slaves.approved, true));
   }
 
-  getApprovedSlaves(): Slave[] {
-    return Array.from(this.slaves.values()).filter(s => s.approved);
+  async getSlave(slaveId: string): Promise<Slave | undefined> {
+    const [slave] = await db.select().from(slaves).where(eq(slaves.slaveId, slaveId));
+    return slave;
   }
 
-  getSlave(slaveId: string): Slave | undefined {
-    return this.slaves.get(slaveId);
-  }
-
-  addSlave(data: InsertSlave): Slave {
-    if (this.slaves.has(data.slaveId)) {
-      throw new Error("Slave ID already exists");
-    }
-    const slave: Slave = {
-      slaveId: data.slaveId,
+  async addSlave(data: InsertSlave): Promise<Slave> {
+    const [slave] = await db.insert(slaves).values({
+      ...data,
       patientName: data.patientName || "",
       bed: data.bed || "",
       room: data.room || "",
       alertActive: false,
-      lastAlertTime: null,
       registered: false,
       approved: false,
       online: false,
-      lastSeen: null,
-    };
-    this.slaves.set(data.slaveId, slave);
+    }).returning();
     return slave;
   }
 
-  approveSlave(slaveId: string, data: ApproveSlave): Slave | undefined {
-    const slave = this.slaves.get(slaveId);
-    if (!slave) return undefined;
-    slave.patientName = data.patientName;
-    slave.bed = data.bed;
-    slave.room = data.room;
-    slave.approved = true;
-    this.slaves.set(slaveId, slave);
+  async approveSlave(slaveId: string, data: ApproveSlave): Promise<Slave | undefined> {
+    const [slave] = await db.update(slaves)
+      .set({ ...data, approved: true })
+      .where(eq(slaves.slaveId, slaveId))
+      .returning();
     return slave;
   }
 
-  updateSlave(slaveId: string, data: UpdateSlave): Slave | undefined {
-    const slave = this.slaves.get(slaveId);
-    if (!slave) return undefined;
-    if (data.patientName !== undefined) slave.patientName = data.patientName;
-    if (data.bed !== undefined) slave.bed = data.bed;
-    if (data.room !== undefined) slave.room = data.room;
-    this.slaves.set(slaveId, slave);
+  async updateSlave(slaveId: string, data: UpdateSlave): Promise<Slave | undefined> {
+    const [slave] = await db.update(slaves)
+      .set(data)
+      .where(eq(slaves.slaveId, slaveId))
+      .returning();
     return slave;
   }
 
-  deleteSlave(slaveId: string): boolean {
-    return this.slaves.delete(slaveId);
+  async deleteSlave(slaveId: string): Promise<boolean> {
+    const result = await db.delete(slaves).where(eq(slaves.slaveId, slaveId)).returning();
+    return result.length > 0;
   }
 
-  registerSlave(slaveId: string): Slave {
-    let slave = this.slaves.get(slaveId);
-    if (slave) {
-      slave.registered = true;
-      slave.lastSeen = Date.now();
-      slave.online = true;
-      this.slaves.set(slaveId, slave);
-      return slave;
+  async registerSlave(slaveId: string): Promise<Slave> {
+    const [existing] = await db.select().from(slaves).where(eq(slaves.slaveId, slaveId));
+    if (existing) {
+      const [updated] = await db.update(slaves)
+        .set({ registered: true, online: true, lastSeen: Date.now() })
+        .where(eq(slaves.slaveId, slaveId))
+        .returning();
+      return updated;
     }
-    slave = {
+    const [inserted] = await db.insert(slaves).values({
       slaveId,
+      registered: true,
+      online: true,
+      lastSeen: Date.now(),
       patientName: "",
       bed: "",
       room: "",
       alertActive: false,
-      lastAlertTime: null,
-      registered: true,
       approved: false,
-      online: true,
-      lastSeen: Date.now(),
-    };
-    this.slaves.set(slaveId, slave);
-    return slave;
+    }).returning();
+    return inserted;
   }
 
-  triggerAlert(slaveId: string): { success: boolean; slave?: Slave; reason?: string } {
-    const slave = this.slaves.get(slaveId);
+  async triggerAlert(slaveId: string): Promise<{ success: boolean; slave?: Slave; reason?: string }> {
+    const slave = await this.getSlave(slaveId);
     if (!slave) return { success: false, reason: "unknown slave" };
     if (!slave.approved) return { success: false, reason: "not approved" };
     if (slave.alertActive) return { success: false, slave, reason: "alert already active" };
-    slave.alertActive = true;
-    slave.lastAlertTime = new Date().toISOString();
-    slave.lastSeen = Date.now();
-    slave.online = true;
-    this.slaves.set(slaveId, slave);
-    return { success: true, slave };
+
+    const [updated] = await db.update(slaves)
+      .set({ 
+        alertActive: true, 
+        lastAlertTime: new Date().toISOString(),
+        lastSeen: Date.now(),
+        online: true
+      })
+      .where(eq(slaves.slaveId, slaveId))
+      .returning();
+    return { success: true, slave: updated };
   }
 
-  clearAlert(slaveId: string): boolean {
-    const slave = this.slaves.get(slaveId);
-    if (!slave) return false;
-    slave.alertActive = false;
-    this.slaves.set(slaveId, slave);
-    return true;
+  async clearAlert(slaveId: string): Promise<boolean> {
+    const [updated] = await db.update(slaves)
+      .set({ alertActive: false })
+      .where(eq(slaves.slaveId, slaveId))
+      .returning();
+    return !!updated;
   }
 
-  getMode(): number {
+  async getMode(): Promise<number> {
     return this.wifiMode;
   }
 
-  setMode(mode: number): void {
+  async setMode(mode: number): Promise<void> {
     this.wifiMode = mode;
-    this.setupComplete = true;
   }
 
-  isSetupDone(): boolean {
-    return this.setupComplete;
+  async isSetupDone(): Promise<boolean> {
+    return this.wifiMode !== 0;
   }
 
-  private alertClearedLocally: Set<string> = new Set();
-
-  updateMasterHeartbeat(): void {
+  async updateMasterHeartbeat(): Promise<void> {
     this.masterLastSeen = Date.now();
   }
 
-  isMasterOnline(): boolean {
+  async isMasterOnline(): Promise<boolean> {
     if (!this.masterLastSeen) return false;
-    // 60s window — tolerates intermittent TLS handshake failures
     return Date.now() - this.masterLastSeen < 60000;
   }
 
-  // ── Bidirectional sync from ESP32 master ──────────────────
-  syncFromMaster(incoming: Array<{
-    slaveId: string;
-    patientName?: string;
-    bed?: string;
-    room?: string;
-    alertActive?: boolean;
-    approved?: boolean;
-    online?: boolean;
-  }>): void {
-    this.updateMasterHeartbeat();
-
-    // ── Reconciliation: Handle deletions ───────────────────
-    // If a slave exists in the cloud but is missing from the master's
-    // incoming list, it means the master deleted it locally.
-    const incomingIds = new Set(incoming.map(s => s.slaveId));
+  async syncFromMaster(incoming: Array<any>): Promise<void> {
+    await this.updateMasterHeartbeat();
     
-    // Only perform reconciliation if we have slaves or if the master 
-    // has been online long enough to have fully initialized.
-    for (const slaveId of this.slaves.keys()) {
-      if (!incomingIds.has(slaveId)) {
-        this.slaves.delete(slaveId);
-      }
-    }
+    // First, set all current slaves to offline (we'll re-enable ones that appear in incoming)
+    await db.update(slaves).set({ online: false });
 
     for (const remote of incoming) {
-      const local = this.slaves.get(remote.slaveId);
-      if (local) {
-        // Update online/alert state from master
-        if (remote.online !== undefined) local.online = remote.online;
-
-        // ── Alert sync: CLEARS flow bidirectionally, activations DON'T ──
-        // New alerts reach the cloud via the /api/alert endpoint.
-        // Sync only propagates clears to prevent the loop:
-        //   cloud clears → ESP32 re-sends true → cloud re-activates → forever
-        if (remote.alertActive !== undefined) {
-          if (!remote.alertActive && local.alertActive) {
-            // ESP32 cleared an alert → clear on cloud too
-            local.alertActive = false;
-            this.alertClearedLocally.delete(remote.slaveId);
-          }
-          // If master says alert active BUT cloud already cleared it: ignore
-          // The cloud response will tell the ESP32 to clear on next sync
-        }
-
-        // Accept approval from master (bidirectional: local dashboard can approve)
-        if (remote.approved && !local.approved) {
-          local.approved = true;
-        }
-
-        // Update metadata if provided by master
-        if (remote.patientName) local.patientName = remote.patientName;
-        if (remote.bed) local.bed = remote.bed;
-        if (remote.room) local.room = remote.room;
-
-        local.lastSeen = Date.now();
-        this.slaves.set(remote.slaveId, local);
+      const [existing] = await db.select().from(slaves).where(eq(slaves.slaveId, remote.slaveId));
+      
+      if (existing) {
+        await db.update(slaves)
+          .set({
+            online: true,
+            alertActive: remote.alertActive !== undefined ? (remote.alertActive && existing.alertActive) || remote.alertActive : existing.alertActive,
+            approved: remote.approved || existing.approved,
+            patientName: remote.patientName || existing.patientName,
+            bed: remote.bed || existing.bed,
+            room: remote.room || existing.room,
+            lastSeen: Date.now()
+          })
+          .where(eq(slaves.slaveId, remote.slaveId));
       } else {
-        // New device discovered by master — auto-register
-        const newSlave: Slave = {
+        await db.insert(slaves).values({
           slaveId: remote.slaveId,
           patientName: remote.patientName || "",
           bed: remote.bed || "",
           room: remote.room || "",
           alertActive: remote.alertActive || false,
-          lastAlertTime: remote.alertActive ? new Date().toISOString() : null,
-          registered: true,
           approved: remote.approved || false,
-          online: remote.online || false,
+          online: true,
+          registered: true,
           lastSeen: Date.now(),
-        };
-        this.slaves.set(remote.slaveId, newSlave);
+        });
       }
     }
   }
+
+  async reset(): Promise<void> {
+    await db.delete(slaves);
+    this.wifiMode = 0;
+  }
 }
 
-export class DatabaseStorage implements IStorage {
-  async getAllSlaves(): Promise<Slave[]> {
-    const { db } = await import("./db");
-    const { slaves } = await import("@shared/schema");
-    return db.select().from(slaves);
-  }
-
-  getApprovedSlaves(): Slave[] {
-    // This interface is synchronous in the original MemStorage, but DB calls are async.
-    // To minimize refactoring of routes.ts, we'll make the interface async or 
-    // keep MemStorage as a cache and sync to DB.
-    // For now, let's update IStorage to allow Promises (best practice).
-    throw new Error("Switching to async interface required");
-  }
-  // ... (Full implementation below)
-}
-
-// Check if we should use DB or Memory
-export const storage = process.env.DATABASE_URL
-  ? new MemStorage() // Fallback to MemStorage for now to avoid breaking sync code
-  : new MemStorage();
-
+export const storage = new DatabaseStorage();

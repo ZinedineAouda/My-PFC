@@ -13,14 +13,12 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { C, API_BASE } from './constants';
 
-type Props = {
-  onLogin: () => void;
-};
-
 export default function LoginScreen({ onLogin }: Props) {
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
+  const [server, setServer] = useState(API_BASE); // Default from constants
   const [loading, setLoading] = useState(false);
+  const [showServer, setShowServer] = useState(false);
 
   const handleLogin = async () => {
     if (!user || !pass) {
@@ -29,16 +27,20 @@ export default function LoginScreen({ onLogin }: Props) {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/login`, {
+      const baseUrl = server.endsWith('/') ? server.slice(0, -1) : server;
+      const res = await fetch(`${baseUrl}/api/admin/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Admin-Token': 'admin1234'
+        },
         credentials: 'include',
         body: JSON.stringify({ username: user, password: pass }),
       });
       if (!res.ok) throw new Error('Invalid credentials');
-      onLogin();
-    } catch {
-      Alert.alert('Login Failed', 'Invalid credentials');
+      onLogin(baseUrl); 
+    } catch (e: any) {
+      Alert.alert('Network Error', 'Could not reach server. Check URL and connection.');
     } finally {
       setLoading(false);
     }
@@ -58,6 +60,33 @@ export default function LoginScreen({ onLogin }: Props) {
         {/* Title */}
         <Text style={s.title}>Security Command</Text>
         <Text style={s.subtitle}>ADMINISTRATOR ACCESS</Text>
+
+        {/* Server Config Toggle */}
+        <TouchableOpacity 
+          style={s.serverToggle} 
+          onPress={() => setShowServer(!showServer)}
+          activeOpacity={0.6}
+        >
+          <MaterialCommunityIcons name="server-network" size={14} color={showServer ? C.emerald : C.slate500} />
+          <Text style={[s.serverToggleText, showServer && {color: C.emerald}]}>
+            {showServer ? 'HIDE SERVER SETTINGS' : 'CONFIGURE SERVER'}
+          </Text>
+        </TouchableOpacity>
+
+        {showServer && (
+          <View style={s.serverBox}>
+            <Text style={s.label}>API ENDPOINT</Text>
+            <TextInput
+              style={s.input}
+              value={server}
+              onChangeText={setServer}
+              placeholder="https://..."
+              placeholderTextColor={C.slate600}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        )}
 
         {/* Username */}
         <Text style={s.label}>USERNAME</Text>
@@ -118,7 +147,8 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     borderRadius: 24,
-    padding: 40,
+    paddingHorizontal: 32,
+    paddingVertical: 40,
   },
   iconWrap: {
     width: 64,
@@ -144,9 +174,35 @@ const s = StyleSheet.create({
     color: '#10b98199',
     textAlign: 'center',
     marginTop: 4,
-    marginBottom: 32,
+    marginBottom: 24,
     fontWeight: '700',
     letterSpacing: 2,
+  },
+  serverToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 16,
+    padding: 8,
+    backgroundColor: '#ffffff05',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.borderLight,
+  },
+  serverToggleText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: C.slate500,
+    letterSpacing: 1,
+  },
+  serverBox: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#ffffff03',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ffffff0a',
   },
   label: {
     fontSize: 10,

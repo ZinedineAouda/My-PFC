@@ -23,9 +23,14 @@ declare module "express-session" {
   }
 }
 
-// ─── Middleware: Require admin session ───────────────────────────────
+// ─── Middleware: Require admin session or token ───────────────────────
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.session?.isAdmin) return next();
+  
+  // Allow token-based auth for mobile/local testing
+  const token = req.headers["x-admin-token"];
+  if (token === "admin1234") return next();
+  
   return res.status(401).json({ message: "Unauthorized" });
 }
 
@@ -121,27 +126,33 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   //  SYSTEM STATUS
   // ═════════════════════════════════════════════════════════════
-  app.get("/api/status", (_req: Request, res: Response) => {
-    const all = storage.getAllSlaves();
+  app.get("/api/status", async (_req: Request, res: Response) => {
+    const all = await storage.getAllSlaves();
     return res.json({
-      mode: storage.getMode(),
-      setup: storage.isSetupDone(),
+      mode: await storage.getMode(),
+      setup: await storage.isSetupDone(),
       masterIP: "cloud",
       slaves: all.length,
       online: all.filter((s) => s.online).length,
       alerts: all.filter((s) => s.alertActive).length,
       pending: all.filter((s) => !s.approved).length,
-      isMasterOnline: storage.isMasterOnline(),
+      isMasterOnline: await storage.isMasterOnline(),
     });
   });
 
-  app.post("/api/setup", (req: Request, res: Response) => {
+  app.post("/api/setup", async (req: Request, res: Response) => {
     const parsed = setupSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid mode" });
     }
-    storage.setMode(parsed.data.mode);
+    await storage.setMode(parsed.data.mode);
     return res.json({ success: true, mode: parsed.data.mode });
+  });
+
+  app.post("/api/reset", requireAdmin, async (_req: Request, res: Response) => {
+    await storage.reset();
+    broadcastAllDevices();
+    return res.json({ success: true, message: "System reset successful" });
   });
 
   // ═════════════════════════════════════════════════════════════
@@ -166,23 +177,20 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   //  SLAVE MANAGEMENT
   // ═════════════════════════════════════════════════════════════
-  app.get("/api/slaves", (req: Request, res: Response) => {
+  app.get("/api/slaves", async (req: Request, res: Response) => {
     if (req.query.all === "1" || req.query.all === "") {
-      return res.json(storage.getAllSlaves());
+      return res.json(await storage.getAllSlaves());
     }
-    if (req.query.approved === "1") {
-      return res.json(storage.getApprovedSlaves());
-    }
-    return res.json(storage.getApprovedSlaves());
+    return res.json(await storage.getApprovedSlaves());
   });
 
-  app.post("/api/slaves", requireAdmin, (req: Request, res: Response) => {
+  app.post("/api/slaves", requireAdmin, async (req: Request, res: Response) => {
     const parsed = insertSlaveSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
     try {
-      const slave = storage.addSlave(parsed.data);
+      const slave = await storage.addSlave(parsed.data);
       broadcast({ type: "REGISTER", payload: slave });
       return res.json({ success: true, slave });
     } catch (err: any) {
@@ -190,12 +198,12 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/slaves/:slaveId", requireAdmin, (req: Request, res: Response) => {
+  app.put("/api/slaves/:slaveId", requireAdmin, async (req: Request, res: Response) => {
     const parsed = updateSlaveSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
-    const slave = storage.updateSlave(req.params.slaveId as string, parsed.data);
+    const slave = await storage.updateSlave(req.params.slaveId as string, parsed.data);
     if (!slave) {
       return res.status(404).json({ message: "Slave not found" });
     }
@@ -203,8 +211,8 @@ export async function registerRoutes(
     return res.json({ success: true, slave });
   });
 
-  app.delete("/api/slaves/:slaveId", requireAdmin, (req: Request, res: Response) => {
-    const deleted = storage.deleteSlave(req.params.slaveId as string);
+  app.delete("/api/slaves/:slaveId", requireAdmin, async (req: Request, res: Response) => {
+    const deleted = await storage.deleteSlave(req.params.slaveId as string);
     if (!deleted) {
       return res.status(404).json({ message: "Slave not found" });
     }
@@ -215,12 +223,12 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   //  DEVICE REGISTRATION & ALERTS (from ESP32 master)
   // ═════════════════════════════════════════════════════════════
-  app.post("/api/register", requireDeviceKey, (req: Request, res: Response) => {
+  app.post("/api/register", requireDeviceKey, async (req: Request, res: Response) => {
     const parsed = registerRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid body" });
     }
-    const slave = storage.registerSlave(parsed.data.slaveId);
+    const slave = await storage.registerSlave(parsed.data.slaveId);
     broadcast({ type: "REGISTER", payload: slave });
     return res.json({
       success: true,
@@ -228,12 +236,12 @@ export async function registerRoutes(
     });
   });
 
-  app.post("/api/alert", requireDeviceKey, (req: Request, res: Response) => {
+  app.post("/api/alert", requireDeviceKey, async (req: Request, res: Response) => {
     const parsed = alertRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid body" });
     }
-    const result = storage.triggerAlert(parsed.data.slaveId);
+    const result = await storage.triggerAlert(parsed.data.slaveId);
     if (!result.success) {
       return res.json({ success: false, reason: result.reason });
     }
@@ -242,12 +250,12 @@ export async function registerRoutes(
     return res.json({ success: true });
   });
 
-  app.post("/api/heartbeat", requireDeviceKey, (req: Request, res: Response) => {
+  app.post("/api/heartbeat", requireDeviceKey, async (req: Request, res: Response) => {
     const parsed = registerRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid body" });
     }
-    const slave = storage.registerSlave(parsed.data.slaveId);
+    const slave = await storage.registerSlave(parsed.data.slaveId);
     return res.json({
       success: true,
       approved: slave.approved,
@@ -258,34 +266,29 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   //  MASTER SYNC (bidirectional state exchange)
   // ═════════════════════════════════════════════════════════════
-  app.post("/api/master-sync", requireDeviceKey, (req: Request, res: Response) => {
+  app.post("/api/master-sync", requireDeviceKey, async (req: Request, res: Response) => {
     const parsed = masterSyncSchema.safeParse(req.body);
     if (!parsed.success) {
-      // Accept even if validation fails — backwards compat
-      storage.updateMasterHeartbeat();
+      await storage.updateMasterHeartbeat();
       return res.json({
         success: true,
-        mode: storage.getMode(),
-        slaves: storage.getAllSlaves(),
+        mode: await storage.getMode(),
+        slaves: await storage.getAllSlaves(),
       });
     }
 
-    // Sync incoming state from master
-    storage.syncFromMaster(parsed.data.slaves);
-
-    // Broadcast updates to all WebSocket dashboard clients
+    await storage.syncFromMaster(parsed.data.slaves);
     broadcastAllDevices();
 
-    // Return full state back to master (cloud is source of truth for approvals)
     return res.json({
       success: true,
-      mode: storage.getMode(),
-      slaves: storage.getAllSlaves(),
+      mode: await storage.getMode(),
+      slaves: await storage.getAllSlaves(),
     });
   });
 
-  app.post("/api/master-ping", requireDeviceKey, (_req: Request, res: Response) => {
-    storage.updateMasterHeartbeat();
+  app.post("/api/master-ping", requireDeviceKey, async (_req: Request, res: Response) => {
+    await storage.updateMasterHeartbeat();
     broadcast({ type: "MASTER_STATUS", payload: { online: true } });
     return res.json({ success: true });
   });
@@ -293,12 +296,12 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   //  ADMIN ACTIONS (approve, clear alerts)
   // ═════════════════════════════════════════════════════════════
-  app.post("/api/approve/:slaveId", requireAdmin, (req: Request, res: Response) => {
+  app.post("/api/approve/:slaveId", requireAdmin, async (req: Request, res: Response) => {
     const parsed = approveSlaveSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
-    const slave = storage.approveSlave(req.params.slaveId as string, parsed.data);
+    const slave = await storage.approveSlave(req.params.slaveId as string, parsed.data);
     if (!slave) {
       return res.status(404).json({ message: "Slave not found" });
     }
@@ -306,12 +309,12 @@ export async function registerRoutes(
     return res.json({ success: true, slave });
   });
 
-  app.post("/api/clearAlert/:slaveId", requireAdminOrDevice, (req: Request, res: Response) => {
-    const cleared = storage.clearAlert(req.params.slaveId as string);
+  app.post("/api/clearAlert/:slaveId", requireAdminOrDevice, async (req: Request, res: Response) => {
+    const cleared = await storage.clearAlert(req.params.slaveId as string);
     if (!cleared) {
       return res.status(404).json({ message: "Slave not found" });
     }
-    broadcastDeviceUpdate(req.params.slaveId as string);
+    await broadcastDeviceUpdate(req.params.slaveId as string);
     return res.json({ success: true, message: "Alert cleared" });
   });
 

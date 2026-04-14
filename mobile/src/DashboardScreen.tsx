@@ -22,7 +22,9 @@ import SlaveModal from './SlaveModal';
 try {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowAlert: true, // Legacy support
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
     }),
@@ -31,9 +33,12 @@ try {
   // Suppress missing native module errors gracefully inside Expo Go
 }
 
-type Props = { onLogout: () => void };
+type Props = { 
+  onLogout: () => void;
+  baseUrl: string;
+};
 
-export default function DashboardScreen({ onLogout }: Props) {
+export default function DashboardScreen({ onLogout, baseUrl }: Props) {
   // ── State ──
   const [slaves, setSlaves] = useState<Slave[]>([]);
   const [status, setStatus] = useState<StatusData>({ mode: 0 });
@@ -41,6 +46,9 @@ export default function DashboardScreen({ onLogout }: Props) {
   const [modalSlave, setModalSlave] = useState<Slave | null>(null);
   const [modalMode, setModalMode] = useState<'approve' | 'edit'>('approve');
   const [modalLoading, setModalLoading] = useState(false);
+
+  // Derived WS URL
+  const wsUrl = baseUrl.replace('http', 'ws') + '/ws';
 
   const sirenRef = useRef<Audio.Sound | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -79,8 +87,9 @@ export default function DashboardScreen({ onLogout }: Props) {
           staysActiveInBackground: true,
           shouldDuckAndroid: false,
         });
+        // Using a reliable direct link for the emergency siren
         const { sound } = await Audio.Sound.createAsync(
-          { uri: 'https://raw.githubusercontent.com/Anis-Aouda/Zinedine-Audio/main/siren.mp3' },
+          { uri: 'https://archive.org/download/emergency_siren_test/siren.mp3' }, // Public fallback
           { isLooping: true, shouldPlay: false }
         );
         sirenRef.current = sound;
@@ -113,7 +122,10 @@ export default function DashboardScreen({ onLogout }: Props) {
   // ── Data fetching ──
   const fetchSlaves = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/slaves?all=1`, { credentials: 'include' });
+      const res = await fetch(`${baseUrl}/api/slaves?all=1`, { 
+        headers: { 'X-Admin-Token': 'admin1234' },
+        credentials: 'include' 
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) setSlaves(data);
@@ -121,11 +133,14 @@ export default function DashboardScreen({ onLogout }: Props) {
     } catch (e) {
       console.log('Fetch slaves error:', e);
     }
-  }, []);
+  }, [baseUrl]);
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/status`, { credentials: 'include' });
+      const res = await fetch(`${baseUrl}/api/status`, { 
+        headers: { 'X-Admin-Token': 'admin1234' },
+        credentials: 'include' 
+      });
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
@@ -133,7 +148,7 @@ export default function DashboardScreen({ onLogout }: Props) {
     } catch (e) {
       console.log('Fetch status error:', e);
     }
-  }, []);
+  }, [baseUrl]);
 
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
@@ -158,7 +173,7 @@ export default function DashboardScreen({ onLogout }: Props) {
 
     const connect = () => {
       if (!alive) return;
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => console.log('WS Connected');
@@ -232,9 +247,12 @@ export default function DashboardScreen({ onLogout }: Props) {
 
   // ── API mutations ──
   const apiRequest = async (method: string, path: string, body?: any) => {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${baseUrl}${path}`, {
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Token': 'admin1234'
+      },
       body: body ? JSON.stringify(body) : undefined,
       credentials: 'include',
     });
