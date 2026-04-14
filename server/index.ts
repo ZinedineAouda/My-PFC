@@ -10,7 +10,10 @@ const app = express();
 app.set("trust proxy", 1);
 
 // ─── STAGE 0: Fast Health Checks (Highest Priority for Railway) ─────
-app.get("/health", (_req, res) => res.status(200).send("OK"));
+app.get("/health", (_req, res) => {
+  console.log("[HEALTH] Responding to /health check: OK");
+  res.status(200).send("OK");
+});
 app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
 
 // ─── Body parsers ──
@@ -47,8 +50,15 @@ const httpServer = createServer(app);
     if (isProd) serveStatic(app);
 
     log("Connecting to database in background...");
-    await db.execute(sql`SELECT 1`);
-    log("Database linked successfully.");
+    try {
+      await Promise.race([
+        db.execute(sql`SELECT 1`),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("DB Timeout")), 8000))
+      ]);
+      log("Database linked successfully.");
+    } catch (dbErr) {
+      console.warn("[WARN] Database not ready yet, but server is UP. Will retry on next request.");
+    }
 
     if (!isProd) {
       log("Mode: Development — starting Vite");

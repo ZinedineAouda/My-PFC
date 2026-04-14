@@ -44,7 +44,7 @@ export function serveStatic(app: Express) {
     app.use(express.static(foundPath));
     
     // SPA Fallback: Serve index.html for any route not starting with /api or /ws 
-    app.get("*", (req, res, next) => {
+    app.get("*path", (req, res, next) => {
       if (req.path.startsWith("/api") || req.path.startsWith("/ws")) {
         return next();
       }

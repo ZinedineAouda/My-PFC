@@ -5,7 +5,7 @@ import * as schema from "@shared/schema";
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl && process.env.NODE_ENV === "production") {
-  throw new Error("DATABASE_URL is missing! Please link a PostgreSQL database in your Railway dashboard.");
+  console.warn("[CRITICAL] DATABASE_URL is missing! Server will start but database features will be disabled. Please link a PostgreSQL database in Railway.");
 }
 
 // Use a placeholder for local development if DB is not available
