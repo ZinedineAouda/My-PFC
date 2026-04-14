@@ -9,11 +9,11 @@ import { slaves } from "@shared/schema";
 const app = express();
 app.set("trust proxy", 1);
 
-// ─── PRIORITY 1: Health checks (before any middleware) ──────────────
+// ─── STAGE 0: Fast Health Checks (Highest Priority for Railway) ─────
 app.get("/health", (_req, res) => res.status(200).send("OK"));
 app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
 
-// ─── PRIORITY 2: Body parsers ──────────────────────────────────────
+// ─── Body parsers ──
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
