@@ -202,6 +202,29 @@ public:
         return (it != _devices.end()) ? &it->second : nullptr;
     }
 
+    size_t onlineCount() const {
+        size_t c = 0;
+        for (auto const& kv : _devices) if (kv.second.online) c++;
+        return c;
+    }
+
+    size_t alertCount() const {
+        size_t c = 0;
+        for (auto const& kv : _devices) if (kv.second.alertActive) c++;
+        return c;
+    }
+
+    String deviceToJson(const String& id) {
+        auto it = _devices.find(id);
+        if (it == _devices.end()) return "{}";
+        JsonDocument doc;
+        JsonObject obj = doc.to<JsonObject>();
+        _serializeDevice(it->second, obj);
+        String out;
+        serializeJson(doc, out);
+        return out;
+    }
+
     size_t count() const { return _devices.size(); }
     bool hasActiveAlerts() const {
         for (auto const& kv : _devices) if (kv.second.alertActive) return true;
