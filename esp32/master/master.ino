@@ -52,6 +52,26 @@ void onReSetup();
 void onFactoryReset();
 void handleBuzzer();
 
+void checkNewFlash() {
+    String currentBuild = String(__DATE__) + " " + String(__TIME__);
+    prefs.begin("sys_info", false);
+    String lastBuild = prefs.getString("build_id", "");
+    
+    if (lastBuild.length() > 0 && lastBuild != currentBuild) {
+        Serial.println("╔═════════════════════════════════════════════════════╗");
+        Serial.println("║  [NEW FLASH] New firmware detected!                 ║");
+        Serial.println("║  Performing automatic factory reset to ensure clean  ║");
+        Serial.println("║  setup as requested.                                ║");
+        Serial.println("╚═════════════════════════════════════════════════════╝");
+        prefs.putString("build_id", currentBuild);
+        prefs.end();
+        onFactoryReset(); // This restarts the device
+    }
+    
+    prefs.putString("build_id", currentBuild);
+    prefs.end();
+}
+
 void loadSettings() {
     prefs.begin("master_cfg", true); // Read-only mode
     setupDone = prefs.getBool("setupDone", false);
@@ -101,6 +121,9 @@ void setup() {
     // ── Hardware ────────────────────────────────────────────
     pinMode(BUZZER_PIN, OUTPUT);
     digitalWrite(BUZZER_PIN, LOW);
+
+    // ── Check if code was just flashed ─────────────────────
+    checkNewFlash();
 
     // ── Load Config & WiFi ──────────────────────────────────
     loadSettings();

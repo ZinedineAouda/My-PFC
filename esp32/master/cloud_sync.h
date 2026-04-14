@@ -151,9 +151,11 @@ private:
         WiFiClientSecure& client = _ensureClient();
         HTTPClient http;
         http.setTimeout(CLOUD_HTTP_TIMEOUT);
-        http.setReuse(true);
+        http.setReuse(false); // Forced false to prevent -1 (Stale Connection) errors on cloud proxies
 
         String url = String(CLOUD_SERVER_URL) + path;
+        Serial.printf("[CLOUD] Connecting to: %s\n", url.c_str());
+        
         if (!http.begin(client, url)) return -2; // Connection init error
 
         http.addHeader("Content-Type", "application/json");
@@ -161,6 +163,14 @@ private:
         http.addHeader("Connection", "keep-alive");
 
         int code = http.POST(payload);
+        
+        if (code != 200) {
+            String errorBody = http.getString();
+            if (errorBody.length() > 0) {
+                Serial.printf("[CLOUD] Error Response: %s\n", errorBody.c_str());
+            }
+        }
+
         if (code == 200 && path == "/api/master-sync") {
             String response = http.getString();
             JsonDocument recvDoc;

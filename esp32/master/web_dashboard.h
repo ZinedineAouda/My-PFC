@@ -37,7 +37,7 @@ public:
         // ── Page routes ─────────────────────────────────────
         _server.on("/", HTTP_GET, [this](AsyncWebServerRequest* req) {
             if (!_setupDone) {
-                req->send_P(200, "text/html", SETUP_HTML);
+                req->redirect("/setup");
             } else {
                 req->send_P(200, "text/html", DASHBOARD_HTML);
             }

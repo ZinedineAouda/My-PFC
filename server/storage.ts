@@ -158,16 +158,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateMasterHeartbeat(): Promise<void> {
-    await this.getSettings(); // ensure row exists
-    await db.update(systemSettings)
-      .set({ masterLastSeen: Date.now() })
-      .where(eq(systemSettings.id, 1));
+    const now = Date.now();
+    await db.insert(systemSettings)
+      .values({ id: 1, masterLastSeen: now })
+      .onConflictDoUpdate({
+        target: systemSettings.id,
+        set: { masterLastSeen: now }
+      });
   }
 
   async isMasterOnline(): Promise<boolean> {
     const settings = await this.getSettings();
-    if (!settings.masterLastSeen) return false;
-    return Date.now() - settings.masterLastSeen < 60000;
+    const lastSeen = settings.masterLastSeen;
+    if (!lastSeen) return false;
+    
+    // Ensure we handle both number and possible string/bigint types from the driver
+    const lastSeenNum = typeof lastSeen === 'string' ? parseInt(lastSeen) : Number(lastSeen);
+    return Date.now() - lastSeenNum < 60000;
   }
 
   async syncFromMaster(incoming: Array<any>): Promise<void> {
