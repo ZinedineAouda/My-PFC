@@ -81,9 +81,9 @@ export async function registerRoutes(
       proxy: true,
       store: new SessionStore({ checkPeriod: 86400000 }),
       cookie: {
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for persistent login
+        secure: false, // Set to false to allow testing on local/non-https while we debug
+        sameSite: "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000, 
       },
     })
   );
@@ -98,26 +98,27 @@ export async function registerRoutes(
   //  AUTHENTICATION
   // ═════════════════════════════════════════════════════════════
   app.post("/api/admin/login", (req: Request, res: Response) => {
-    const usernameInput = (req.body.username || "").toString().trim();
+    const usernameInput = (req.body.username || "").toString().trim().toLowerCase();
     const passwordInput = (req.body.password || "").toString().trim();
 
-    console.log(`[LOGIN] Attempt for user: "${usernameInput}"`);
+    console.log(`[AUTH] Login attempt — User: "${usernameInput}"`);
 
+    // Hardcoded credentials: admin / admin1234
     if (usernameInput === "admin" && passwordInput === "admin1234") {
       req.session.isAdmin = true;
       req.session.save((err) => {
         if (err) {
-          console.error("[LOGIN] Session save error:", err);
-          return res.status(500).json({ message: "Session save failed" });
+          console.error("[AUTH] Session Save Error:", err);
+          return res.status(500).json({ message: "Internal Session Error" });
         }
-        console.log("[LOGIN] Success: Admin session created.");
-        res.json({ success: true, message: "Logged in" });
+        console.log("[AUTH] Success: Session started for Admin.");
+        res.json({ success: true });
       });
       return;
     }
 
-    console.warn(`[LOGIN] Failed: Invalid credentials received for "${usernameInput}"`);
-    return res.status(401).json({ message: "Invalid credentials" });
+    console.warn(`[AUTH] Rejection: Provided "${usernameInput}" / "${passwordInput.length} chars"`);
+    return res.status(401).json({ message: "Access Denied: Invalid Credentials" });
   });
 
   app.post("/api/admin/logout", (req: Request, res: Response) => {

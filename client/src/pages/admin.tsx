@@ -21,12 +21,14 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
     e.preventDefault();
     setLoading(true);
     try {
+      console.log(`[LOGIN] Sending request to: ${apiUrl("/api/admin/login")}`);
       const res = await fetch(apiUrl("/api/admin/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ username: user, password: pass }),
       });
+      console.log(`[LOGIN] Response status: ${res.status}`);
       if (!res.ok) throw new Error("Invalid credentials");
       onLogin();
       toast({ title: "Authorized", description: "Terminal access granted." });
