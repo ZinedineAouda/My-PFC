@@ -6,7 +6,7 @@ COPY package.json package-lock.json* ./
 RUN npm install --ignore-scripts
 
 COPY . .
-RUN npx tsx script/build-external.ts
+RUN npm run build
 
 FROM node:20-alpine AS runner
 
