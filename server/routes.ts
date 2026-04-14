@@ -312,6 +312,7 @@ export async function registerRoutes(
 
   app.post("/api/master-ping", requireDeviceKey, asyncHandler(async (_req: Request, res: Response) => {
     await storage.updateMasterHeartbeat();
+    console.log(`[MASTER] Heartbeat received at ${new Date().toISOString()}`);
     broadcast({ type: "MASTER_STATUS", payload: { online: true } });
     return res.json({ success: true });
   }));

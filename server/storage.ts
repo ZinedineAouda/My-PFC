@@ -1,5 +1,5 @@
 import type { Slave, InsertSlave, UpdateSlave, ApproveSlave } from "@shared/schema";
-import { slaves } from "@shared/schema";
+import { slaves, systemSettings } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql } from "drizzle-orm";
 
@@ -32,8 +32,16 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  private masterLastSeen: number | null = null;
-  private wifiMode: number = 0;
+  // ─── Internal Utility: Upsert Singleton Settings ───────────────────
+  private async getSettings() {
+    const [row] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
+    if (!row) {
+      // Create default row if missing
+      const [newRow] = await db.insert(systemSettings).values({ id: 1 }).returning();
+      return newRow;
+    }
+    return row;
+  }
 
   async getAllSlaves(): Promise<Slave[]> {
     return await db.select().from(slaves);
@@ -133,24 +141,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMode(): Promise<number> {
-    return this.wifiMode;
+    const settings = await this.getSettings();
+    return settings.wifiMode;
   }
 
   async setMode(mode: number): Promise<void> {
-    this.wifiMode = mode;
+    await this.getSettings(); // ensure row exists
+    await db.update(systemSettings)
+      .set({ wifiMode: mode })
+      .where(eq(systemSettings.id, 1));
   }
 
   async isSetupDone(): Promise<boolean> {
-    return this.wifiMode !== 0;
+    const mode = await this.getMode();
+    return mode !== 0;
   }
 
   async updateMasterHeartbeat(): Promise<void> {
-    this.masterLastSeen = Date.now();
+    await this.getSettings(); // ensure row exists
+    await db.update(systemSettings)
+      .set({ masterLastSeen: Date.now() })
+      .where(eq(systemSettings.id, 1));
   }
 
   async isMasterOnline(): Promise<boolean> {
-    if (!this.masterLastSeen) return false;
-    return Date.now() - this.masterLastSeen < 60000;
+    const settings = await this.getSettings();
+    if (!settings.masterLastSeen) return false;
+    return Date.now() - settings.masterLastSeen < 60000;
   }
 
   async syncFromMaster(incoming: Array<any>): Promise<void> {
@@ -192,7 +209,9 @@ export class DatabaseStorage implements IStorage {
 
   async reset(): Promise<void> {
     await db.delete(slaves);
-    this.wifiMode = 0;
+    await db.update(systemSettings)
+      .set({ wifiMode: 0, masterLastSeen: null })
+      .where(eq(systemSettings.id, 1));
   }
 }
 

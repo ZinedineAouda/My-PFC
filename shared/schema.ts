@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pgTable, text, boolean, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, integer, timestamp, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 // ─── Drizzle Database Table ─────────────────────────────────────────
@@ -14,6 +14,13 @@ export const slaves = pgTable("slaves", {
   approved: boolean("approved").notNull().default(false),
   online: boolean("online").notNull().default(false),
   lastSeen: integer("last_seen"),
+});
+
+// ─── System Settings Table (Global Persistence) ─────────────────────
+export const systemSettings = pgTable("system_settings", {
+  id: integer("id").primaryKey().default(1),
+  masterLastSeen: bigint("master_last_seen", { mode: "number" }),
+  wifiMode: integer("wifi_mode").notNull().default(1),
 });
 
 // ─── Slave Device Schema (Zod) ──────────────────────────────────────
