@@ -89,8 +89,14 @@ public:
         
         String out;
         serializeJson(doc, out);
+        
+        if (out.length() > 3800) {
+            Serial.printf("[REG] WARNING: Registry size (%d bytes) is approaching NVS limit (4096)!\n", out.length());
+        }
+        
         prefs.putString("slaves", out);
         prefs.end();
+        Serial.printf("[REG] Saved %d devices (%d bytes)\n", _devices.size(), out.length());
     }
 
     void factoryReset() {

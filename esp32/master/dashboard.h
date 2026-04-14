@@ -277,7 +277,7 @@ main{padding:0 28px 40px;flex:1;position:relative;z-index:1}
   </div>
   <div class="hdr-right">
     <div class="ws-badge off" id="ws-indicator"><div class="ws-dot"></div><span id="ws-text">DISCONNECTED</span></div>
-    <a href="/admin" class="hdr-btn">Establish Secure Link</a>
+    <a href="/admin" class="hdr-btn">System</a>
   </div>
 </header>
 
@@ -443,13 +443,17 @@ button:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(16,185,129,0.
     <option value="4">Cloud Sync Online</option>
   </select>
   <button onclick="location.href='/'">Return to Dashboard</button>
-  <button class="danger" style="margin-top:20px" onclick="reset()">Factory Reset Master</button>
+  <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--glass2);display:flex;flex-direction:column;gap:10px">
+    <button style="background:rgba(16,185,129,0.1);color:var(--emerald);border:1px solid rgba(16,185,129,0.2)" onclick="reSetup()">Re-run Setup Wizard</button>
+    <button class="danger" onclick="reset()">Wipe Data & Factory Reset</button>
+  </div>
 </div>
 <script>
 const AUTH='admin1234';
 function check(){if(document.getElementById('pass').value===AUTH){document.getElementById('login').style.display='none';document.getElementById('panel').style.display='block'}else alert('Link Failure: Invalid credentials')}
 function chMode(){fetch('/api/system/mode',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':AUTH},body:JSON.stringify({mode:parseInt(document.getElementById('mode').value)})})}
-function reset(){if(confirm('ERASE EVERYTHING?'))fetch('/api/system/reset',{method:'POST',headers:{'X-Auth-Token':AUTH}})}
+function reSetup(){if(confirm('Re-run setup? WiFi configuration will be cleared.'))fetch('/api/system/re-setup',{method:'POST',headers:{'X-Auth-Token':AUTH}}).then(()=>alert('Entering Setup Mode...'))}
+function reset(){if(confirm('ERASE EVERYTHING? This cannot be undone.'))fetch('/api/system/reset',{method:'POST',headers:{'X-Auth-Token':AUTH}}).then(()=>alert('System Wiping...'))}
 fetch('/api/status').then(r=>r.json()).then(s=>document.getElementById('mode').value=s.mode);
 </script>
 </body>

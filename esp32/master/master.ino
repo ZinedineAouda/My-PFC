@@ -48,15 +48,15 @@ bool          buzzerState      = false;
 // ─── Forward Declarations ───────────────────────────────────────────
 void onWifiConnect(const char* ssid, const char* pass);
 void onSetup(int mode, const char* apSSID, const char* apPass);
+void onReSetup();
 void onFactoryReset();
 void handleBuzzer();
 
 void loadSettings() {
-    prefs.begin("master_cfg", false);
+    prefs.begin("master_cfg", true); // Read-only mode
     setupDone = prefs.getBool("setupDone", false);
     currentMode = (WiFiOpMode)prefs.getInt("mode", (int)MODE_AP);
-
-    // Configuration survives reboots correctly now.
+    
     if (setupDone) {
         String apS = prefs.getString("apSSID", AP_SSID_DEFAULT);
         String apP = prefs.getString("apPass", "");
@@ -67,13 +67,15 @@ void loadSettings() {
         if (staS.length() > 0) {
             wifiMgr.setSTACredentials(staS.c_str(), staP.c_str());
         }
-        Serial.println("[PREFS] Loaded saved configuration.");
+        Serial.printf("[PREFS] Configuration Loaded: Mode=%d, SSID=%s\n", (int)currentMode, apS.c_str());
+    } else {
+        Serial.println("[PREFS] No valid configuration found. Entering Setup Mode.");
     }
     prefs.end();
 }
 
 void saveSettings() {
-    prefs.begin("master_cfg", false);
+    prefs.begin("master_cfg", false); // Read-write mode
     prefs.putBool("setupDone", setupDone);
     prefs.putInt("mode", (int)currentMode);
     prefs.putString("apSSID", wifiMgr.apSSID());
@@ -81,7 +83,7 @@ void saveSettings() {
     prefs.putString("staSSID", wifiMgr.staSSID());
     prefs.putString("staPass", wifiMgr.staPass());
     prefs.end();
-    Serial.println("[PREFS] Configuration saved.");
+    Serial.println("[PREFS] Configuration successfully committed to NVS.");
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -121,6 +123,7 @@ void setup() {
     // ── Web Dashboard: start with setup page ────────────────
     dashboard.onConnect(onWifiConnect);
     dashboard.onSetup(onSetup);
+    dashboard.onReSetup(onReSetup);
     dashboard.onReset(onFactoryReset);
     dashboard.begin(setupDone, currentMode);
 
@@ -286,6 +289,18 @@ void handleBuzzer() {
         digitalWrite(BUZZER_PIN, LOW);
         buzzerState = false;
     }
+}
+
+// Called by dashboard: entering setup mode again (soft reset)
+void onReSetup() {
+    Serial.println("[RESET] Re-setup requested. Clearing WiFi config...");
+    prefs.begin("master_cfg", false);
+    prefs.clear();
+    prefs.end();
+    
+    Serial.println("[RESET] Restarting into Setup Wizard...");
+    delay(1000);
+    ESP.restart();
 }
 
 // Called by setup or admin page: full wipe

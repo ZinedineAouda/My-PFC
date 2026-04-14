@@ -60,7 +60,8 @@ public:
             JsonDocument doc;
             doc["mode"]     = (int)_mode;
             doc["setup"]    = _setupDone;
-            doc["masterIP"] = WiFi.softAPIP().toString();
+            doc["masterIP"] = _registry.onlineCount() > 0 ? WiFi.localIP().toString() : WiFi.softAPIP().toString(); 
+            // Better: use the IP that the dashboard is actually being served on
             doc["slaves"]   = (int)_registry.count();
             doc["online"]   = (int)_registry.onlineCount();
             doc["alerts"]   = (int)_registry.alertCount();
@@ -281,22 +282,15 @@ public:
             });
         _server.addHandler(deleteHandler);
 
-        // ── API: System Mode Change ──────────────────────────
-        auto* modeHandler = new AsyncCallbackJsonWebHandler("/api/system/mode",
-            [this](AsyncWebServerRequest* req, JsonVariant& json) {
-                if (!_checkAuth(req)) {
-                    req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
-                    return;
-                }
-                int mode = json["mode"] | (int)_mode;
-                if (mode >= 1 && mode <= 4) {
-                    if (_setupCallback) _setupCallback(mode, "", "");
-                    req->send(200, "application/json", "{\"success\":true}");
-                } else {
-                    req->send(400, "application/json", "{\"message\":\"Invalid mode\"}");
-                }
-            });
-        _server.addHandler(modeHandler);
+        // ── API: Re-setup ────────────────────────────────────
+        _server.on("/api/system/re-setup", HTTP_POST, [this](AsyncWebServerRequest* req) {
+            if (!_checkAuth(req)) {
+                req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
+                return;
+            }
+            if (_reSetupCallback) _reSetupCallback();
+            req->send(200, "application/json", "{\"success\":true}");
+        });
 
         // ── API: Factory Reset ───────────────────────────────
         _server.on("/api/system/reset", HTTP_POST, [this](AsyncWebServerRequest* req) {
@@ -354,10 +348,12 @@ public:
     typedef void (*ConnectCallback)(const char* ssid, const char* pass);
     typedef void (*SetupCallback)(int mode, const char* apSSID, const char* apPass);
     typedef void (*ResetCallback)();
+    typedef void (*ReSetupCallback)();
 
     void onConnect(ConnectCallback cb) { _connectCallback = cb; }
     void onSetup(SetupCallback cb)     { _setupCallback = cb; }
     void onReset(ResetCallback cb)     { _resetCallback = cb; }
+    void onReSetup(ReSetupCallback cb) { _reSetupCallback = cb; }
 
     void setSetupDone(bool done) { _setupDone = done; }
     void setMode(WiFiOpMode m)   { _mode = m; }
@@ -371,6 +367,7 @@ private:
     ConnectCallback _connectCallback = nullptr;
     SetupCallback   _setupCallback = nullptr;
     ResetCallback   _resetCallback = nullptr;
+    ReSetupCallback _reSetupCallback = nullptr;
 
     // ── Auth check ──────────────────────────────────────────
     static bool _checkAuth(AsyncWebServerRequest* req) {
