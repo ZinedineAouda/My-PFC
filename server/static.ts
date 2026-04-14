@@ -12,25 +12,24 @@ function getBaseDir() {
 
 function findPublicDir(): string | null {
   const root = process.cwd();
-  const baseDir = getBaseDir();
   
-  // Potential locations for compiled frontend files
+  // Potential locations for compiled frontend files (Absolute Paths)
   const targets = [
-    path.join(root, "dist", "public"),
-    path.join(root, "public"),
-    path.join(root, "client", "dist"),
-    path.join(root, "dist"),
-    path.join(baseDir, "public"),
-    path.join(baseDir, "..", "dist", "public"),
-    path.join(baseDir, "..", "public"),
+    path.resolve(root, "dist", "public"),
+    path.resolve(root, "public"),
+    path.resolve(root, "client", "dist"),
+    path.resolve(root, "dist"),
   ];
 
-  console.log(`[STATIC] Searching for frontend in ${targets.length} locations...`);
+  console.log(`[STATIC] Checking ${targets.length} absolute paths for index.html...`);
 
   for (const p of targets) {
-    const indexFile = path.resolve(p, "index.html");
+    const indexFile = path.join(p, "index.html");
     if (fs.existsSync(p) && fs.existsSync(indexFile)) {
+      console.log(`[CHECK] Found matching directory: ${p}`);
       return p;
+    } else {
+      console.log(`[CHECK] Miss at: ${p}`);
     }
   }
 
