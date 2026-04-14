@@ -98,15 +98,25 @@ export async function registerRoutes(
   //  AUTHENTICATION
   // ═════════════════════════════════════════════════════════════
   app.post("/api/admin/login", (req: Request, res: Response) => {
-    const { username, password } = req.body;
-    if (username === "admin" && password === "admin1234") {
+    const usernameInput = (req.body.username || "").toString().trim();
+    const passwordInput = (req.body.password || "").toString().trim();
+
+    console.log(`[LOGIN] Attempt for user: "${usernameInput}"`);
+
+    if (usernameInput === "admin" && passwordInput === "admin1234") {
       req.session.isAdmin = true;
       req.session.save((err) => {
-        if (err) console.error("Session save error:", err);
+        if (err) {
+          console.error("[LOGIN] Session save error:", err);
+          return res.status(500).json({ message: "Session save failed" });
+        }
+        console.log("[LOGIN] Success: Admin session created.");
         res.json({ success: true, message: "Logged in" });
       });
       return;
     }
+
+    console.warn(`[LOGIN] Failed: Invalid credentials received for "${usernameInput}"`);
     return res.status(401).json({ message: "Invalid credentials" });
   });
 
