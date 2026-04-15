@@ -1,7 +1,7 @@
 import type { Slave, InsertSlave, UpdateSlave, ApproveSlave } from "@shared/schema";
 import { slaves, systemSettings } from "@shared/schema";
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, notIn } from "drizzle-orm";
 
 export interface IStorage {
   getAllSlaves(): Promise<Slave[]>;
@@ -211,7 +211,10 @@ export class DatabaseStorage implements IStorage {
     
     console.log(`[SYNC] Starting bidir sync for ${incoming.length} slaves`);
     
-    // First, set all current slaves to offline
+    // Track incoming IDs to prune deleted nodes
+    const incomingIds = incoming.map(s => s.slaveId);
+
+    // First, set all current slaves to offline (temporary state)
     try {
       await db.update(slaves).set({ online: false });
     } catch (err) {
@@ -261,6 +264,20 @@ export class DatabaseStorage implements IStorage {
           lastSeen: Date.now(),
           lastUpdatedAt: remote.lastUpdatedAt || Date.now()
         });
+      }
+    }
+
+    // PRUNING: Delete slaves that are NOT in the incoming list
+    if (incomingIds.length > 0) {
+      const deletedCount = await db.delete(slaves).where(notIn(slaves.slaveId, incomingIds)).returning();
+      if (deletedCount.length > 0) {
+        console.log(`[SYNC] Pruned ${deletedCount.length} ghost slaves from cloud DB`);
+      }
+    } else {
+      // If incoming list is empty (e.g. Wipe Data just happened), clear all slaves
+      const deletedCount = await db.delete(slaves).returning();
+      if (deletedCount.length > 0) {
+        console.log(`[SYNC] Cleared all ${deletedCount.length} slaves (empty sync bundle)`);
       }
     }
   }

@@ -474,7 +474,15 @@ function AdminPanel() {
                         <div className="flex-1" />
                       )}
                       <button 
-                        onClick={() => { if(confirm(`Remove patient unit?`)) apiRequest("DELETE", "/api/slaves/" + d.slaveId); }}
+                        onClick={() => { 
+                          if(confirm(`Remove patient unit?`)) {
+                            if (isCloud) {
+                              apiRequest("DELETE", "/api/slaves/" + d.slaveId);
+                            } else {
+                              apiRequest("POST", "/api/delete-slave", { slaveId: d.slaveId });
+                            }
+                          }
+                        }}
                         className="w-12 h-12 bg-slate-50 text-slate-300 rounded-2xl flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all border border-slate-100"
                       >
                         <Trash2 size={18} />
