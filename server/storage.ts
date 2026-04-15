@@ -83,9 +83,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSlave(slaveId: string): Promise<boolean> {
+    const [existing] = await db.select().from(slaves).where(eq(slaves.slaveId, slaveId));
+    if (!existing) return false;
+
+    // First delete from DB
+    await db.delete(slaves).where(eq(slaves.slaveId, slaveId));
+    
+    // Then queue command for Master to delete locally
+    // This completes the bidirectional sync: Cloud -> Local propagation
     await this.queueCommand("REMOVE_SLAVE", slaveId);
-    const result = await db.delete(slaves).where(eq(slaves.slaveId, slaveId)).returning();
-    return result.length > 0;
+    
+    return true;
   }
 
   async registerSlave(slaveId: string): Promise<Slave> {
