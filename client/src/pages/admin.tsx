@@ -360,7 +360,6 @@ function AdminPanel() {
           <button onClick={() => logoutMutation.mutate()} className="w-10 h-10 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">
             <LogOut className="w-5 h-5" />
           </button>
-        </div>
       </header>
 
       {activeTab === "dashboard" ? (
