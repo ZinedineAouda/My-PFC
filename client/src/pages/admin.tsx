@@ -329,7 +329,6 @@ function AdminPanel() {
   const safeSlaves = Array.isArray(slaves) ? slaves : [];
   const pending = safeSlaves.filter(s => !s.approved);
   const approved = safeSlaves.filter(s => s.approved);
-  const isCloudActive = status?.mode === 4;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-32 font-sans">
