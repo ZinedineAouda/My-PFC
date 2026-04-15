@@ -195,9 +195,9 @@ export class DatabaseStorage implements IStorage {
     const lastSeen = settings.masterLastSeen;
     if (!lastSeen) return false;
     
-    // Ensure we handle both number and possible string/bigint types from the driver
+    // 12 second timeout for "Ultra-Live" feel (ESP32 pings every 5s)
     const lastSeenNum = typeof lastSeen === 'string' ? parseInt(lastSeen) : Number(lastSeen);
-    return Date.now() - lastSeenNum < 60000;
+    return Date.now() - lastSeenNum < 12000;
   }
 
   async syncFromMaster(incoming: Array<any>, stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void> {
