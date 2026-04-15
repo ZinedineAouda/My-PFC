@@ -500,28 +500,58 @@ export default function AdminPage() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [forceSetup, setForceSetup] = useState(false);
   
-  const { data: status, isLoading } = useQuery<{ mode: number; setup: boolean; authenticated: boolean } | null>({
+  const { data: status, isLoading, isError } = useQuery<{ mode: number; setup: boolean; authenticated: boolean } | null>({
     queryKey: ["/api/status"],
     queryFn: async () => { 
-      const res = await fetch(apiUrl("/api/status"), { credentials: "include" }); 
-      return res.json(); 
+      try {
+        const res = await fetch(apiUrl("/api/status"), { credentials: "include" }); 
+        if (!res.ok) throw new Error("Status failed");
+        return res.json(); 
+      } catch (e) {
+        console.error("API Status Error:", e);
+        return null; // Return null on error to prevent infinite retries with bad state
+      }
     },
-    staleTime: 5000,
+    staleTime: 2000,
+    retry: 3
   });
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-blue-500 font-mono text-xs font-bold uppercase tracking-[3px] animate-pulse">
-        Stabilizing Handshake...
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
+        <div className="text-blue-500 font-mono text-[10px] font-bold uppercase tracking-[3px] animate-pulse">
+          Synchronizing State...
+        </div>
       </div>
     );
   }
 
-  // If the device is not yet configured, show the SetupWizard directly (No Login Required)
-  if (status && !status.setup && !forceSetup) {
+  // 1. If we can't get status, show Connection Error Instead of Default Login
+  if (isError || !status) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
+        <div className="text-center">
+          <Shield className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+          <h2 className="text-slate-900 font-bold">Connection Interrupted</h2>
+          <p className="text-slate-500 text-xs mt-1">Ensure you are connected to the Master WiFi.</p>
+          <button onClick={() => window.location.reload()} className="mt-6 px-6 py-2 bg-slate-900 text-white text-xs font-bold rounded-full">Retry</button>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. ABSOLUTE PRIORITY: If the device is not yet configured, show the SetupWizard
+  // This bypasses the Login Form entirely on first boot/reset.
+  if (status.setup === false && !forceSetup) {
     return <SetupWizard onComplete={() => setForceSetup(true)} />;
   }
 
-  if (!(loggedIn || !!status?.authenticated)) return <LoginForm onLogin={() => setLoggedIn(true)} />;
+  // 3. SECURE STATE: If setup is done, require authentication
+  if (!(loggedIn || !!status.authenticated)) {
+    return <LoginForm onLogin={() => setLoggedIn(true)} />;
+  }
+
+  // 4. ADMIN PANEL: Full access
   return <AdminPanel />;
 }

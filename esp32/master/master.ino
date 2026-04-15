@@ -127,12 +127,17 @@ void setup() {
 
     // ── Load Config & WiFi ──────────────────────────────────
     loadSettings();
-    WiFi.setSleep(WIFI_PS_NONE); // Disable power saving for maximum responsiveness
-    WiFi.setTxPower(WIFI_POWER_20dBm); // Force maximum transmission power
+    Serial.printf("[BOOT] Setup Done: %s\n", setupDone ? "TRUE" : "FALSE");
+    Serial.printf("[BOOT] Mode: %d\n", (int)currentMode);
+    
+    WiFi.setSleep(WIFI_PS_NONE); 
+    WiFi.setTxPower(WIFI_POWER_20dBm);
     if (!setupDone) {
+        Serial.println("[BOOT] Starting Setup Mode (AP Mode)...");
         wifiMgr.beginSetup();
-        WiFi.scanNetworks(true); // Start background scan
+        WiFi.scanNetworks(true); 
     } else {
+        Serial.println("[BOOT] Applying saved WiFi Configuration...");
         wifiMgr.applyMode(currentMode);
     }
 
