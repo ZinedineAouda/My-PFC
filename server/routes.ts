@@ -322,9 +322,10 @@ export async function registerRoutes(
       });
       broadcastAllDevices();
       return res.json(responseData);
-    } catch (err) {
-      console.error("[SYNC] Fatal error during bidirectional sync:", err);
-      return res.status(500).json({ success: false, message: "Internal Sync Failure" });
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      console.error("[SYNC] Fatal error during bidirectional sync:", errMsg, err?.stack);
+      return res.status(500).json({ success: false, message: "Sync Error: " + errMsg });
     }
   }));
 
