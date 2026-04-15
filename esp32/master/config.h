@@ -44,7 +44,8 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 #define ADMIN_PASS            "admin1234"
 #define ADMIN_TOKEN           "admin1234"
 
-// ─── Web Server ─────────────────────────────────────────────
+// ─── Post-Upload Behavior ──────────────────────────────────
+#define AUTO_FACTORY_RESET_ON_FLASH true  // Set to true to wipe data on new uploads
 #define WEB_PORT              80
 
 // ─── Operating Modes ────────────────────────────────────────

@@ -36,6 +36,10 @@ public:
 
         // ── Page routes ─────────────────────────────────────
         _server.on("/", HTTP_GET, [this](AsyncWebServerRequest* req) {
+            if (!_setupDone) {
+                req->redirect("/setup");
+                return;
+            }
             AsyncWebServerResponse *response = req->beginResponse_P(200, "text/html", react_index_html_gz, react_index_html_gz_len);
             response->addHeader("Content-Encoding", "gzip");
             req->send(response);

@@ -59,7 +59,7 @@ void checkNewFlash() {
     
     // If lastBuild is empty, it means this is a fresh flash of THIS code
     // If lastBuild != currentBuild, it means it's a new update
-    if (lastBuild != currentBuild) {
+    if (AUTO_FACTORY_RESET_ON_FLASH && lastBuild != currentBuild) {
         Serial.println("╔═════════════════════════════════════════════════════╗");
         Serial.println("║  [NEW FLASH] Clean firmware detected!               ║");
         Serial.println("║  Performing automatic factory reset to ensure clean  ║");

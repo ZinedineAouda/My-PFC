@@ -9,6 +9,127 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 import { Haptics } from "@capacitor/haptics";
 
 // ═══════════════════════════════════════════════════════════════
+//  SETUP WIZARD — Non-Auth First Boot
+// ═══════════════════════════════════════════════════════════════
+function SetupWizard({ onComplete }: { onComplete: () => void }) {
+  const { toast } = useToast();
+  const [step, setStep] = useState(1);
+  const [mode, setMode] = useState(1);
+  const [apSsid, setApSsid] = useState("");
+  const [apPass, setApPass] = useState("");
+  const [staSsid, setStaSsid] = useState("");
+  const [staPass, setStaPass] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const { data: networks } = useQuery<any[]>({
+    queryKey: ["/api/scan"],
+    queryFn: async () => { const res = await fetch(apiUrl("/api/scan")); return res.json(); },
+    refetchInterval: 5000,
+    enabled: mode === 2 || mode === 4
+  });
+
+  const handleFinish = async () => {
+    setLoading(true);
+    try {
+      if (mode === 2 || mode === 4) {
+        await apiRequest("POST", "/api/connect-wifi", { ssid: staSsid, password: staPass });
+      }
+      await apiRequest("POST", "/api/setup", { mode, apSSID: apSsid, apPass: apPass });
+      toast({ title: "Configuration Applied", description: "System is restarting in selected mode." });
+      onComplete();
+    } catch {
+      toast({ title: "Setup Failed", description: "Could not communicate with Master.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 sm:p-12">
+      <div className="w-full max-w-md bg-white border border-slate-200 shadow-2xl rounded-[32px] overflow-hidden">
+        <div className="bg-blue-600 p-8 text-white text-center">
+          <Shield className="w-10 h-10 mb-2 mx-auto" />
+          <h1 className="text-2xl font-black mb-1">System Initialize</h1>
+          <p className="text-blue-100 text-[10px] font-bold uppercase tracking-wider">Step {step} of 3 • Configuration Wizard</p>
+        </div>
+        
+        <div className="p-8">
+          {step === 1 && (
+            <div className="space-y-4">
+              <h2 className="text-slate-900 font-extrabold text-lg mb-4">Select Operating Mode</h2>
+              {[
+                { m: 1, t: "Standalone AP", d: "Local emergency network only" },
+                { m: 2, t: "Facility Station", d: "Connect to hospital WiFi infrastructure" },
+                { m: 4, t: "Railway Cloud", d: "Enable remote monitoring & cloud sync" }
+              ].map(opt => (
+                <button 
+                  key={opt.m}
+                  onClick={() => setMode(opt.m)}
+                  className={`w-full p-4 rounded-2xl border text-left transition-all ${mode === opt.m ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500/20" : "border-slate-100 hover:border-slate-200"}`}
+                >
+                  <div className="font-bold text-slate-800 text-sm">{opt.t}</div>
+                  <div className="text-slate-500 text-[11px] mt-0.5">{opt.d}</div>
+                </button>
+              ))}
+              <button onClick={() => setStep(2)} className="w-full mt-6 py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-lg">Continue</button>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              <h2 className="text-slate-900 font-extrabold text-lg mb-4">Device Credentials</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Master SSID (e.g. HospitalAlarm)</label>
+                  <input className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl" placeholder="HospitalAlarm" value={apSsid} onChange={e => setApSsid(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">AP Password (Optional)</label>
+                  <input className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl" type="password" placeholder="Leave blank for open" value={apPass} onChange={e => setApPass(e.target.value)} />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button onClick={() => setStep(1)} className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl">Back</button>
+                <button onClick={() => setStep(3)} className="flex-1 py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-lg">Next</button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-4">
+              <h2 className="text-slate-900 font-extrabold text-lg mb-4">Network Integration</h2>
+              {(mode === 2 || mode === 4) ? (
+                <div className="space-y-3">
+                  <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-xl p-2 space-y-1">
+                    {networks?.map(n => (
+                      <button key={n.ssid} onClick={() => setStaSsid(n.ssid)} className={`w-full text-left p-2 rounded-lg text-xs font-bold ${staSsid === n.ssid ? "bg-blue-600 text-white" : "hover:bg-slate-50"}`}>
+                        {n.ssid} ({n.rssi}dBm)
+                      </button>
+                    ))}
+                  </div>
+                  <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="Network Password" type="password" value={staPass} onChange={e => setStaPass(e.target.value)} />
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <Wifi className="mx-auto w-12 h-12 text-slate-200 mb-2" />
+                  <p className="text-slate-400 text-xs font-medium text-center">Standalone Mode active.<br/>WiFi connection bypassed.</p>
+                </div>
+              )}
+              <div className="flex gap-3 mt-6">
+                <button onClick={() => setStep(2)} className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl">Back</button>
+                <button onClick={handleFinish} disabled={loading} className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-lg shadow-blue-500/30">
+                  {loading ? "Configuring..." : "Launch System"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  LOGIN FORM — Light Mode
 // ═══════════════════════════════════════════════════════════════
 function LoginForm({ onLogin }: { onLogin: () => void }) {
@@ -377,10 +498,15 @@ function AdminPanel() {
 
 export default function AdminPage() {
   const [loggedIn, setLoggedIn] = useState(false);
-  const { data: session, isLoading } = useQuery<{ authenticated: boolean } | null>({
-    queryKey: ["/api/admin/session"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-    staleTime: 0,
+  const [forceSetup, setForceSetup] = useState(false);
+  
+  const { data: status, isLoading } = useQuery<{ mode: number; setup: boolean; authenticated: boolean } | null>({
+    queryKey: ["/api/status"],
+    queryFn: async () => { 
+      const res = await fetch(apiUrl("/api/status"), { credentials: "include" }); 
+      return res.json(); 
+    },
+    staleTime: 5000,
   });
 
   if (isLoading) {
@@ -391,6 +517,11 @@ export default function AdminPage() {
     );
   }
 
-  if (!(loggedIn || !!session?.authenticated)) return <LoginForm onLogin={() => setLoggedIn(true)} />;
+  // If the device is not yet configured, show the SetupWizard directly (No Login Required)
+  if (status && !status.setup && !forceSetup) {
+    return <SetupWizard onComplete={() => setForceSetup(true)} />;
+  }
+
+  if (!(loggedIn || !!status?.authenticated)) return <LoginForm onLogin={() => setLoggedIn(true)} />;
   return <AdminPanel />;
 }
