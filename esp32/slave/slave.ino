@@ -370,12 +370,12 @@ function updateUI(data) {
   if(!data.connected || !data.approved) {
     // Show Setup Mode
     card.innerHTML = `
-      <h2 style="font-size:24px;font-weight:900;margin-bottom:8px">Connect Unit</h2>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:32px;font-weight:500">Link this unit to the Main System.</p>
-      <div class="field"><label>System WiFi Name</label><input id="ssid" value="HospitalAlarm"></div>
-      <div class="field"><label>Password</label><input id="pass" type="password" placeholder="If any"></div>
-      <div class="field"><label>System Address</label><input id="mqtt" value="192.168.4.1"></div>
-      <button onclick="save()">Connect</button>
+      <h2 style="font-size:24px;font-weight:700;margin-bottom:8px">Setup Unit</h2>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:32px;font-weight:500">Link this device to the Main Unit.</p>
+      <div class="field"><label>Main Station WiFi</label><input id="ssid" value="HospitalAlarm"></div>
+      <div class="field"><label>WiFi Password</label><input id="pass" type="password" placeholder="If any"></div>
+      <div class="field"><label>Main Unit Address</label><input id="mqtt" value="192.168.4.1"></div>
+      <button onclick="save()">Connect Now</button>
       <div id="msg"></div>
     `;
   } else {
@@ -387,10 +387,10 @@ function updateUI(data) {
           <div class="status-icon ${isAlt?'status-help':'status-ok'}">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="${isAlt?'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01':'M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3'}"/></svg>
           </div>
-          <div class="status-label">${isAlt?'HELP':'OK'}</div>
-          <div class="status-sub">${isAlt?'Push button to stop':'Device is monitoring'}</div>
+          <div class="status-label">${isAlt?'HELPING':'MONITORING'}</div>
+          <div class="status-sub">${isAlt?'Pull handle or push button':'Device is active'}</div>
           <div style="margin-top:32px;padding-top:32px;border-top:1px solid #f1f5f9">
-            <p style="font-size:9px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:2px">Unit ID: ${data.id}</p>
+            <p style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Unit Number: ${data.id}</p>
           </div>
         </div>
       `;
