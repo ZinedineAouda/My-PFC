@@ -261,8 +261,7 @@ void publishAlert() {
     }
 
     if (alertActive) {
-        Serial.println("[ALERT] Already active");
-        return;
+        Serial.println("[ALERT] Already active (re-publishing for reliability)");
     }
 
     JsonDocument doc;

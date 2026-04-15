@@ -47,6 +47,7 @@ public:
         if (!_alertQueue.empty()) {
             _processAlertQueue();
             _lastOpTime = now; 
+            delay(100); // Settle network stack after critical TX
             return;
         }
 
