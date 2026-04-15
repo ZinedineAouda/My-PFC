@@ -189,7 +189,7 @@ void loop() {
 
     // ── Cloud sync (Mode 4 only) ────────────────────────────
     if (setupDone && currentMode == MODE_ONLINE && wifiMgr.staConnected()) {
-        cloudSync.handle();
+        cloudSync.handle((int)currentMode);
     }
 
     // ── Periodic reminder if setup is pending ───────────────

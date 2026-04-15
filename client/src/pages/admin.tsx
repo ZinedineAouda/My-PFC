@@ -302,11 +302,24 @@ function AdminPanel() {
     refetchInterval: 5000,
   });
 
-  const { data: status } = useQuery<{ mode: number; uptime: number; rssi: number; slaves: number; online: number; alerts: number }>({
+  const { data: status } = useQuery<{ 
+    mode: number; 
+    uptime: number; 
+    rssi: number; 
+    slaves: number; 
+    online: number; 
+    alerts: number;
+    isMasterOnline?: boolean;
+    masterIP?: string;
+  }>({
     queryKey: ["/api/status"],
     queryFn: async () => { const res = await fetch(apiUrl("/api/status"), { credentials: "include" }); return res.json(); },
-    refetchInterval: 5000,
+    refetchInterval: 2000,
   });
+
+  const isCloud = status?.masterIP === "cloud";
+  // On cloud, we are active if master is online. On local, strictly mode 4 (Online) logic.
+  const isCloudActive = isCloud ? !!status?.isMasterOnline : status?.mode === 4;
 
   const logoutMutation = useMutation({
     mutationFn: async () => { await apiRequest("POST", "/api/admin/logout"); },
@@ -335,8 +348,10 @@ function AdminPanel() {
         <div className="flex items-center gap-6">
           <div className="hidden md:flex flex-col items-end">
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${isCloudActive ? "bg-emerald-500" : "bg-amber-500"} animate-pulse`} />
-              <span className="text-[10px] font-black uppercase tracking-widest">{isCloudActive ? "Cloud Link Active" : "Local Logic Restricted"}</span>
+              <div className={`w-2 h-2 rounded-full ${isCloudActive ? "bg-emerald-500" : (isCloud ? "bg-red-500" : "bg-amber-500")} animate-pulse`} />
+              <span className="text-[10px] font-black uppercase tracking-widest">
+                {isCloudActive ? "Cloud Link Active" : (isCloud ? "Master Offline" : "Local Logic Restricted")}
+              </span>
             </div>
             <p className="text-[9px] text-slate-400 font-bold mt-1">UPTIME: {Math.floor((status?.uptime || 0) / 60)} MIN</p>
           </div>

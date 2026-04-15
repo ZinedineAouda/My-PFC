@@ -35,21 +35,22 @@ public:
         }
     }
 
-    void handle() {
+    void handle(int currentMode) {
         if (WiFi.status() != WL_CONNECTED) return;
         if (_busy) return;
 
+        _currentMode = currentMode;
         unsigned long now = millis();
         
         // ── 1. Process pending alert queue (highest priority — NO THROTTLE) ─
         if (!_alertQueue.empty()) {
             _processAlertQueue();
-            _lastOpTime = now; // Update op time to push back background tasks
+            _lastOpTime = now; 
             return;
         }
 
         // ── 2. Background throttled tasks ────────────────────
-        if (now - _lastOpTime < 1000) return; // Only throttle background syncs
+        if (now - _lastOpTime < 1000) return; 
 
         // ── 3. Lightweight heartbeat ping every 10s ──────────
         if (now - _lastPing >= CLOUD_PING_INTERVAL) {
@@ -215,7 +216,14 @@ private:
 
     // ── Lightweight ping ────────────────────────────────────
     void _sendPing() {
-        int code = _postWithRetry("/api/master-ping", "{}");
+        JsonDocument doc;
+        doc["mode"] = _currentMode;
+        doc["uptime"] = millis() / 1000;
+        doc["rssi"] = WiFi.RSSI();
+        String payload;
+        serializeJson(doc, payload);
+
+        int code = _postWithRetry("/api/master-ping", payload);
         if (code == 200) {
             Serial.println("[CLOUD] Ping OK");
         } else {
@@ -244,6 +252,10 @@ private:
 
         // ── Build sync payload ──────────────────────────────
         JsonDocument sendDoc;
+        sendDoc["mode"] = _currentMode;
+        sendDoc["uptime"] = millis() / 1000;
+        sendDoc["rssi"] = WiFi.RSSI();
+
         JsonArray arr = sendDoc["slaves"].to<JsonArray>();
         for (auto& kv : _registry.devices()) {
             const SlaveDevice& d = kv.second;
@@ -298,6 +310,7 @@ private:
     bool                _busy;
     bool                _forceSyncPending;
     int                 _consecutiveFails;
+    int                 _currentMode = 1;
     uint64_t            _timeOffset;
     WiFiClientSecure*   _client;
     std::vector<String> _alertQueue;

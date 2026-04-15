@@ -151,8 +151,9 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   app.get("/api/status", asyncHandler(async (_req: Request, res: Response) => {
     const all = await storage.getAllSlaves();
+    const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
     return res.json({
-      mode: await storage.getMode(),
+      mode: settings?.wifiMode ?? await storage.getMode(),
       setup: await storage.isSetupDone(),
       masterIP: "cloud",
       slaves: all.length,
@@ -160,6 +161,8 @@ export async function registerRoutes(
       alerts: all.filter((s) => s.alertActive).length,
       pending: all.filter((s) => !s.approved).length,
       isMasterOnline: await storage.isMasterOnline(),
+      uptime: settings?.masterUptime ?? 0,
+      rssi: settings?.masterRSSI ?? 0,
     });
   }));
 
@@ -313,16 +316,21 @@ export async function registerRoutes(
       return res.json(responseData);
     }
 
-    await storage.syncFromMaster(parsed.data.slaves);
+    await storage.syncFromMaster(parsed.data.slaves, {
+      mode: parsed.data.mode,
+      uptime: parsed.data.uptime,
+      rssi: parsed.data.rssi
+    });
     broadcastAllDevices();
 
     return res.json(responseData);
   }));
 
-  app.post("/api/master-ping", requireDeviceKey, asyncHandler(async (_req: Request, res: Response) => {
-    await storage.updateMasterHeartbeat();
-    console.log(`[MASTER] Heartbeat received at ${new Date().toISOString()}`);
-    broadcast({ type: "MASTER_STATUS", payload: { online: true } });
+  app.post("/api/master-ping", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
+    const { mode, uptime, rssi } = req.body;
+    await storage.updateMasterHeartbeat(mode, uptime, rssi);
+    console.log(`[MASTER] Heartbeat received at ${new Date().toISOString()} (Uptime: ${uptime}s, RSSI: ${rssi}dBm)`);
+    broadcast({ type: "MASTER_STATUS", payload: { online: true, uptime, rssi } });
     return res.json({ success: true, serverTime: Date.now() });
   }));
 

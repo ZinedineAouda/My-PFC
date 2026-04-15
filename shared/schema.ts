@@ -21,6 +21,8 @@ export const slaves = pgTable("slaves", {
 export const systemSettings = pgTable("system_settings", {
   id: integer("id").primaryKey().default(1),
   masterLastSeen: bigint("master_last_seen", { mode: "number" }),
+  masterUptime: integer("master_uptime"),
+  masterRSSI: integer("master_rssi"),
   wifiMode: integer("wifi_mode").notNull().default(1),
   pendingCommand: text("pending_command"),
   commandParams: text("command_params"),
@@ -82,8 +84,11 @@ export const connectWifiSchema = z.object({
   password: z.string().optional().default(""),
 });
 
-// Master sync: array of slave states from ESP32
+// Master sync: array of slave states from ESP32 + master stats
 export const masterSyncSchema = z.object({
+  uptime: z.number().optional(),
+  rssi: z.number().optional(),
+  mode: z.number().optional(),
   slaves: z.array(z.object({
     slaveId: z.string(),
     patientName: z.string().optional().default(""),
