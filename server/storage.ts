@@ -83,6 +83,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSlave(slaveId: string): Promise<boolean> {
+    await this.queueCommand("REMOVE_SLAVE", slaveId);
     const result = await db.delete(slaves).where(eq(slaves.slaveId, slaveId)).returning();
     return result.length > 0;
   }

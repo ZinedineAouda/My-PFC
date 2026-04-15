@@ -91,10 +91,10 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
               </header>
               <div className="grid gap-3">
                 {[
-                  { m: 1, t: "Master Only", d: "Uses only Master WiFi. No internet needed.", icon: <Shield className="w-4 h-4" /> },
-                  { m: 2, t: "WiFi Mode", d: "Connects to your hospital network.", icon: <Database className="w-4 h-4" /> },
-                  { m: 3, t: "Bridge Mode", d: "Supports both Master WiFi and Network.", icon: <Wifi className="w-4 h-4" /> },
-                  { m: 4, t: "Cloud Mode", d: "Syncs with the Internet (Recommended).", icon: <Activity className="w-4 h-4" /> }
+                  { m: 1, t: "Master Only", d: "Just for this building. No internet.", icon: <Shield className="w-4 h-4" /> },
+                  { m: 2, t: "Hospitall WiFi", d: "Connect to the hospital network.", icon: <Database className="w-4 h-4" /> },
+                  { m: 3, t: "Bridge Mode", d: "Connect to both WiFi and Units.", icon: <Wifi className="w-4 h-4" /> },
+                  { m: 4, t: "Online Mode", d: "Cloud access (High Stability).", icon: <Activity className="w-4 h-4" /> }
                 ].map(opt => (
                   <button 
                     key={opt.m}
@@ -102,7 +102,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                     className={`group w-full p-5 rounded-[24px] border-2 text-left transition-all relative overflow-hidden ${mode === opt.m ? "border-blue-600 bg-blue-50/50 shadow-lg shadow-blue-500/5" : "border-slate-100 hover:border-slate-300 bg-slate-50/30"}`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className={`text-[9px] font-black uppercase tracking-widest ${mode === opt.m ? "text-blue-600" : "text-slate-400"}`}>Protocol {opt.m}</span>
+                      <span className={`text-[9px] font-black uppercase tracking-widest ${mode === opt.m ? "text-blue-600" : "text-slate-400"}`}>Selection</span>
                       <div className={`p-1.5 rounded-lg ${mode === opt.m ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-500"}`}>{opt.icon}</div>
                     </div>
                     <div className="font-extrabold text-slate-900">{opt.t}</div>
@@ -117,23 +117,23 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
           {step === 2 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
               <header>
-                <h2 className="text-2xl font-black">Radio Identity</h2>
-                <p className="text-slate-500 text-sm mt-1">Establish the local broadcast identity for patient nodes.</p>
+                <h2 className="text-2xl font-black">WiFi Setup</h2>
+                <p className="text-slate-500 text-sm mt-1">Choose a name for your new Master unit.</p>
               </header>
               <div className="space-y-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Access SSID</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">WiFi Name</label>
                   <input 
                     className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[24px] focus:border-blue-600 focus:bg-white outline-none transition-all font-bold text-lg placeholder:text-slate-300" 
-                    placeholder="e.g. Master-Radio-Alpha" 
+                    placeholder="e.g. Ward-A-Unit" 
                     value={apSsid} onChange={e => setApSsid(e.target.value)} 
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Access Password</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">WiFi Password</label>
                   <input 
                     className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[24px] focus:border-blue-600 focus:bg-white outline-none transition-all font-bold text-lg placeholder:text-slate-300"
-                    type="password" placeholder="Min 8 Characters" value={apPass} onChange={e => setApPass(e.target.value)} 
+                    type="password" placeholder="At least 8 letters" value={apPass} onChange={e => setApPass(e.target.value)} 
                   />
                 </div>
               </div>
@@ -178,8 +178,8 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                   <div className="w-20 h-20 bg-white rounded-3xl shadow-lg flex items-center justify-center mb-6">
                     <Shield className="w-10 h-10 text-blue-600" />
                   </div>
-                  <p className="text-blue-900 font-black uppercase text-sm tracking-[2px]">Air-Gapped Protocol</p>
-                  <p className="text-blue-600/60 text-xs px-12 mt-2 font-medium italic">No bridge required for standalone medical grids.</p>
+                  <p className="text-blue-900 font-black uppercase text-sm tracking-[2px]">No Internet Mode</p>
+                  <p className="text-blue-600/60 text-xs px-12 mt-2 font-medium italic">This unit is set up to work alone in this wing.</p>
                 </div>
               )}
               <div className="flex gap-4">

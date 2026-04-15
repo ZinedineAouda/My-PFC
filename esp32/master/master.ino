@@ -335,6 +335,17 @@ void onRemoteCommand(const String& cmd, const String& params) {
     } else if (cmd == "CLEAR_ALL_ALERTS") {
         registry.clearAllAlerts();
         dashboard.broadcastFullState();
+    } else if (cmd == "REMOVE_SLAVE") {
+        // Removes unit from hardware memory and NVS persistence
+        if (registry.deleteDevice(params)) {
+           Serial.printf("[REG] Node %s removed by remote command\n", params.c_str());
+           dashboard.broadcastFullState();
+        }
+    } else if (cmd == "clear_alert") {
+        // Stop sound for one specific unit
+        if (registry.clearAlert(params)) {
+           dashboard.broadcastFullState();
+        }
     }
 }
 

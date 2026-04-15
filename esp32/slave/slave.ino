@@ -370,12 +370,12 @@ function updateUI(data) {
   if(!data.connected || !data.approved) {
     // Show Setup Mode
     card.innerHTML = `
-      <h2 style="font-size:24px;font-weight:900;margin-bottom:8px">Link Unit</h2>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:32px;font-weight:500">Connect this unit to the alarm system.</p>
-      <div class="field"><label>Link to Main Unit</label><input id="ssid" value="HospitalAlarm"></div>
-      <div class="field"><label>Password</label><input id="pass" type="password" placeholder="Empty if none"></div>
-      <div class="field"><label>Main IP Address</label><input id="mqtt" value="192.168.4.1"></div>
-      <button onclick="save()">Save</button>
+      <h2 style="font-size:24px;font-weight:900;margin-bottom:8px">Connect Unit</h2>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:32px;font-weight:500">Link this unit to the Main System.</p>
+      <div class="field"><label>System WiFi Name</label><input id="ssid" value="HospitalAlarm"></div>
+      <div class="field"><label>Password</label><input id="pass" type="password" placeholder="If any"></div>
+      <div class="field"><label>System Address</label><input id="mqtt" value="192.168.4.1"></div>
+      <button onclick="save()">Connect</button>
       <div id="msg"></div>
     `;
   } else {
