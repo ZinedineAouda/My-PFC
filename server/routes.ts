@@ -295,7 +295,28 @@ export async function registerRoutes(
     try {
       const cmd = await storage.getAndClearCommand();
       const parsed = masterSyncSchema.safeParse(req.body);
-      
+
+      if (!parsed.success) {
+        console.warn("[SYNC] Validation failed:", parsed.error.format());
+        await storage.updateMasterHeartbeat();
+        return res.json({
+          success: true,
+          mode: await storage.getMode(),
+          slaves: await storage.getAllSlaves(),
+          command: cmd?.command,
+          params: cmd?.params
+        });
+      }
+
+      // 1. Authoritative Merge & Pruning FIRST
+      await storage.syncFromMaster(parsed.data.slaves, {
+        mode: parsed.data.mode,
+        uptime: parsed.data.uptime,
+        rssi: parsed.data.rssi,
+        wifiError: parsed.data.wifiError
+      });
+
+      // 2. Build Response AFTER Pruning
       const responseData: any = {
         success: true,
         mode: await storage.getMode(),
@@ -308,18 +329,6 @@ export async function registerRoutes(
         console.log(`[SYNC] Delivering command to Master: ${cmd.command}`);
       }
 
-      if (!parsed.success) {
-        console.warn("[SYNC] Validation failed:", parsed.error.format());
-        await storage.updateMasterHeartbeat();
-        return res.json(responseData);
-      }
-
-      await storage.syncFromMaster(parsed.data.slaves, {
-        mode: parsed.data.mode,
-        uptime: parsed.data.uptime,
-        rssi: parsed.data.rssi,
-        wifiError: parsed.data.wifiError
-      });
       broadcastAllDevices();
       return res.json(responseData);
     } catch (err: any) {
