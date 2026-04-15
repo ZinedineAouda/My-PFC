@@ -109,6 +109,16 @@ void saveSlaveConfig() {
     Serial.println("[EEPROM] Configuration saved");
 }
 
+void resetConfig() {
+    Serial.println("[EEPROM] Wiping configuration...");
+    SlaveConfig cfg;
+    cfg.magic = 0; // Invalidate
+    EEPROM.begin(512);
+    EEPROM.put(0, cfg);
+    for (int i = sizeof(SlaveConfig); i < 512; i++) EEPROM.write(i, 0);
+    EEPROM.commit();
+}
+
 // ─── Network Objects ────────────────────────────────────────────────
 WiFiClient   espClient;
 PubSubClient mqtt(espClient);
@@ -184,11 +194,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         } else if (strcmp(action, "RESET_UNIT") == 0) {
             Serial.println("[CMD] FACTORY RESET REQUESTED");
             ledBlink(10, 50, 50); // Warning blink
-            SlaveConfig cfg;
-            cfg.magic = 0; // Invalidate config
-            EEPROM.begin(sizeof(SlaveConfig));
-            EEPROM.put(0, cfg);
-            EEPROM.commit();
+            resetConfig();
             delay(500);
             ESP.restart();
         }
