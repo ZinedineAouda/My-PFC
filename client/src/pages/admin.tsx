@@ -607,8 +607,9 @@ export default function AdminPage() {
 
   const setupDone = localSetupDone ?? status?.setup;
 
-  // 1. First Boot Logic
-  if (setupDone === false) {
+  // 1. First Boot Logic (Only on local gateway, cloud bypasses setup)
+  const isCloud = status?.masterIP === "cloud";
+  if (setupDone === false && !isCloud) {
     return <SetupWizard onComplete={() => setLocalSetupDone(true)} />;
   }
 

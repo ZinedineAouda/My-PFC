@@ -213,8 +213,6 @@ private:
         return code;
     }
 
-    CloudCommandCallback _commandCallback = nullptr;
-
     // ── Lightweight ping ────────────────────────────────────
     void _sendPing() {
         int code = _postWithRetry("/api/master-ping", "{}");
