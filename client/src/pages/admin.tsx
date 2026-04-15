@@ -275,7 +275,6 @@ function AdminPanel() {
   const queryClient = useQueryClient();
   const [modalSlave, setModalSlave] = useState<Slave | null>(null);
   const [modalMode, setModalMode] = useState<"approve" | "edit">("approve");
-  const [activeTab, setActiveTab] = useState<"dashboard" | "settings">("dashboard");
   const [isSyncing, setIsSyncing] = useState(false);
   const sirenRef = useRef<HTMLAudioElement | null>(null);
 
@@ -379,9 +378,7 @@ function AdminPanel() {
             <LogOut className="w-5 h-5" />
           </button>
       </header>
-
-      {activeTab === "dashboard" ? (
-        <main className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+      <main className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
           {/* Stats Grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {[
@@ -494,55 +491,6 @@ function AdminPanel() {
              )}
           </div>
         </main>
-      ) : (
-        <main className="p-8 max-w-2xl mx-auto space-y-8 animate-in fade-in duration-500">
-          <div className="bg-white p-10 rounded-[48px] shadow-sm border border-slate-100">
-            <h2 className="text-xl font-bold mb-2">Change connection</h2>
-            <p className="text-slate-500 text-xs mb-8 uppercase tracking-widest font-bold opacity-60">System Mode</p>
-            <div className="grid grid-cols-1 gap-4">
-              {[
-                { m: 1, t: "Master Unit Only", d: "Private network for local monitoring." },
-                { m: 2, t: "Hospital Network", d: "Join the building's existing WiFi." },
-                { m: 4, t: "Cloud Synchronization", d: "Secure internet access for remote view." }
-              ].map(opt => (
-                <button 
-                  key={opt.m}
-                  onClick={() => apiRequest("POST", "/api/setup", { mode: opt.m })}
-                  className={`p-6 rounded-[32px] border-2 text-left transition-all relative ${status?.mode === opt.m ? "border-blue-600 bg-blue-50/50 shadow-lg shadow-blue-600/5 ring-4 ring-blue-500/5" : "border-slate-50 hover:border-slate-200 bg-slate-50/30"}`}
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-bold text-slate-900">{opt.t}</span>
-                    {status?.mode === opt.m && <CheckCircle2 className="w-5 h-5 text-blue-600" />}
-                  </div>
-                  <p className="text-slate-500 text-[11px] font-medium leading-relaxed">{opt.d}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-        </main>
-      )}
-
-      {/* Premium Dock Navigation */}
-      <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-3xl px-8 py-5 rounded-[32px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] flex items-center gap-12 z-50">
-        <button 
-          onClick={() => setActiveTab("dashboard")}
-          className={`flex flex-col items-center gap-2 group transition-all ${activeTab === "dashboard" ? "text-blue-400" : "text-slate-500 hover:text-white"}`}
-        >
-          <div className={`w-2 h-2 rounded-full mb-1 transition-all ${activeTab === "dashboard" ? "bg-blue-400" : "bg-transparent"}`} />
-          <Activity size={24} className="transition-all-duration-200 group-active:scale-95" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Monitor</span>
-        </button>
-        <div className="w-[1px] h-10 bg-white/10" />
-        <button 
-          onClick={() => setActiveTab("settings")}
-          className={`flex flex-col items-center gap-2 group transition-all ${activeTab === "settings" ? "text-blue-400" : "text-slate-500 hover:text-white"}`}
-        >
-          <div className={`w-2 h-2 rounded-full mb-1 transition-all ${activeTab === "settings" ? "bg-blue-400" : "bg-transparent"}`} />
-          <Settings size={24} className="transition-all-duration-200 group-active:scale-95" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Setup</span>
-        </button>
-      </nav>
 
       {/* Modal Overlay */}
       <SlaveModal
