@@ -525,6 +525,21 @@ void loop() {
         saveSlaveConfig();
     }
 
+    // ── Serial Command Interface (Emergency Wipe) ───────────
+    // This block monitors the Serial input for the "RESET_WIPE" command.
+    // If received, it clears the stored configuration and reboots the device,
+    // allowing for a factory reset without needing physical access to the EEPROM.
+    if (Serial.available()) {
+        String input = Serial.readStringUntil('\n');
+        input.trim();
+        if (input == "RESET_WIPE") {
+            Serial.println("[SECURITY] Manual Wipe sequence confirmed!");
+            resetConfig();
+            delay(500);
+            ESP.restart();
+        }
+    }
+
     // ── WiFi management ─────────────────────────────────────
     if (setupDone) {
         connectWiFi();
