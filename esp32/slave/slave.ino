@@ -228,10 +228,25 @@ bool connectMQTT() {
 
     unsigned long now = millis();
     if (now - lastReconnect < RECONNECT_MS) return false;
-    lastReconnect = now;
+    lastReconnect = now; // Add back the timestamp update
+    if (deviceId.isEmpty()) return false;
 
-    Serial.printf("[MQTT] Connecting to %s:%d...\n", mqttIP, MQTT_BROKER_PORT);
+    // ── Pre-Connect Delay (ensures stack stability) ──────
+    static bool firstTry = true;
+    if (firstTry) {
+        Serial.println("[MQTT] Waiting 2s for IP stability...");
+        delay(2000);
+        firstTry = false;
+    }
+
+    Serial.printf("[MQTT] Connecting to %s:%d (My IP: %s)...\n", 
+                  mqttIP, MQTT_BROKER_PORT, WiFi.localIP().toString().c_str());
     
+    mqtt.setServer(mqttIP, MQTT_BROKER_PORT);
+    mqtt.setCallback(mqttCallback);
+    mqtt.setKeepAlive(MQTT_KEEPALIVE);
+    mqtt.setBufferSize(512);
+
     // ── mDNS Resolution Fallback ───────────────────────────
     String targetIP = String(mqttIP);
     if (targetIP.endsWith(".local")) {

@@ -17,6 +17,15 @@ public:
     MqttHandler(DeviceRegistry& reg) : _registry(reg) {}
 
     void begin() {
+        // ── Connection Monitoring ───────────────────────────
+        _broker.on_connected([](uint32_t client_id, const char* client_name) {
+            Serial.printf("[MQTT] Client Connected: ID=%u, Name=%s\n", client_id, client_name);
+        });
+        
+        _broker.on_disconnected([](uint32_t client_id) {
+            Serial.printf("[MQTT] Client Disconnected: ID=%u\n", client_id);
+        });
+
         // ── Subscribe to slave alerts ───────────────────────
         _broker.subscribe("device/+/alert", [this](const char* topic, const char* payload) {
             String deviceId = _extractDeviceId(topic);
