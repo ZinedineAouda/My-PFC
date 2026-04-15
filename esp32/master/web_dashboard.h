@@ -302,15 +302,18 @@ public:
             req->send(200, "application/json", "{\"success\":true}");
         });
 
-        // ── API: Force Cloud Sync ────────────────────────────
-        _server.on("/api/system/sync", HTTP_POST, [this](AsyncWebServerRequest* req) {
+        // ── API: Clear Slave Registry ────────────────────────
+        _server.on("/api/system/clear-slaves", HTTP_POST, [this](AsyncWebServerRequest* req) {
             if (!_checkAuth(req)) {
                 req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
                 return;
             }
-            if (_syncCallback) _syncCallback();
+            if (_clearSlavesCallback) _clearSlavesCallback();
             req->send(200, "application/json", "{\"success\":true}");
         });
+
+        // ── API: Force Cloud Sync ────────────────────────────
+        _server.on("/api/system/sync", HTTP_POST, [this](AsyncWebServerRequest* req) {
 
         // ── Catch-all: DELETE + OPTIONS + 404 ───────────────
         _server.onNotFound([this](AsyncWebServerRequest* req) {
@@ -359,12 +362,14 @@ public:
     typedef void (*SetupCallback)(int mode, const char* apSSID, const char* apPass);
     typedef void (*ResetCallback)();
     typedef void (*ReSetupCallback)();
+    typedef void (*ClearSlavesCallback)();
     typedef void (*SyncCallback)();
 
     void onConnect(ConnectCallback cb) { _connectCallback = cb; }
     void onSetup(SetupCallback cb)     { _setupCallback = cb; }
     void onReSetup(ReSetupCallback cb) { _reSetupCallback = cb; }
     void onReset(ResetCallback cb)     { _resetCallback = cb; }
+    void onClearSlaves(ClearSlavesCallback cb) { _clearSlavesCallback = cb; }
     void onSync(SyncCallback cb)       { _syncCallback = cb; }
 
     void setSetupDone(bool done) { _setupDone = done; }
@@ -380,6 +385,7 @@ private:
     SetupCallback   _setupCallback = nullptr;
     ResetCallback   _resetCallback = nullptr;
     ReSetupCallback _reSetupCallback = nullptr;
+    ClearSlavesCallback _clearSlavesCallback = nullptr;
     SyncCallback    _syncCallback = nullptr;
 
     // ── Auth check ──────────────────────────────────────────

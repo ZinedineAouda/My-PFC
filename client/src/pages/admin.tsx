@@ -490,6 +490,53 @@ function AdminPanel() {
                </div>
              )}
           </div>
+
+          {/* Maintenance Section (Local Only) */}
+          {!isCloud && (
+            <div className="space-y-4 pt-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
+               <div className="flex items-center gap-3 ml-2 mb-2">
+                 <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                 <h2 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">System Maintenance</h2>
+               </div>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="bg-white p-8 rounded-[40px] border-2 border-slate-50 relative overflow-hidden group hover:border-blue-100 transition-all shadow-[0_20px_40px_-15px_rgba(0,0,0,0.02)]">
+                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-slate-900"><Database className="w-24 h-24" /></div>
+                    <div className="relative z-10">
+                      <h3 className="text-lg font-bold mb-2 tracking-tight">Erase Patient Registry</h3>
+                      <p className="text-xs text-slate-400 mb-8 leading-relaxed max-w-[240px]">This will delete all rooms and Bed units from this Master. <br/>All nodes will automatically enter Setup Mode.</p>
+                      <button 
+                        onClick={() => {
+                          if(confirm("DANGER: This will decommission ALL patient units. Are you sure?")) {
+                            apiRequest("POST", "/api/system/clear-slaves").then(() => window.location.reload());
+                          }
+                        }}
+                        className="w-full py-5 bg-slate-900 text-white font-bold uppercase text-[10px] tracking-[3px] rounded-2xl hover:translate-y-[-2px] active:translate-y-0 transition-all shadow-xl shadow-slate-900/10"
+                      >
+                        Clear All Rooms
+                      </button>
+                    </div>
+                 </div>
+                 
+                 <div className="bg-white p-8 rounded-[40px] border-2 border-red-50 relative overflow-hidden group hover:border-red-100 transition-all shadow-[0_20px_40px_-15px_rgba(220,38,38,0.02)]">
+                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-red-600"><AlertTriangle className="w-24 h-24" /></div>
+                    <div className="relative z-10">
+                      <h3 className="text-lg font-bold mb-2 text-red-600 tracking-tight">Factory Reset System</h3>
+                      <p className="text-xs text-slate-400 mb-8 leading-relaxed max-w-[240px]">Wipes WiFi credentials, account links, and all settings. <br/>Node will restart in initial Setup Wizard.</p>
+                      <button 
+                        onClick={() => {
+                          if(confirm("CRITICAL: This will wipe EVERYTHING including WiFi. Continue?")) {
+                            apiRequest("POST", "/api/system/reset").then(() => window.location.reload());
+                          }
+                        }}
+                        className="w-full py-5 bg-red-600 text-white font-bold uppercase text-[10px] tracking-[3px] rounded-2xl shadow-xl shadow-red-600/20 hover:translate-y-[-2px] active:translate-y-0 transition-all"
+                      >
+                        Reset Everything
+                      </button>
+                    </div>
+                 </div>
+               </div>
+            </div>
+          )}
         </main>
 
       {/* Modal Overlay */}

@@ -157,6 +157,14 @@ void setup() {
     dashboard.onSetup(onSetup);
     dashboard.onReSetup(onReSetup);
     dashboard.onReset(onFactoryReset);
+    dashboard.onClearSlaves([]() {
+        Serial.println("[SYSTEM] Clearing all patient nodes...");
+        for (auto const& [id, dev] : registry.devices()) {
+            mqttHandler.sendCommand(id, "RESET_UNIT");
+        }
+        delay(1000);
+        registry.factoryReset();
+    });
     dashboard.onSync([]() { 
         Serial.println("[SYSTEM] Manual Sync Triggered from Local Dashboard");
         cloudSync.syncNow(); 
@@ -227,6 +235,8 @@ void onDeviceChange(const String& deviceId, const char* eventType) {
 
     // Push update to all WebSocket clients
     if (strcmp(eventType, "delete") == 0) {
+        // Critical: Signal physical unit to wipe itself and enter setup mode
+        mqttHandler.sendCommand(deviceId, "RESET_UNIT");
         dashboard.broadcastDelete(deviceId);
     } else {
         dashboard.broadcastDeviceUpdate(deviceId);
@@ -342,6 +352,7 @@ void onRemoteCommand(const String& cmd, const String& params) {
         dashboard.broadcastFullState();
     } else if (cmd == "REMOVE_SLAVE") {
         // Removes unit from hardware memory and NVS persistence
+        // The registry.deleteDevice will trigger onDeviceChange -> RESET_UNIT
         if (registry.deleteDevice(params)) {
            Serial.printf("[REG] Node %s removed by remote command\n", params.c_str());
            dashboard.broadcastFullState();
@@ -391,22 +402,31 @@ void onReSetup() {
 
 // Full factory reset (Local or Remote)
 void onFactoryReset() {
-    Serial.println("[SYSTEM] FACTORY RESET TRIGGERED!");
+    Serial.println("╔══════════════════════════════════════════╗");
+    Serial.println("║  [SYSTEM] GLOBAL FACTORY RESET INITIATED ║");
+    Serial.println("╚══════════════════════════════════════════╝");
+    
+    // 1. Decommission ALL connected nodes before we lose our connection to them
+    Serial.println("[RESET] Signaling all patient units to clear memory...");
+    for (auto const& [id, dev] : registry.devices()) {
+        mqttHandler.sendCommand(id, "RESET_UNIT");
+    }
+    delay(2000); // Give radio stack time to transmit all packets
+
+    // 2. Wipe Registry NVS
+    registry.factoryReset();
+    
+    // 3. Clear Master Config (WiFi, Mode, etc)
     prefs.begin("master_cfg", false);
     prefs.clear();
     prefs.end();
-    Serial.println("[RESET] Factory reset triggered! Wiping all data...");
+
+    // 4. Wipe Sys Info (Build ID)
+    prefs.begin("sys_info", false);
+    prefs.clear();
+    prefs.end();
     
-    // 1. Clear Master Config (WiFi, Mode)
-    Preferences pcfg;
-    pcfg.begin("master_cfg", false);
-    pcfg.clear();
-    pcfg.end();
-    
-    // 2. Clear Device Registry
-    registry.factoryReset();
-    
-    Serial.println("[RESET] Data wiped. Restarting...");
+    Serial.println("[RESET] Memory wiped. System rebooting into Setup Mode...");
     delay(1000);
     ESP.restart();
 }

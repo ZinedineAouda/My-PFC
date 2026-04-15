@@ -168,6 +168,16 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
             lastClearTime = millis();
             digitalWrite(LED_PIN, LED_OFF);
             Serial.println("[CMD] Alert cleared by master");
+        } else if (strcmp(action, "RESET_UNIT") == 0) {
+            Serial.println("[CMD] FACTORY RESET REQUESTED");
+            ledBlink(10, 50, 50); // Warning blink
+            SlaveConfig cfg;
+            cfg.magic = 0; // Invalidate config
+            EEPROM.begin(sizeof(SlaveConfig));
+            EEPROM.put(0, cfg);
+            EEPROM.commit();
+            delay(500);
+            ESP.restart();
         }
     }
 
