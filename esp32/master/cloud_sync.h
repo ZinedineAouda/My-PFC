@@ -17,12 +17,16 @@
 
 class CloudSync {
 public:
+    typedef void (*CloudCommandCallback)(const String& cmd, const String& params);
+    
     CloudSync(DeviceRegistry& reg)
         : _registry(reg), _lastSync(0), _lastPing(0), _lastOpTime(0),
           _busy(false), _forceSyncPending(false),
           _consecutiveFails(0), _timeOffset(0) {
         _client = nullptr;
     }
+
+    void onCommand(CloudCommandCallback cb) { _commandCallback = cb; }
 
     ~CloudSync() {
         if (_client) {
@@ -88,16 +92,6 @@ public:
     }
 
 private:
-    DeviceRegistry&   _registry;
-    unsigned long     _lastSync;
-    unsigned long     _lastPing;
-    unsigned long     _lastOpTime;
-    bool              _busy;
-    bool              _forceSyncPending;
-    int               _consecutiveFails;
-    uint64_t          _timeOffset;
-    WiFiClientSecure* _client;
-    std::vector<String> _alertQueue;
 
     uint64_t _getCurrentTime() {
         return _timeOffset > 0 ? (millis() + _timeOffset) : 0;
@@ -205,18 +199,11 @@ private:
                     // 2. Listen for Remote Commands (New in 4D Rebuild)
                     if (!recvDoc["command"].isNull()) {
                         String cmd = recvDoc["command"].as<String>();
-                        Serial.printf("[CLOUD] Remote Command Received: %s\n", cmd.c_str());
+                        String params = recvDoc["params"] | "";
+                        Serial.printf("[CLOUD] Remote Command Received: %s (params: %s)\n", cmd.c_str(), params.c_str());
                         
-                        if (cmd == "WIPE_DATA") {
-                            Serial.println("[CLOUD] Remote WIPE triggered!");
-                            // Signal master.ino to reset (callback logic)
-                            if (_commandCallback) _commandCallback(100); 
-                        } else if (cmd == "CHANGE_MODE") {
-                            int newMode = recvDoc["mode"] | 0;
-                            if (newMode >= 1 && newMode <= 4) {
-                                Serial.printf("[CLOUD] Remote MODE change to: %d\n", newMode);
-                                if (_commandCallback) _commandCallback(newMode);
-                            }
+                        if (_commandCallback) {
+                            _commandCallback(cmd, params);
                         }
                     }
                 }
@@ -226,21 +213,6 @@ private:
         return code;
     }
 
-    // Callback for remote commands (reset / mode change)
-    typedef void (*CloudCommandCallback)(int action);
-    void onCommand(CloudCommandCallback cb) { _commandCallback = cb; }
-
-private:
-    DeviceRegistry&   _registry;
-    unsigned long     _lastSync;
-    unsigned long     _lastPing;
-    unsigned long     _lastOpTime;
-    bool              _busy;
-    bool              _forceSyncPending;
-    int               _consecutiveFails;
-    uint64_t          _timeOffset;
-    WiFiClientSecure* _client;
-    std::vector<String> _alertQueue;
     CloudCommandCallback _commandCallback = nullptr;
 
     // ── Lightweight ping ────────────────────────────────────
@@ -319,6 +291,19 @@ private:
             _consecutiveFails = 0;
         }
     }
+
+private:
+    DeviceRegistry&     _registry;
+    unsigned long       _lastSync;
+    unsigned long       _lastPing;
+    unsigned long       _lastOpTime;
+    bool                _busy;
+    bool                _forceSyncPending;
+    int                 _consecutiveFails;
+    uint64_t            _timeOffset;
+    WiFiClientSecure*   _client;
+    std::vector<String> _alertQueue;
+    CloudCommandCallback _commandCallback = nullptr;
 };
 
 #endif // CLOUD_SYNC_H

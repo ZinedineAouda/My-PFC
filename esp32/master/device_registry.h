@@ -180,6 +180,17 @@ public:
         return true;
     }
 
+    void clearAllAlerts() {
+        for (auto& kv : _devices) {
+            if (kv.second.alertActive) {
+                kv.second.alertActive = false;
+                kv.second.lastClearTime = millis();
+                kv.second.lastUpdatedAt = getCurrentTime();
+                _notify(kv.second.slaveId, "clear");
+            }
+        }
+    }
+
     bool approveDevice(const String& id, const String& name,
                        const String& bed, const String& room) {
         auto it = _devices.find(id);
