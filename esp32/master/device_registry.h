@@ -71,6 +71,7 @@ public:
                     dev.bed = obj["b"] | "";
                     dev.room = obj["r"] | "";
                     dev.approved = obj["a"] | false;
+                    dev.alertActive = obj["al"] | false; // Restore alert state
                     dev.registered = true;
                     dev.online = false; // Reset to false on reboot
                     _devices[dev.slaveId] = dev;
@@ -94,6 +95,7 @@ public:
             obj["b"]  = d.bed;
             obj["r"]  = d.room;
             obj["a"]  = d.approved;
+            obj["al"] = d.alertActive;
         }
         
         String out;
@@ -166,6 +168,7 @@ public:
         it->second.lastUpdatedAt = getCurrentTime();
 
         Serial.printf("[ALERT] Active: %s\n", id.c_str());
+        save(); // Persist alert state
         _notify(id, "alert");
         return true;
     }
@@ -176,6 +179,7 @@ public:
         it->second.alertActive = false;
         it->second.lastClearTime = millis();
         it->second.lastUpdatedAt = getCurrentTime();
+        save(); // Persist clear state
         _notify(id, "clear");
         return true;
     }
@@ -189,6 +193,7 @@ public:
                 _notify(kv.second.slaveId, "clear");
             }
         }
+        save();
     }
 
     bool approveDevice(const String& id, const String& name,

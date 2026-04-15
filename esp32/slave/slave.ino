@@ -54,10 +54,11 @@ struct SlaveConfig {
     char ssid[64];
     char pass[64];
     char mqtt[32];
-    bool approved; // Moved to end to preserve alignment of string fields
+    bool approved;
+    bool alertActive; // Persist alert state across power cuts
 };
-// Updated MAGIC to force a clean reset of the shifted memory from the previous version
-const uint32_t CONFIG_MAGIC = 0xAA55CC34;
+// Updated MAGIC to force a clean reset for the new structure
+const uint32_t CONFIG_MAGIC = 0xAA55CC35;
 
 // ─── State ──────────────────────────────────────────────────────────
 bool setupDone       = USE_HARDCODED_WIFI;
@@ -71,7 +72,10 @@ unsigned long lastHeartbeat   = 0;
 unsigned long lastReconnect   = 0;
 unsigned long alertLedTime    = 0;
 unsigned long lastClearTime   = 0;  // Localized cooldown after master clear
-bool configChanged            = false; // Deferred save flag to prevent crashes in callbacks
+bool configChanged            = false;
+unsigned long bootTime         = 0;     
+bool portalTriggered          = false; 
+bool recoveryAlertPending     = false; // Flag to re-publish on first MQTT connect
 
 // ─── WiFi Credentials ──────────────────────────────────────────────
 char wifiSSID[64] = DEFAULT_WIFI_SSID;
@@ -85,6 +89,7 @@ void loadSlaveConfig() {
     if (cfg.magic == CONFIG_MAGIC) {
         setupDone = cfg.setupDone;
         isApproved = cfg.approved;
+        alertActive = cfg.alertActive; // Restore last state
         strncpy(wifiSSID, cfg.ssid, sizeof(wifiSSID));
         strncpy(wifiPass, cfg.pass, sizeof(wifiPass));
         strncpy(mqttIP, cfg.mqtt, sizeof(mqttIP));
@@ -99,6 +104,7 @@ void saveSlaveConfig() {
     cfg.magic = CONFIG_MAGIC;
     cfg.setupDone = setupDone;
     cfg.approved = isApproved;
+    cfg.alertActive = alertActive;
     strncpy(cfg.ssid, wifiSSID, sizeof(cfg.ssid));
     strncpy(cfg.pass, wifiPass, sizeof(cfg.pass));
     strncpy(cfg.mqtt, mqttIP, sizeof(cfg.mqtt));
@@ -351,6 +357,7 @@ void publishAlert() {
     // Note: PubSubClient publish() is QoS 0 by default.Master handles the state.
     if (mqtt.publish(topicAlert.c_str(), payload.c_str(), false)) {
         alertActive = true;
+        configChanged = true; // Save alert state
         alertLedTime = millis();
         digitalWrite(LED_PIN, LED_ON);
         Serial.println("[ALERT] Published successfully");
@@ -436,6 +443,7 @@ function updateUI(d){const c=document.getElementById('main-card');if(!d.connecte
         });
 
     setupServer.begin();
+    portalTriggered = true; // Mark as running
 }
 #endif
 
@@ -443,6 +451,7 @@ function updateUI(d){const c=document.getElementById('main-card');if(!d.connecte
 //  SETUP
 // ═══════════════════════════════════════════════════════════════════
 void setup() {
+    bootTime = millis();
     Serial.begin(115200);
     delay(200);
 
@@ -491,10 +500,19 @@ void setup() {
         Serial.printf("[WIFI] Connecting to %s (hardcoded)...\n", wifiSSID);
         setupDone = true;
     } else {
-        // Start setup portal
-        #if !USE_HARDCODED_WIFI
-        startSetupPortal();
-        #endif
+        // We no longer start the portal immediately. 
+        // We wait 60s in the loop to allow auto-reconnect.
+        Serial.println("[BOOT] Smart Recovery: Waiting 60s for auto-reconnect...");
+        WiFi.mode(WIFI_STA);
+        if (strlen(wifiSSID) > 0) {
+            WiFi.begin(wifiSSID, wifiPass);
+        }
+    }
+
+    // Re-trigger alert if it was active before power cut
+    if (isApproved && alertActive) {
+        Serial.println("[RECOVER] Alert state restored from memory");
+        recoveryAlertPending = true; 
     }
 
     // Boot-up LED pattern
@@ -507,8 +525,13 @@ void setup() {
 // ═══════════════════════════════════════════════════════════════════
 void loop() {
 
-    // ── Handle setup portal connect request ─────────────────
+    // ── Smart Setup Portal Delay (1 Minute) ───────────────
     #if !USE_HARDCODED_WIFI
+    if (!mqttConnected && !portalTriggered && (millis() - bootTime > 60000)) {
+        Serial.println("[RECOVERY] Disconnected for >60s. Opening Setup Portal...");
+        startSetupPortal();
+    }
+
     if (connectPending) {
         connectPending = false;
         Serial.printf("[SETUP] Connecting to %s, MQTT broker: %s\n",
@@ -554,6 +577,13 @@ void loop() {
             // ── MQTT connection + message processing ────────
             if (connectMQTT()) {
                 mqtt.loop(); // Process incoming messages
+
+                // ── Recover Pending Alert ───────────────────
+                if (recoveryAlertPending) {
+                    recoveryAlertPending = false;
+                    Serial.println("[RECOVER] Re-publishing alert to Master...");
+                    publishAlert();
+                }
 
                 // ── Periodic heartbeat ──────────────────────
                 unsigned long now = millis();
