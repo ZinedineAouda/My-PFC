@@ -5,20 +5,18 @@ async function main() {
   const c = new Client(process.env.DATABASE_URL);
   await c.connect();
   
-  // Seed the system_settings row if it doesn't exist
-  const result = await c.query(
-    `INSERT INTO system_settings (id, wifi_mode) VALUES (1, 4) ON CONFLICT (id) DO NOTHING RETURNING *`
-  );
+  const res = await c.query("SELECT * FROM system_settings");
+  console.log('SETTINGS:', JSON.stringify(res.rows, null, 2));
   
-  if (result.rows.length > 0) {
-    console.log('CREATED system_settings row:', JSON.stringify(result.rows[0]));
-  } else {
-    console.log('system_settings row already exists');
-  }
+  const now = Date.now();
+  const lastSeen = res.rows[0]?.master_last_seen;
+  console.log(`\nCurrent time: ${now}`);
+  console.log(`Last seen:    ${lastSeen}`);
+  console.log(`Difference:   ${lastSeen ? now - Number(lastSeen) : 'N/A'}ms`);
+  console.log(`Online?:      ${lastSeen ? (now - Number(lastSeen) < 60000) : false}`);
 
-  // Verify
-  const check = await c.query("SELECT * FROM system_settings");
-  console.log('SETTINGS NOW:', JSON.stringify(check.rows, null, 2));
+  const slavesRes = await c.query("SELECT * FROM slaves");
+  console.log(`\nSLAVES (${slavesRes.rows.length}):`, JSON.stringify(slavesRes.rows, null, 2));
 
   await c.end();
 }

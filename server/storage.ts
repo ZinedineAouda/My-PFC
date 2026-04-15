@@ -22,12 +22,13 @@ export interface IStorage {
   syncFromMaster(slaves: any[], stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void>;
   queueCommand(command: string, params?: string): Promise<void>;
   getAndClearCommand(): Promise<{ command: string; params: string } | null>;
+  getSettings(): Promise<any>;
   reset(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
   // ─── Internal Utility: Upsert Singleton Settings ───────────────────
-  private async getSettings() {
+  public async getSettings() {
     const [row] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
     if (!row) {
       // Create default row if missing

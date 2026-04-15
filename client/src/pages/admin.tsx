@@ -288,10 +288,11 @@ function AdminPanel() {
     queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
     queryClient.invalidateQueries({ queryKey: ["/api/status"] });
     if (msg.type === "ALERT" || msg.type === "UPDATE") {
-       if (msg.device?.alertActive) {
+       const device = msg.payload;
+       if (device?.alertActive) {
           if (sirenRef.current) sirenRef.current.play().catch(() => {});
           Haptics.vibrate({ duration: 1000 }).catch(() => {});
-          toast({ title: "EMERGENCY ALARM", description: `Alert: ${msg.device.patientName || msg.device.slaveId}`, variant: "destructive" });
+          toast({ title: "EMERGENCY ALARM", description: `Alert: ${device.patientName || device.slaveId}`, variant: "destructive" });
        }
     }
   });
@@ -308,6 +309,7 @@ function AdminPanel() {
     rssi: number; 
     slaves: number; 
     online: number; 
+    alerts: number;
     isMasterOnline?: boolean;
     masterIP?: string;
     wifiError?: string;

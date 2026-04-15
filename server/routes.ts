@@ -151,7 +151,7 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   app.get("/api/status", asyncHandler(async (_req: Request, res: Response) => {
     const all = await storage.getAllSlaves();
-    const [settings] = await db.select().from(systemSettings).where(eq(systemSettings.id, 1));
+    const settings = await storage.getSettings();
     return res.json({
       mode: settings?.wifiMode ?? await storage.getMode(),
       setup: await storage.isSetupDone(),
