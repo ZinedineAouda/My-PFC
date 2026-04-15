@@ -46,7 +46,7 @@ public:
         });
 
         // ── Start broker ────────────────────────────────────
-        _broker.begin();
+        _broker.begin(MQTT_PORT);
         Serial.printf("[MQTT] Broker started on port %d\n", MQTT_PORT);
     }
 

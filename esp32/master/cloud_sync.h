@@ -27,10 +27,14 @@ public:
         _client->setInsecure();
         _client->setHandshakeTimeout(30000);
         _http = new HTTPClient();
-        _http->setTimeout(15000); 
+        _http->setTimeout(3000); // Drastically reduced to prevent Master loop blocking (critical for MQTT server)
     }
 
     void onCommand(CloudCommandCallback cb) { _commandCallback = cb; }
+
+    void setTimeout(unsigned long timeoutMs) {
+        if (_http) _http->setTimeout(timeoutMs);
+    }
 
     ~CloudSync() {
         if (_http) {
