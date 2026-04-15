@@ -13,7 +13,7 @@ class WifiManager {
 public:
     WifiManager()
         : _mode(MODE_NONE), _staConnected(false),
-          _lastReconnect(0), _reconnectInterval(5000), _lastReason(0) {
+          _lastReconnect(0), _reconnectInterval(5000) {
         memset(_apSSID, 0, sizeof(_apSSID));
         memset(_apPass, 0, sizeof(_apPass));
         memset(_staSSID, 0, sizeof(_staSSID));
@@ -79,9 +79,8 @@ public:
             Serial.printf("[WIFI] STA connected! IP: %s\n", _staIP.c_str());
         } else if (!connected && _staConnected) {
             _staConnected = false;
-            _lastReason = WiFi.reasonCode();
-            Serial.printf("[WIFI] STA disconnected. Reason: %d - %s\n", 
-                          _lastReason, getLastError().c_str());
+            Serial.printf("[WIFI] STA disconnected. Status: %d - %s\n", 
+                          (int)WiFi.status(), getLastError().c_str());
         }
 
         // Auto-reconnect STA (non-blocking)
@@ -143,10 +142,7 @@ public:
         wl_status_t status = WiFi.status();
         switch (status) {
             case WL_NO_SSID_AVAIL: return "SSID Not Found";
-            case WL_CONNECT_FAILED: {
-                if (_lastReason == 15 || _lastReason == 204) return "Invalid Password";
-                return "Connection Failed (" + String(_lastReason) + ")";
-            }
+            case WL_CONNECT_FAILED: return "Invalid Password or Timeout";
             case WL_CONNECTION_LOST: return "Connection Lost";
             case WL_DISCONNECTED: return "Disconnected";
             case WL_IDLE_STATUS: return "Connecting...";
@@ -183,7 +179,6 @@ public:
 private:
     WiFiOpMode _mode;
     bool _staConnected;
-    int  _lastReason;
     unsigned long _lastReconnect;
     unsigned long _reconnectInterval;
     String _staIP;
