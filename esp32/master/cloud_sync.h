@@ -115,15 +115,6 @@ private:
     }
 
     // ── Ensure persistent TLS client exists ─────────────────
-    WiFiClientSecure& _ensureClient() {
-        if (!_client) {
-            _client = new WiFiClientSecure();
-            _client->setInsecure();
-            _client->setHandshakeTimeout(12); // 12s handshake for stability
-            Serial.println("[CLOUD] TLS client created");
-        }
-        return *_client;
-    }
 
     // ── Reset the TLS client (after repeated failures) ──────
     void _resetClient() {
@@ -151,15 +142,22 @@ private:
     }
 
     int _executePost(const String& path, const String& payload) {
-        WiFiClientSecure& client = _ensureClient();
+        WiFiClientSecure client;
+        client.setInsecure();
+        client.setHandshakeTimeout(30000); // 30s for secure handshake
+        
         HTTPClient http;
-        http.setTimeout(CLOUD_HTTP_TIMEOUT);
-        http.setReuse(false); // Forced false to prevent -1 (Stale Connection) errors on cloud proxies
+        http.setTimeout(20000); // 20s for the entire request
+        http.setReuse(false); 
 
         String url = String(CLOUD_SERVER_URL) + path;
-        Serial.printf("[CLOUD] Connecting to: %s\n", url.c_str());
+        Serial.printf("[CLOUD] Requesting: %s\n", url.c_str());
         
-        if (!http.begin(client, url)) return -2; // Connection init error
+        delay(100); // Settlement delay
+        if (!http.begin(client, url)) {
+            Serial.println("[CLOUD] Failed to init HTTPClient");
+            return -2;
+        }
 
         http.addHeader("Content-Type", "application/json");
         http.addHeader("x-device-key", CLOUD_DEVICE_KEY);

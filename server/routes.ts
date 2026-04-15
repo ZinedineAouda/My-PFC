@@ -307,20 +307,24 @@ export async function registerRoutes(
       console.log(`[SYNC] Delivering command to Master: ${cmd.command}`);
     }
 
-    if (!parsed.success) {
-      await storage.updateMasterHeartbeat();
+    try {
+      if (!parsed.success) {
+        await storage.updateMasterHeartbeat();
+        return res.json(responseData);
+      }
+
+      await storage.syncFromMaster(parsed.data.slaves, {
+        mode: parsed.data.mode,
+        uptime: parsed.data.uptime,
+        rssi: parsed.data.rssi,
+        wifiError: parsed.data.wifiError
+      });
+      broadcastAllDevices();
       return res.json(responseData);
+    } catch (err) {
+      console.error("[SYNC] Fatal error during bidirectional sync:", err);
+      return res.status(500).json({ success: false, message: "Internal Sync Failure" });
     }
-
-    await storage.syncFromMaster(parsed.data.slaves, {
-      mode: parsed.data.mode,
-      uptime: parsed.data.uptime,
-      rssi: parsed.data.rssi,
-      wifiError: parsed.data.wifiError
-    });
-    broadcastAllDevices();
-
-    return res.json(responseData);
   }));
 
   app.post("/api/master-ping", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
