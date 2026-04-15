@@ -302,6 +302,16 @@ public:
             req->send(200, "application/json", "{\"success\":true}");
         });
 
+        // ── API: Force Cloud Sync ────────────────────────────
+        _server.on("/api/system/sync", HTTP_POST, [this](AsyncWebServerRequest* req) {
+            if (!_checkAuth(req)) {
+                req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
+                return;
+            }
+            if (_syncCallback) _syncCallback();
+            req->send(200, "application/json", "{\"success\":true}");
+        });
+
         // ── Catch-all: DELETE + OPTIONS + 404 ───────────────
         _server.onNotFound([this](AsyncWebServerRequest* req) {
             if (req->method() == HTTP_OPTIONS) {
@@ -349,11 +359,13 @@ public:
     typedef void (*SetupCallback)(int mode, const char* apSSID, const char* apPass);
     typedef void (*ResetCallback)();
     typedef void (*ReSetupCallback)();
+    typedef void (*SyncCallback)();
 
     void onConnect(ConnectCallback cb) { _connectCallback = cb; }
     void onSetup(SetupCallback cb)     { _setupCallback = cb; }
-    void onReset(ResetCallback cb)     { _resetCallback = cb; }
     void onReSetup(ReSetupCallback cb) { _reSetupCallback = cb; }
+    void onReset(ResetCallback cb)     { _resetCallback = cb; }
+    void onSync(SyncCallback cb)       { _syncCallback = cb; }
 
     void setSetupDone(bool done) { _setupDone = done; }
     void setMode(WiFiOpMode m)   { _mode = m; }
@@ -368,6 +380,7 @@ private:
     SetupCallback   _setupCallback = nullptr;
     ResetCallback   _resetCallback = nullptr;
     ReSetupCallback _reSetupCallback = nullptr;
+    SyncCallback    _syncCallback = nullptr;
 
     // ── Auth check ──────────────────────────────────────────
     static bool _checkAuth(AsyncWebServerRequest* req) {

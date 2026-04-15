@@ -541,6 +541,7 @@ void loop() {
 
         // Non-blocking: let the loop handle connection
         setupDone = true;
+        saveSlaveConfig();
     }
     #endif
 

@@ -357,6 +357,23 @@ function AdminPanel() {
                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">UPTIME: {Math.floor((status?.uptime || 0) / 60)} MIN</p>
                <span className="text-[9px] text-slate-300 font-bold">|</span>
                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">RSSI: {status?.rssi || 0} dBm</p>
+               {isCloudActive && (
+                 <>
+                   <span className="text-[9px] text-slate-300 font-bold">|</span>
+                   <button 
+                     onClick={() => {
+                       const btn = document.getElementById('sync-btn');
+                       if (btn) btn.classList.add('animate-spin');
+                       apiRequest("POST", "/api/system/sync")
+                         .finally(() => setTimeout(() => btn?.classList.remove('animate-spin'), 1000));
+                     }}
+                     className="flex items-center gap-1 group"
+                   >
+                     <RefreshCw id="sync-btn" className="w-[10px] h-[10px] text-blue-600 group-hover:text-blue-700" />
+                     <span className="text-[9px] text-blue-600 font-black uppercase tracking-tighter group-hover:text-blue-700">Sync Now</span>
+                   </button>
+                 </>
+               )}
             </div>
           </div>
           <button onClick={() => logoutMutation.mutate()} className="w-10 h-10 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">

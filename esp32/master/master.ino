@@ -157,6 +157,10 @@ void setup() {
     dashboard.onSetup(onSetup);
     dashboard.onReSetup(onReSetup);
     dashboard.onReset(onFactoryReset);
+    dashboard.onSync([]() { 
+        Serial.println("[SYSTEM] Manual Sync Triggered from Local Dashboard");
+        cloudSync.syncNow(); 
+    });
     dashboard.begin(setupDone, currentMode);
 
     if (setupDone) {
@@ -243,6 +247,7 @@ void onDeviceChange(const String& deviceId, const char* eventType) {
         if (strcmp(eventType, "alert") == 0) {
             cloudSync.alertToCloud(deviceId);
         } else if (strcmp(eventType, "approve") == 0 ||
+                   strcmp(eventType, "update") == 0 || 
                    strcmp(eventType, "clear") == 0 ||
                    strcmp(eventType, "delete") == 0) {
             cloudSync.syncNow();
