@@ -27,11 +27,19 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
         credentials: "include",
         body: JSON.stringify({ username: user, password: pass }),
       });
-      if (!res.ok) throw new Error("Invalid credentials");
+      if (!res.ok) {
+        if (res.status === 401) throw new Error("Invalid credentials");
+        throw new Error(`Server error: ${res.status}`);
+      }
       onLogin();
       toast({ title: "Authorized", description: "Terminal access granted." });
-    } catch {
-      toast({ title: "Login Failed", description: "Invalid credentials", variant: "destructive" });
+    } catch (err: any) {
+      console.error("Login Error:", err);
+      toast({ 
+        title: "Login Failed", 
+        description: err.message || "Could not connect to security server.", 
+        variant: "destructive" 
+      });
     } finally {
       setLoading(false);
     }
