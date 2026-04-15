@@ -28,6 +28,8 @@ export interface IStorage {
     approved?: boolean;
     online?: boolean;
   }>): Promise<void>;
+  queueCommand(command: string, params?: string): Promise<void>;
+  getAndClearCommand(): Promise<{ command: string; params: string } | null>;
   reset(): Promise<void>;
 }
 
@@ -151,7 +153,7 @@ export class DatabaseStorage implements IStorage {
   async setMode(mode: number): Promise<void> {
     await this.getSettings(); // ensure row exists
     await db.update(systemSettings)
-      .set({ wifiMode: mode })
+      .set({ wifiMode: mode, pendingCommand: "CHANGE_MODE", commandParams: mode.toString() })
       .where(eq(systemSettings.id, 1));
   }
 
@@ -233,10 +235,35 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async queueCommand(command: string, params: string = ""): Promise<void> {
+    await this.getSettings(); // ensure exists
+    await db.update(systemSettings)
+      .set({ pendingCommand: command, commandParams: params })
+      .where(eq(systemSettings.id, 1));
+    console.log(`[STORAGE] Queued command for Master: ${command} (${params})`);
+  }
+
+  async getAndClearCommand(): Promise<{ command: string; params: string } | null> {
+    const settings = await this.getSettings();
+    if (!settings.pendingCommand) return null;
+
+    const cmd = { 
+      command: settings.pendingCommand, 
+      params: settings.commandParams || "" 
+    };
+
+    // Clear command immediately after fetching
+    await db.update(systemSettings)
+      .set({ pendingCommand: null, commandParams: null })
+      .where(eq(systemSettings.id, 1));
+
+    return cmd;
+  }
+
   async reset(): Promise<void> {
     await db.delete(slaves);
     await db.update(systemSettings)
-      .set({ wifiMode: 0, masterLastSeen: null })
+      .set({ wifiMode: 0, masterLastSeen: null, pendingCommand: "WIPE_DATA", commandParams: "" })
       .where(eq(systemSettings.id, 1));
   }
 }

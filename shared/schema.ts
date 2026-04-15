@@ -22,6 +22,8 @@ export const systemSettings = pgTable("system_settings", {
   id: integer("id").primaryKey().default(1),
   masterLastSeen: bigint("master_last_seen", { mode: "number" }),
   wifiMode: integer("wifi_mode").notNull().default(1),
+  pendingCommand: text("pending_command"),
+  commandParams: text("command_params"),
 });
 
 // ─── Slave Device Schema (Zod) ──────────────────────────────────────
