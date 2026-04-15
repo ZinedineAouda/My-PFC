@@ -523,6 +523,7 @@ void setup() {
     if (isApproved && alertActive) {
         Serial.println("[RECOVER] Alert state restored from memory");
         recoveryAlertPending = true; 
+        alertLedTime = millis(); // Reset timer so it doesn't immediately time out
     }
 
     // Boot-up LED pattern
