@@ -105,7 +105,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                       <span className={`text-[9px] font-bold uppercase tracking-widest ${mode === opt.m ? "text-blue-600" : "text-slate-400"}`}>Selection</span>
                       <div className={`p-1.5 rounded-lg ${mode === opt.m ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-500"}`}>{opt.icon}</div>
                     </div>
-                    <div className="font-extrabold text-slate-900">{opt.t}</div>
+                    <div className="font-bold text-slate-900">{opt.t}</div>
                     <div className="text-slate-500 text-[11px] font-medium leading-relaxed mt-1 opacity-80">{opt.d}</div>
                   </button>
                 ))}
@@ -585,16 +585,16 @@ function SlaveModal({ title, open, onClose, onSubmit, defaults }: any) {
         <div className="space-y-6">
           <div className="space-y-2">
             <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Patient Name</label>
-            <input className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-600 focus:bg-white transition-all font-extrabold" value={name} onChange={e => setName(e.target.value)} placeholder="Full Name..." autoFocus />
+            <input className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-600 focus:bg-white transition-all font-bold" value={name} onChange={e => setName(e.target.value)} placeholder="Full Name..." autoFocus />
           </div>
           <div className="grid grid-cols-2 gap-4">
              <div className="space-y-2">
                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Room</label>
-               <input className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-600 focus:bg-white transition-all font-extrabold" value={room} onChange={e => setRoom(e.target.value)} placeholder="e.g. 101" />
+               <input className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-600 focus:bg-white transition-all font-bold" value={room} onChange={e => setRoom(e.target.value)} placeholder="e.g. 101" />
              </div>
              <div className="space-y-2">
                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Bed</label>
-               <input className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-600 focus:bg-white transition-all font-extrabold" value={bed} onChange={e => setBed(e.target.value)} placeholder="e.g. 2" />
+               <input className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-blue-600 focus:bg-white transition-all font-bold" value={bed} onChange={e => setBed(e.target.value)} placeholder="e.g. 2" />
              </div>
           </div>
         </div>

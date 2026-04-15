@@ -324,15 +324,16 @@ void startSetupPortal() {
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Patient Unit</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800&display=swap');
 :root{--pri:#2563eb;--bg:#f8fafc;--card:#ffffff;--text:#0f172a;--muted:#64748b;--danger:#dc2626;--ok:#10b981}
-*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Inter",sans-serif}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Outfit',-apple-system,BlinkMacSystemFont,"Inter",sans-serif}
 body{background:var(--bg);color:var(--text);min-height:100vh}
 .header{background:var(--pri);padding:40px;color:#fff;position:relative;overflow:hidden}
 .header-bg{position:absolute;top:-20px;right:-20px;opacity:0.1;transform:rotate(45deg)}
 .header-content{position:relative;z-index:10;display:flex;items-center;gap:16px}
 .icon-box{width:48px;height:48px;background:rgba(255,255,255,0.2);backdrop-filter:blur(8px);border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 10px rgba(255,255,255,0.2)}
-.header h1{font-size:24px;font-weight:900;text-transform:uppercase;letter-spacing:-0.5px}
-.header p{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:3px;opacity:0.7;margin-bottom:4px}
+.header h1{font-size:24px;font-weight:700;text-transform:uppercase;letter-spacing:-0.5px}
+.header p{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:3px;opacity:0.7;margin-bottom:4px}
 .content{padding:32px;max-width:500px;margin:0 auto}
 .card{background:var(--card);border-radius:40px;padding:40px;box-shadow:0 40px 80px -15px rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.02)}
 .status-card{text-align:center;padding:60px 20px}
@@ -340,13 +341,13 @@ body{background:var(--bg);color:var(--text);min-height:100vh}
 .status-ok{background:rgba(16,185,129,0.1);color:var(--ok)}
 .status-help{background:rgba(220,38,38,0.1);color:var(--danger);animation:pulse 2s infinite}
 @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.05)}100%{transform:scale(1)}}
-.status-label{font-size:40px;font-weight:900;letter-spacing:-1px;margin-bottom:8px}
+.status-label{font-size:40px;font-weight:700;letter-spacing:-1px;margin-bottom:8px}
 .status-sub{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:2px}
 .field{margin-bottom:24px}
-label{display:block;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:8px;padding-left:4px}
+label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:8px;padding-left:4px}
 input{width:100%;padding:20px;background:var(--bg);border:2px solid transparent;border-radius:24px;font-size:16px;font-weight:700;outline:none;transition:all 0.3s}
 input:focus{background:#fff;border-color:var(--pri);box-shadow:0 0 0 8px rgba(37,99,235,0.05)}
-button{width:100%;padding:20px;background:#0f172a;color:#fff;border:none;border-radius:24px;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:3px;cursor:pointer;transition:all 0.3s;box-shadow:0 20px 40px -10px rgba(0,0,0,0.1)}
+button{width:100%;padding:20px;background:#0f172a;color:#fff;border:none;border-radius:24px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:3px;cursor:pointer;transition:all 0.3s;box-shadow:0 20px 40px -10px rgba(0,0,0,0.1)}
 button:hover{transform:translateY(-2px);box-shadow:0 30px 60px -15px rgba(0,0,0,0.2)}
 button:active{transform:translateY(1px)}
 #msg{margin-top:24px;text-align:center;font-size:12px;font-weight:800;color:var(--ok)}
