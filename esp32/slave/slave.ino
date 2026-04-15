@@ -51,6 +51,7 @@ String topicDiscovery; // Global discovery/migration topic
 struct SlaveConfig {
     uint32_t magic;
     bool setupDone;
+    bool approved; // Persistent approval status
     char ssid[64];
     char pass[64];
     char mqtt[32];
@@ -76,15 +77,18 @@ char wifiPass[64] = DEFAULT_WIFI_PASS;
 char mqttIP[32]   = MQTT_BROKER_IP;
 
 void loadSlaveConfig() {
-    EEPROM.begin(sizeof(SlaveConfig));
+    EEPROM.begin(512); // Use standard 512 byte sector
     SlaveConfig cfg;
     EEPROM.get(0, cfg);
     if (cfg.magic == CONFIG_MAGIC) {
         setupDone = cfg.setupDone;
+        isApproved = cfg.approved;
         strncpy(wifiSSID, cfg.ssid, sizeof(wifiSSID));
         strncpy(wifiPass, cfg.pass, sizeof(wifiPass));
         strncpy(mqttIP, cfg.mqtt, sizeof(mqttIP));
         Serial.println("[EEPROM] Loaded saved configuration");
+    } else {
+        Serial.println("[EEPROM] No valid configuration found");
     }
 }
 
@@ -92,10 +96,12 @@ void saveSlaveConfig() {
     SlaveConfig cfg;
     cfg.magic = CONFIG_MAGIC;
     cfg.setupDone = setupDone;
+    cfg.approved = isApproved;
     strncpy(cfg.ssid, wifiSSID, sizeof(cfg.ssid));
     strncpy(cfg.pass, wifiPass, sizeof(cfg.pass));
     strncpy(cfg.mqtt, mqttIP, sizeof(cfg.mqtt));
-    EEPROM.begin(sizeof(SlaveConfig));
+    
+    EEPROM.begin(512);
     EEPROM.put(0, cfg);
     EEPROM.commit();
     Serial.println("[EEPROM] Configuration saved");
@@ -153,11 +159,15 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (t == topicStatus) {
         bool wasApproved = isApproved;
         isApproved = doc["approved"] | false;
-        if (isApproved && !wasApproved) {
-            Serial.println("[STATUS] Device APPROVED by admin");
-            ledBlink(3, 80, 80); // Confirmation blink
-        } else if (!isApproved && wasApproved) {
-            Serial.println("[STATUS] Approval revoked");
+        
+        if (isApproved != wasApproved) {
+            saveSlaveConfig(); // Persist the new status
+            if (isApproved) {
+                Serial.println("[STATUS] Device APPROVED by admin");
+                ledBlink(3, 80, 80); 
+            } else {
+                Serial.println("[STATUS] Approval revoked");
+            }
         }
     }
 

@@ -37,7 +37,12 @@ public:
         _broker.subscribe("device/+/heartbeat", [this](const char* topic, const char* payload) {
             String deviceId = _extractDeviceId(topic);
             if (deviceId.isEmpty()) return;
+            
             _registry.heartbeat(deviceId);
+            
+            // Refresh approval status for the slave on every heartbeat
+            // This fixes the "ghost setup page" after a slave reboots
+            publishDeviceStatus(deviceId);
         });
 
         // ── Start broker ────────────────────────────────────
