@@ -28,7 +28,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState(1);
-  const [apSsid, setApSsid] = useState("");
+  const [apSsid, setApSsid] = useState("HospitalAlarm");
   const [apPass, setApPass] = useState("");
   const [staSsid, setStaSsid] = useState("");
   const [staPass, setStaPass] = useState("");
@@ -125,7 +125,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">WiFi Name</label>
                   <input 
                     className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[24px] focus:border-blue-600 focus:bg-white outline-none transition-all font-bold text-lg placeholder:text-slate-300" 
-                    placeholder="e.g. Ward-A-Unit" 
+                    placeholder="e.g. HospitalAlarm" 
                     value={apSsid} onChange={e => setApSsid(e.target.value)} 
                   />
                 </div>
