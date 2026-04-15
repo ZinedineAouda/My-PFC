@@ -377,8 +377,18 @@ void connectWiFi() {
     unsigned long now = millis();
     if (now - lastTry < RECONNECT_MS) return;
     lastTry = now;
+    
+    wl_status_t status = WiFi.status();
+    String reason = "Unknown";
+    switch(status) {
+        case WL_NO_SSID_AVAIL: reason = "SSID Not Found"; break;
+        case WL_CONNECT_FAILED: reason = "Failed (Check Pass)"; break;
+        case WL_IDLE_STATUS: reason = "In Progress"; break;
+        case WL_DISCONNECTED: reason = "Disconnected"; break;
+        default: reason = String(status);
+    }
 
-    Serial.printf("[WIFI] Connecting to %s...\n", wifiSSID);
+    Serial.printf("[WIFI] Target: %s | Status: %s | Trying...\n", wifiSSID, reason.c_str());
     WiFi.begin(wifiSSID, wifiPass);
 }
 
