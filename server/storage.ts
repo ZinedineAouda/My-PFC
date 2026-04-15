@@ -162,19 +162,31 @@ export class DatabaseStorage implements IStorage {
     if (rssi !== undefined) update.masterRSSI = rssi;
     if (wifiError !== undefined) update.masterWifiError = wifiError;
 
-    await db.insert(systemSettings)
-      .values({ 
-        id: 1, 
-        masterLastSeen: now,
-        wifiMode: mode !== undefined ? mode : 1,
-        masterUptime: uptime,
-        masterRSSI: rssi,
-        masterWifiError: wifiError
-      })
-      .onConflictDoUpdate({
-        target: systemSettings.id,
-        set: update
-      });
+    try {
+      await db.insert(systemSettings)
+        .values({ 
+          id: 1, 
+          masterLastSeen: now,
+          wifiMode: mode !== undefined ? mode : 1,
+          masterUptime: uptime,
+          masterRSSI: rssi,
+          masterWifiError: wifiError
+        })
+        .onConflictDoUpdate({
+          target: systemSettings.id,
+          set: update
+        });
+    } catch (err) {
+      console.warn("[DB] Failed to update Master heartbeat (schema mismatch?):", err);
+      // Fallback: minimal update of just the 'last seen' timestamp if possible
+      try {
+        await db.update(systemSettings)
+          .set({ masterLastSeen: now })
+          .where(eq(systemSettings.id, 1));
+      } catch (e) {
+        console.error("[DB] Critical: Heartbeat fallback failed:", e);
+      }
+    }
   }
 
   async isMasterOnline(): Promise<boolean> {
