@@ -514,10 +514,10 @@ function AdminPanel() {
                       <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
                         <Trash2 className="w-8 h-8" />
                       </div>
-                      <h3 className="text-xl font-bold mb-2 text-slate-900 tracking-tight">Wipe Data</h3>
+                      <h3 className="text-xl font-bold mb-2 text-slate-900 tracking-tight">Factory Reset</h3>
                       <p className="text-xs text-slate-400 mb-8 leading-relaxed mx-auto max-w-[320px]">
-                        This will delete ALL database records, patient rooms, and system settings. 
-                        The device will restart in its initial setup mode.
+                        This will delete ALL database records, forget WiFi settings, and reset the device mode. 
+                        The unit will restart and enter the initial Setup Wizard.
                       </p>
                       <button 
                         onClick={() => {

@@ -20,7 +20,11 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(apiUrl(url), {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {
+      "X-Auth-Token": "admin1234",
+      "X-Admin-Token": "admin1234",
+      ...(data ? { "Content-Type": "application/json" } : {}),
+    },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -37,6 +41,10 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const fullUrl = apiUrl(queryKey.join("/") as string);
     const res = await fetch(fullUrl, {
+      headers: {
+        "X-Auth-Token": "admin1234",
+        "X-Admin-Token": "admin1234",
+      },
       credentials: "include",
     });
 
