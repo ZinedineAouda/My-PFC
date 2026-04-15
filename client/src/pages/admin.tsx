@@ -276,6 +276,7 @@ function AdminPanel() {
   const [modalSlave, setModalSlave] = useState<Slave | null>(null);
   const [modalMode, setModalMode] = useState<"approve" | "edit">("approve");
   const [activeTab, setActiveTab] = useState<"dashboard" | "settings">("dashboard");
+  const [isSyncing, setIsSyncing] = useState(false);
   const sirenRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
