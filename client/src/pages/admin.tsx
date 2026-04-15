@@ -4,7 +4,7 @@ import type { Slave } from "@shared/schema";
 import { apiRequest, apiUrl, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWebsocket } from "@/hooks/use-websocket";
-import { Shield, LogIn, LogOut, Wifi, Trash2, Pencil, Activity, Database, Settings, AlertTriangle, CheckCircle2, Navigation } from "lucide-react";
+import { Shield, LogIn, LogOut, Wifi, Trash2, Pencil, Activity, Database, Settings, AlertTriangle, CheckCircle2, Navigation, RefreshCw } from "lucide-react";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { Haptics } from "@capacitor/haptics";
 
