@@ -14,7 +14,7 @@
 
 class MqttHandler {
 public:
-    MqttHandler(DeviceRegistry& reg) : _registry(reg) {}
+    MqttHandler(DeviceRegistry& reg) : _registry(reg), _broker(MQTT_PORT) {}
 
     void begin() {
         // ── Subscribe to slave alerts ───────────────────────
@@ -46,7 +46,7 @@ public:
         });
 
         // ── Start broker ────────────────────────────────────
-        _broker.begin(MQTT_PORT);
+        _broker.begin();
         Serial.printf("[MQTT] Broker started on port %d\n", MQTT_PORT);
     }
 
