@@ -314,6 +314,13 @@ public:
 
         // ── API: Force Cloud Sync ────────────────────────────
         _server.on("/api/system/sync", HTTP_POST, [this](AsyncWebServerRequest* req) {
+            if (!_checkAuth(req)) {
+                req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
+                return;
+            }
+            if (_syncCallback) _syncCallback();
+            req->send(200, "application/json", "{\"success\":true}");
+        });
 
         // ── Catch-all: DELETE + OPTIONS + 404 ───────────────
         _server.onNotFound([this](AsyncWebServerRequest* req) {

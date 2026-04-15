@@ -21,6 +21,7 @@
  */
 
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <Preferences.h>
 #include "config.h"
 #include "device_registry.h"
@@ -145,6 +146,13 @@ void setup() {
     // ─── Initialize Registry ───
     registry.begin();
     registry.onDeviceChange(onDeviceChange);
+
+    // ── mDNS Discovery ──────────────────────────────────────
+    if (MDNS.begin(MDNS_NAME)) {
+        MDNS.addService("mqtt", "tcp", MQTT_PORT);
+        MDNS.addService("http", "tcp", WEB_PORT);
+        Serial.printf("[MDNS] Started: %s.local\n", MDNS_NAME);
+    }
 
     // ── MQTT Broker: start on port 1883 ─────────────────────
     mqttHandler.begin();

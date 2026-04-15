@@ -23,15 +23,23 @@ public:
         : _registry(reg), _lastSync(0), _lastPing(0), _lastOpTime(0),
           _busy(false), _forceSyncPending(false),
           _consecutiveFails(0), _timeOffset(0) {
-        _client = nullptr;
+        _client = new WiFiClientSecure();
+        _client->setInsecure();
+        _client->setHandshakeTimeout(30000);
+        _http = new HTTPClient();
+        _http->setTimeout(15000); 
     }
 
     void onCommand(CloudCommandCallback cb) { _commandCallback = cb; }
 
     ~CloudSync() {
+        if (_http) {
+            _http->end();
+            delete _http;
+        }
         if (_client) {
+            _client->stop();
             delete _client;
-            _client = nullptr;
         }
     }
 
@@ -119,71 +127,57 @@ private:
 
     // ── Reset the TLS client (after repeated failures) ──────
     void _resetClient() {
-        if (_client) {
-            _client->stop();
-            delete _client;
-            _client = nullptr;
-            Serial.println("[CLOUD] TLS client reset");
-        }
+        if (_http) _http->end();
+        if (_client) _client->stop();
+        Serial.println("[CLOUD] Persistent TLS reset");
     }
 
     // ── Internal POST helper with auto-recovery for -1 ──────
     int _postWithRetry(const String& path, const String& payload) {
         int code = _executePost(path, payload);
         
-        // If it failed with -1 (connection lost), reset and try once more
-        if (code == -1) {
-            Serial.println("[CLOUD] Connection lost (-1). Resetting stack...");
+        // If it failed with a transport error (negative codes like -1, -5, etc), reset and retry
+        if (code < 0) {
+            Serial.printf("[CLOUD] Transport error %d. Resetting for retry...\n", code);
             _resetClient();
-            delay(500); // Critical delay for network stack recovery
-            Serial.println("[CLOUD] Retrying fresh socket...");
+            delay(500); 
             code = _executePost(path, payload);
         }
         return code;
     }
 
     int _executePost(const String& path, const String& payload) {
-        WiFiClientSecure client;
-        client.setInsecure();
-        client.setHandshakeTimeout(30000); // 30s for secure handshake
-        
-        HTTPClient http;
-        http.setTimeout(20000); // 20s for the entire request
-        http.setReuse(false); 
+        if (!_client || !_http) return -3;
 
         String url = String(CLOUD_SERVER_URL) + path;
         Serial.printf("[CLOUD] Requesting: %s\n", url.c_str());
         
-        delay(100); // Settlement delay
-        if (!http.begin(client, url)) {
+        _http->setReuse(true); 
+        if (!_http->begin(*_client, url)) {
             Serial.println("[CLOUD] Failed to init HTTPClient");
             return -2;
         }
 
-        http.addHeader("Content-Type", "application/json");
-        http.addHeader("x-device-key", CLOUD_DEVICE_KEY);
-        http.addHeader("Connection", "close"); 
+        _http->addHeader("Content-Type", "application/json");
+        _http->addHeader("x-device-key", CLOUD_DEVICE_KEY);
+        _http->addHeader("Connection", "keep-alive"); 
         
         unsigned long startReq = millis();
-        int code = http.POST(payload);
+        int code = _http->POST(payload);
         unsigned long dur = millis() - startReq;
         
-        if (code == -1) {
-            Serial.printf("[CLOUD] Request failed with -1 after %lums\n", dur);
-        }
-        
-        if (code != 200) {
-            String errorBody = http.getString();
-            if (errorBody.length() > 0) {
-                Serial.printf("[CLOUD] Error Response: %s\n", errorBody.c_str());
-            }
-        }
-
-        if (code == 200) {
-            String response = http.getString();
+        if (code < 0) {
+            Serial.printf("[CLOUD] Request failed (%d) after %lums\n", code, dur);
+            _resetClient(); 
+        } else if (code != 200) {
+            String errorBody = _http->getString();
+            Serial.printf("[CLOUD] Error Response (%d): %s\n", code, errorBody.c_str());
+        } else {
+            // Success — Process Response
+            String response = _http->getString();
             JsonDocument recvDoc;
             if (deserializeJson(recvDoc, response) == DeserializationError::Ok) {
-                // If the response contains a server time, synchronize our logical clock
+                // Time Synchronization
                 if (!recvDoc["serverTime"].isNull()) {
                     uint64_t sTime = recvDoc["serverTime"].as<uint64_t>();
                     _timeOffset = sTime - (uint64_t)millis();
@@ -197,20 +191,18 @@ private:
                         _registry.mergeFromCloud(remoteSlaves);
                     }
 
-                    // 2. Listen for Remote Commands (New in 4D Rebuild)
+                    // 2. Listen for Remote Commands
                     if (!recvDoc["command"].isNull()) {
                         String cmd = recvDoc["command"].as<String>();
                         String params = recvDoc["params"] | "";
-                        Serial.printf("[CLOUD] Remote Command Received: %s (params: %s)\n", cmd.c_str(), params.c_str());
-                        
-                        if (_commandCallback) {
-                            _commandCallback(cmd, params);
-                        }
+                        Serial.printf("[CLOUD] Remote Cmd: %s\n", cmd.c_str());
+                        if (_commandCallback) _commandCallback(cmd, params);
                     }
                 }
             }
         }
-        http.end();
+        
+        // Note: NO http->end() here to keep socket open
         return code;
     }
 
@@ -316,6 +308,7 @@ private:
     String              _lastWifiError = "OK";
     uint64_t            _timeOffset;
     WiFiClientSecure*   _client;
+    HTTPClient*         _http;
     std::vector<String> _alertQueue;
     CloudCommandCallback _commandCallback = nullptr;
 };

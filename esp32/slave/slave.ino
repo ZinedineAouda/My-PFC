@@ -26,6 +26,7 @@
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <ESP8266mDNS.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
 #include "config.h"
@@ -218,7 +219,33 @@ bool connectMQTT() {
     lastReconnect = now;
 
     Serial.printf("[MQTT] Connecting to %s:%d...\n", mqttIP, MQTT_BROKER_PORT);
-    mqtt.setServer(mqttIP, MQTT_BROKER_PORT);
+    
+    // ── mDNS Resolution Fallback ───────────────────────────
+    String targetIP = String(mqttIP);
+    if (targetIP.endsWith(".local")) {
+        // Resolve hostname to IP
+        if (!MDNS.begin(deviceId.c_str())) {
+            Serial.println("[MDNS] Failed to start resolver");
+        } else {
+            Serial.printf("[MDNS] Querying %s...\n", mqttIP);
+            int n = MDNS.queryService("mqtt", "tcp"); // Look for the service
+            if (n > 0) {
+                targetIP = MDNS.IP(0).toString();
+                Serial.printf("[MDNS] Service found at: %s\n", targetIP.c_str());
+            } else {
+                // Fallback to host query
+                IPAddress res;
+                if (WiFi.hostByName(mqttIP, res)) {
+                    targetIP = res.toString();
+                    Serial.printf("[MDNS] Host resolved to: %s\n", targetIP.c_str());
+                } else {
+                    Serial.println("[MDNS] Resolution FAILED");
+                }
+            }
+        }
+    }
+
+    mqtt.setServer(targetIP.c_str(), MQTT_BROKER_PORT);
     mqtt.setCallback(mqttCallback);
     mqtt.setKeepAlive(MQTT_KEEPALIVE);
     mqtt.setBufferSize(512);

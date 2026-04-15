@@ -89,7 +89,7 @@ public:
         doc["type"] = "MIGRATION";
         doc["ssid"] = newSSID;
         doc["pass"] = newPass;
-        doc["ip"]   = "192.168.4.1"; // Slaves assume Master is the Gateway
+        doc["ip"]   = String(MDNS_NAME) + ".local"; 
 
         String payload;
         serializeJson(doc, payload);

@@ -23,6 +23,7 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 #define MQTT_PORT             1883
 #define DISCOVERY_TOPIC       "hospital/discovery"
 #define MQTT_MAX_CLIENTS      50
+#define MDNS_NAME            "hospital-alarm"
 
 // ─── Device Management ──────────────────────────────────────
 #define MAX_SLAVES            200
