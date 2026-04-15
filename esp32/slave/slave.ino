@@ -413,6 +413,14 @@ setInterval(poll, 5000);
         req->send(200, "text/html", html);
     });
 
+    setupServer.on("/api/live-status", HTTP_GET, [](AsyncWebServerRequest* req) {
+        JsonDocument doc;
+        doc["alert"] = alertActive;
+        String out;
+        serializeJson(doc, out);
+        req->send(200, "application/json", out);
+    });
+
     setupServer.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* req) {
         JsonDocument doc;
         doc["id"]        = deviceId;
