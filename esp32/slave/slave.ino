@@ -51,12 +51,13 @@ String topicDiscovery; // Global discovery/migration topic
 struct SlaveConfig {
     uint32_t magic;
     bool setupDone;
-    bool approved; // Persistent approval status
     char ssid[64];
     char pass[64];
     char mqtt[32];
+    bool approved; // Moved to end to preserve alignment of string fields
 };
-const uint32_t CONFIG_MAGIC = 0xAA55CC33;
+// Updated MAGIC to force a clean reset of the shifted memory from the previous version
+const uint32_t CONFIG_MAGIC = 0xAA55CC34;
 
 // ─── State ──────────────────────────────────────────────────────────
 bool setupDone       = USE_HARDCODED_WIFI;
@@ -70,6 +71,7 @@ unsigned long lastHeartbeat   = 0;
 unsigned long lastReconnect   = 0;
 unsigned long alertLedTime    = 0;
 unsigned long lastClearTime   = 0;  // Localized cooldown after master clear
+bool configChanged            = false; // Deferred save flag to prevent crashes in callbacks
 
 // ─── WiFi Credentials ──────────────────────────────────────────────
 char wifiSSID[64] = DEFAULT_WIFI_SSID;
@@ -161,7 +163,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         isApproved = doc["approved"] | false;
         
         if (isApproved != wasApproved) {
-            saveSlaveConfig(); // Persist the new status
+            configChanged = true; // Signal a deferred save
             if (isApproved) {
                 Serial.println("[STATUS] Device APPROVED by admin");
                 ledBlink(3, 80, 80); 
@@ -498,9 +500,15 @@ void loop() {
 
         // Non-blocking: let the loop handle connection
         setupDone = true;
-        saveSlaveConfig();
+        configChanged = true;
     }
     #endif
+
+    // ── Deferred EEPROM Save (to prevent crashes) ──────────
+    if (configChanged) {
+        configChanged = false;
+        saveSlaveConfig();
+    }
 
     // ── WiFi management ─────────────────────────────────────
     if (setupDone) {
