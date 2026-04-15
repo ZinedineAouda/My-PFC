@@ -44,6 +44,7 @@ String topicAlert;
 String topicHeartbeat;
 String topicStatus;
 String topicCommand;
+String topicDiscovery; // Global discovery/migration topic
 
 // ─── Config Persistence ─────────────────────────────────────────────
 struct SlaveConfig {
@@ -169,6 +170,31 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
             Serial.println("[CMD] Alert cleared by master");
         }
     }
+
+    // ── DISCOVERY: Handle master migration/provisioning ─────
+    if (t == DISCOVERY_TOPIC) {
+        const char* type = doc["type"] | "";
+        if (strcmp(type, "MIGRATION") == 0) {
+            const char* newSsid = doc["ssid"] | "";
+            const char* newPass = doc["pass"] | "";
+            const char* newIp   = doc["ip"]   | MQTT_BROKER_IP;
+
+            if (strlen(newSsid) > 0) {
+                Serial.printf("[MIGRATE] Received new Master details: %s\n", newSsid);
+                strncpy(wifiSSID, newSsid, sizeof(wifiSSID));
+                strncpy(wifiPass, newPass, sizeof(wifiPass));
+                strncpy(mqttIP,   newIp,   sizeof(mqttIP));
+                
+                // Save and restart networking
+                saveSlaveConfig();
+                ledBlink(5, 50, 50); // Visual cue for migration
+                
+                WiFi.disconnect();
+                WiFi.begin(wifiSSID, wifiPass);
+                Serial.println("[MIGRATE] Reconnecting to new network...");
+            }
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -193,6 +219,7 @@ bool connectMQTT() {
         // Subscribe to our topics
         mqtt.subscribe(topicStatus.c_str(), 1);  // QoS 1 for status
         mqtt.subscribe(topicCommand.c_str(), 1);  // QoS 1 for commands
+        mqtt.subscribe(DISCOVERY_TOPIC, 1);       // QoS 1 for migration broadcasts
 
         // Send initial heartbeat (acts as registration)
         _publishHeartbeat();

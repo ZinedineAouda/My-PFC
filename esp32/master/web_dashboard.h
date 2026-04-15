@@ -60,6 +60,8 @@ public:
             doc["setup"]    = _setupDone;
             doc["authenticated"] = _checkAuth(req);
             doc["masterIP"] = WiFi.localIP().toString(); 
+            doc["uptime"]   = millis() / 1000;
+            doc["rssi"]     = WiFi.RSSI();
             doc["slaves"]   = (int)_registry.count();
             doc["online"]   = (int)_registry.onlineCount();
             doc["alerts"]   = (int)_registry.alertCount();

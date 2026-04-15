@@ -83,6 +83,20 @@ public:
         _broker.publish("master/broadcast", message, 0, false);
     }
 
+    // ── Migration Broadcast (New in 4D Rebuild) ──────────────
+    void broadcastMigration(const char* newSSID, const char* newPass) {
+        JsonDocument doc;
+        doc["type"] = "MIGRATION";
+        doc["ssid"] = newSSID;
+        doc["pass"] = newPass;
+        doc["ip"]   = "192.168.4.1"; // Slaves assume Master is the Gateway
+
+        String payload;
+        serializeJson(doc, payload);
+        _broker.publish(DISCOVERY_TOPIC, payload.c_str(), 1, true); // Retained for late joiners
+        Serial.printf("[MQTT] Migration Broadcast Sent: target=%s\n", newSSID);
+    }
+
     size_t connectedClients() const {
         // PicoMQTT doesn't expose client count directly,
         // rely on registry online count instead

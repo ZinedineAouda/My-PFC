@@ -252,6 +252,7 @@ export async function registerRoutes(
       return res.status(400).json({ success: false, message: "Invalid body" });
     }
     const slave = await storage.registerSlave(parsed.data.slaveId);
+    await storage.updateMasterHeartbeat();
     broadcast({ type: "REGISTER", payload: slave });
     return res.json({
       success: true,
@@ -265,6 +266,7 @@ export async function registerRoutes(
       return res.status(400).json({ success: false, message: "Invalid body" });
     }
     const result = await storage.triggerAlert(parsed.data.slaveId);
+    await storage.updateMasterHeartbeat();
     if (!result.success) {
       return res.json({ success: false, reason: result.reason });
     }
@@ -279,6 +281,7 @@ export async function registerRoutes(
       return res.status(400).json({ success: false, message: "Invalid body" });
     }
     const slave = await storage.registerSlave(parsed.data.slaveId);
+    await storage.updateMasterHeartbeat();
     return res.json({
       success: true,
       approved: slave.approved,

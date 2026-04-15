@@ -22,6 +22,7 @@
 // ─── MQTT Broker (Master ESP32) ─────────────────────────────
 #define MQTT_BROKER_IP    "192.168.4.1"
 #define MQTT_BROKER_PORT  1883
+#define DISCOVERY_TOPIC   "hospital/discovery"
 
 // ─── Default WiFi (Master AP) ───────────────────────────────
 // Change these before flashing, or use the setup portal

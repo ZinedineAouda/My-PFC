@@ -21,6 +21,7 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 
 // ─── MQTT Broker (runs on this ESP32) ───────────────────────
 #define MQTT_PORT             1883
+#define DISCOVERY_TOPIC       "hospital/discovery"
 #define MQTT_MAX_CLIENTS      50
 
 // ─── Device Management ──────────────────────────────────────
@@ -33,7 +34,7 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 #define CLOUD_DEVICE_KEY      "esp32_master_super_secure_key_123"
 #define CLOUD_SYNC_INTERVAL   15000   // Full sync every 15s
 #define CLOUD_PING_INTERVAL   10000   // Lightweight heartbeat ping every 10s
-#define CLOUD_HTTP_TIMEOUT    10000   // 10s timeout for better reliability
+#define CLOUD_HTTP_TIMEOUT    15000   // Increased to 15s for better reliability over slow WAN
 
 // ─── Hardware Pins ──────────────────────────────────────────
 #define BUZZER_PIN            4
@@ -44,18 +45,22 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 #define ADMIN_PASS            "admin1234"
 #define ADMIN_TOKEN           "admin1234"
 
-// ─── Post-Upload Behavior ──────────────────────────────────
-#define AUTO_FACTORY_RESET_ON_FLASH true  // Set to true to wipe data on new uploads
+// ─── Persistence & Post-Upload ─────────────────────────────
+#define ERASE_ON_FLASH        true  // Wipe all settings on new firmware upload
 #define WEB_PORT              80
 
 // ─── Operating Modes ────────────────────────────────────────
 enum WiFiOpMode : uint8_t {
-    MODE_NONE    = 0,   // Not yet configured
-    MODE_AP      = 1,   // Access Point only (standalone)
-    MODE_STA     = 2,   // Station only (joins router)
-    MODE_AP_STA  = 3,   // Hybrid AP + STA
-    MODE_ONLINE  = 4    // Hybrid AP + STA + Cloud sync
+    MODE_NONE    = 0,   // Not yet configured (Setup Wizard)
+    MODE_AP      = 1,   // Standalone: Master creates WiFi
+    MODE_STA     = 2,   // Facility: Master joins Hospital WiFi
+    MODE_AP_STA  = 3,   // Hybrid: Master creates WiFi + joins Hospital WiFi
+    MODE_ONLINE  = 4    // Cloud: AP_STA + Active Railway Sync
 };
+
+// ─── Slave Migration Settings ──────────────────────────────
+#define DISCOVERY_TOPIC       "hospital/discovery"
+#define FALLBACK_SSID         "HospitalAlarm"
 
 // ─── MQTT Topics ────────────────────────────────────────────
 // Slaves publish to:

@@ -145,8 +145,10 @@ private:
         
         // If it failed with -1 (connection lost), reset and try once more
         if (code == -1) {
-            Serial.println("[CLOUD] Connection lost (-1), retrying fresh socket...");
+            Serial.println("[CLOUD] Connection lost (-1). Resetting stack...");
             _resetClient();
+            delay(500); // Critical delay for network stack recovery
+            Serial.println("[CLOUD] Retrying fresh socket...");
             code = _executePost(path, payload);
         }
         return code;
@@ -165,9 +167,15 @@ private:
 
         http.addHeader("Content-Type", "application/json");
         http.addHeader("x-device-key", CLOUD_DEVICE_KEY);
-        http.addHeader("Connection", "close"); // Use close rather than keep-alive for strict reliability with proxy load balancers
-
+        http.addHeader("Connection", "close"); 
+        
+        unsigned long startReq = millis();
         int code = http.POST(payload);
+        unsigned long dur = millis() - startReq;
+        
+        if (code == -1) {
+            Serial.printf("[CLOUD] Request failed with -1 after %lums\n", dur);
+        }
         
         if (code != 200) {
             String errorBody = http.getString();
@@ -188,9 +196,28 @@ private:
                 }
 
                 if (path == "/api/master-sync") {
+                    // 1. Merge Slave Updates
                     JsonArray remoteSlaves = recvDoc["slaves"];
                     if (!remoteSlaves.isNull()) {
                         _registry.mergeFromCloud(remoteSlaves);
+                    }
+
+                    // 2. Listen for Remote Commands (New in 4D Rebuild)
+                    if (!recvDoc["command"].isNull()) {
+                        String cmd = recvDoc["command"].as<String>();
+                        Serial.printf("[CLOUD] Remote Command Received: %s\n", cmd.c_str());
+                        
+                        if (cmd == "WIPE_DATA") {
+                            Serial.println("[CLOUD] Remote WIPE triggered!");
+                            // Signal master.ino to reset (callback logic)
+                            if (_commandCallback) _commandCallback(100); 
+                        } else if (cmd == "CHANGE_MODE") {
+                            int newMode = recvDoc["mode"] | 0;
+                            if (newMode >= 1 && newMode <= 4) {
+                                Serial.printf("[CLOUD] Remote MODE change to: %d\n", newMode);
+                                if (_commandCallback) _commandCallback(newMode);
+                            }
+                        }
                     }
                 }
             }
@@ -198,6 +225,23 @@ private:
         http.end();
         return code;
     }
+
+    // Callback for remote commands (reset / mode change)
+    typedef void (*CloudCommandCallback)(int action);
+    void onCommand(CloudCommandCallback cb) { _commandCallback = cb; }
+
+private:
+    DeviceRegistry&   _registry;
+    unsigned long     _lastSync;
+    unsigned long     _lastPing;
+    unsigned long     _lastOpTime;
+    bool              _busy;
+    bool              _forceSyncPending;
+    int               _consecutiveFails;
+    uint64_t          _timeOffset;
+    WiFiClientSecure* _client;
+    std::vector<String> _alertQueue;
+    CloudCommandCallback _commandCallback = nullptr;
 
     // ── Lightweight ping ────────────────────────────────────
     void _sendPing() {

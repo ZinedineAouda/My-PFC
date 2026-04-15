@@ -48,6 +48,7 @@ bool          buzzerState      = false;
 // ─── Forward Declarations ───────────────────────────────────────────
 void onWifiConnect(const char* ssid, const char* pass);
 void onSetup(int mode, const char* apSSID, const char* apPass);
+void onRemoteCommand(const String& cmd, const String& params);
 void onReSetup();
 void onFactoryReset();
 void handleBuzzer();
@@ -57,19 +58,19 @@ void checkNewFlash() {
     prefs.begin("sys_info", false);
     String lastBuild = prefs.getString("build_id", "");
     
-    // If lastBuild is empty, it means this is a fresh flash of THIS code
-    // If lastBuild != currentBuild, it means it's a new update
-    if (AUTO_FACTORY_RESET_ON_FLASH && lastBuild != currentBuild) {
+    // If ERASE_ON_FLASH is enabled and build timestamp changed, wipe data
+    if (ERASE_ON_FLASH && lastBuild.length() > 0 && lastBuild != currentBuild) {
         Serial.println("╔═════════════════════════════════════════════════════╗");
-        Serial.println("║  [NEW FLASH] Clean firmware detected!               ║");
-        Serial.println("║  Performing automatic factory reset to ensure clean  ║");
-        Serial.println("║  slate as requested.                                ║");
+        Serial.println("║  [MAINTENANCE] New firmware detected!               ║");
+        Serial.println("║  Performing automatic factory reset...               ║");
         Serial.println("╚═════════════════════════════════════════════════════╝");
         prefs.putString("build_id", currentBuild);
         prefs.end();
         onFactoryReset(); // This restarts the device
+    } else {
+        prefs.putString("build_id", currentBuild);
+        prefs.end();
     }
-    prefs.end();
 }
 
 void loadSettings() {
@@ -147,6 +148,9 @@ void setup() {
 
     // ── MQTT Broker: start on port 1883 ─────────────────────
     mqttHandler.begin();
+
+    // ── Cloud Sync: handle remote commands ──────────────────
+    cloudSync.onCommand(onRemoteCommand);
 
     // ── Web Dashboard: start with setup page ────────────────
     dashboard.onConnect(onWifiConnect);
@@ -286,8 +290,10 @@ void onSetup(int mode, const char* apSSID, const char* apPass) {
     currentMode = (WiFiOpMode)mode;
     setupDone = true;
 
-    // Update AP credentials if provided
+    // Migration Broadcast: Alert slaves before we switch networks
     if (strlen(apSSID) > 0) {
+        mqttHandler.broadcastMigration(apSSID, apPass);
+        delay(1000); // Give slaves time to receive the packet
         wifiMgr.setAPCredentials(apSSID, apPass);
     }
 
@@ -302,6 +308,26 @@ void onSetup(int mode, const char* apSSID, const char* apPass) {
     dashboard.setMode(currentMode);
 
     Serial.printf("[SETUP] Mode %d applied. Setup complete.\n", mode);
+}
+
+// Handler for commands received from the Railway Cloud server
+void onRemoteCommand(const String& cmd, const String& params) {
+    Serial.printf("[CLOUD] Remote Command Received: %s (params: %s)\n", cmd.c_str(), params.c_str());
+    
+    if (cmd == "WIPE_DATA") {
+        onFactoryReset();
+    } else if (cmd == "CHANGE_MODE") {
+        int newMode = params.toInt();
+        if (newMode >= 1 && newMode <= 4) {
+            currentMode = (WiFiOpMode)newMode;
+            saveSettings();
+            delay(500);
+            ESP.restart();
+        }
+    } else if (cmd == "CLEAR_ALL_ALERTS") {
+        registry.clearAllAlerts();
+        dashboard.broadcastFullState();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -329,20 +355,22 @@ void handleBuzzer() {
     }
 }
 
-// Called by dashboard: entering setup mode again (soft reset)
+// Force master to re-enter setup phase
 void onReSetup() {
-    Serial.println("[RESET] Re-setup requested. Clearing WiFi config...");
-    prefs.begin("master_cfg", false);
-    prefs.clear();
-    prefs.end();
-    
-    Serial.println("[RESET] Restarting into Setup Wizard...");
-    delay(1000);
+    Serial.println("[SYSTEM] Re-entering setup mode...");
+    setupDone = false;
+    currentMode = MODE_NONE;
+    saveSettings();
+    delay(500);
     ESP.restart();
 }
 
-// Called by setup or admin page: full wipe
+// Full factory reset (Local or Remote)
 void onFactoryReset() {
+    Serial.println("[SYSTEM] FACTORY RESET TRIGGERED!");
+    prefs.begin("master_cfg", false);
+    prefs.clear();
+    prefs.end();
     Serial.println("[RESET] Factory reset triggered! Wiping all data...");
     
     // 1. Clear Master Config (WiFi, Mode)
