@@ -292,23 +292,24 @@ export async function registerRoutes(
   //  MASTER SYNC (bidirectional state exchange)
   // ═════════════════════════════════════════════════════════════
   app.post("/api/master-sync", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
-    const cmd = await storage.getAndClearCommand();
-    const parsed = masterSyncSchema.safeParse(req.body);
-    
-    const responseData: any = {
-      success: true,
-      mode: await storage.getMode(),
-      slaves: await storage.getAllSlaves(),
-    };
-
-    if (cmd) {
-      responseData.command = cmd.command;
-      responseData.params = cmd.params;
-      console.log(`[SYNC] Delivering command to Master: ${cmd.command}`);
-    }
-
     try {
+      const cmd = await storage.getAndClearCommand();
+      const parsed = masterSyncSchema.safeParse(req.body);
+      
+      const responseData: any = {
+        success: true,
+        mode: await storage.getMode(),
+        slaves: await storage.getAllSlaves(),
+      };
+
+      if (cmd) {
+        responseData.command = cmd.command;
+        responseData.params = cmd.params;
+        console.log(`[SYNC] Delivering command to Master: ${cmd.command}`);
+      }
+
       if (!parsed.success) {
+        console.warn("[SYNC] Validation failed:", parsed.error.format());
         await storage.updateMasterHeartbeat();
         return res.json(responseData);
       }

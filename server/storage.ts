@@ -202,8 +202,14 @@ export class DatabaseStorage implements IStorage {
   async syncFromMaster(incoming: Array<any>, stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void> {
     await this.updateMasterHeartbeat(stats?.mode, stats?.uptime, stats?.rssi, stats?.wifiError);
     
-    // First, set all current slaves to offline (we'll re-enable ones that appear in incoming)
-    await db.update(slaves).set({ online: false });
+    console.log(`[SYNC] Starting bidir sync for ${incoming.length} slaves`);
+    
+    // First, set all current slaves to offline
+    try {
+      await db.update(slaves).set({ online: false });
+    } catch (err) {
+      console.error("[SYNC] Failed to set slaves offline:", err);
+    }
 
     for (const remote of incoming) {
       const [existing] = await db.select().from(slaves).where(eq(slaves.slaveId, remote.slaveId));
@@ -280,7 +286,7 @@ export class DatabaseStorage implements IStorage {
   async reset(): Promise<void> {
     await db.delete(slaves);
     await db.update(systemSettings)
-      .set({ wifiMode: 0, masterLastSeen: null, pendingCommand: "WIPE_DATA", commandParams: "" })
+      .set({ wifiMode: 0, masterLastSeen: null, pendingCommand: null, commandParams: null })
       .where(eq(systemSettings.id, 1));
   }
 }
