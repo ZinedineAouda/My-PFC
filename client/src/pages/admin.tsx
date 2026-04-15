@@ -91,10 +91,10 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
               </header>
               <div className="grid gap-3">
                 {[
-                  { m: 1, t: "Master Only", d: "Just for this building. No internet.", icon: <Shield className="w-4 h-4" /> },
-                  { m: 2, t: "Hospitall WiFi", d: "Connect to the hospital network.", icon: <Database className="w-4 h-4" /> },
-                  { m: 3, t: "Bridge Mode", d: "Connect to both WiFi and Units.", icon: <Wifi className="w-4 h-4" /> },
-                  { m: 4, t: "Online Mode", d: "Cloud access (High Stability).", icon: <Activity className="w-4 h-4" /> }
+                   { m: 1, t: "Use just Master Unit", d: "Private network for this building. No cloud.", icon: <Shield className="w-4 h-4" /> },
+                   { m: 2, t: "Join Hospital WiFi", d: "Connect to the building's existing network.", icon: <Database className="w-4 h-4" /> },
+                   { m: 3, t: "Bridge Mode", d: "Hybrid: Joins hospital WiFi while creating its own.", icon: <Wifi className="w-4 h-4" /> },
+                   { m: 4, t: "Full Cloud Access", d: "Securely link to the internet for remote access.", icon: <Activity className="w-4 h-4" /> }
                 ].map(opt => (
                   <button 
                     key={opt.m}
@@ -147,13 +147,13 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
           {step === 3 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
               <header>
-                <h2 className="text-2xl font-bold">Internet</h2>
-                <p className="text-slate-500 text-sm mt-1">Connect this to your building WiFi.</p>
+                <h2 className="text-2xl font-bold">Building WiFi</h2>
+                <p className="text-slate-500 text-sm mt-1">Select the hospital network to connect with.</p>
               </header>
               {mode !== 1 ? (
                 <div className="space-y-5">
                   <div className="max-h-[250px] overflow-y-auto space-y-2 pr-2 scrollbar-hide">
-                    {!networks?.length && <div className="py-12 text-center text-slate-400 font-bold animate-pulse uppercase tracking-[2px] text-xs">Scanning Frequencies...</div>}
+                    {!networks?.length && <div className="py-12 text-center text-slate-400 font-bold animate-pulse uppercase tracking-[2px] text-xs">Scanning...</div>}
                     {networks?.map(n => (
                       <button 
                         key={n.ssid} 
@@ -170,7 +170,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                   </div>
                   <input 
                     className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[24px] focus:border-blue-600 focus:bg-white outline-none transition-all font-bold placeholder:text-slate-300" 
-                    placeholder="Facility Credentials..." type="password" value={staPass} onChange={e => setStaPass(e.target.value)} 
+                    placeholder="WiFi Password..." type="password" value={staPass} onChange={e => setStaPass(e.target.value)} 
                   />
                 </div>
               ) : (
@@ -178,8 +178,8 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
                   <div className="w-20 h-20 bg-white rounded-3xl shadow-lg flex items-center justify-center mb-6">
                     <Shield className="w-10 h-10 text-blue-600" />
                   </div>
-                  <p className="text-blue-900 font-bold uppercase text-sm tracking-[2px]">No Internet Mode</p>
-                  <p className="text-blue-600/60 text-xs px-12 mt-2 font-medium italic">This unit is set up to work alone in this wing.</p>
+                  <p className="text-blue-900 font-bold uppercase text-sm tracking-[2px]">Private Mode</p>
+                  <p className="text-blue-600/60 text-xs px-12 mt-2 font-medium italic">This device will work as its own hub without internet.</p>
                 </div>
               )}
               <div className="flex gap-4">
@@ -218,11 +218,11 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
         credentials: "include",
         body: JSON.stringify({ username: user, password: pass }),
       });
-      if (!res.ok) throw new Error(res.status === 401 ? "Wrong password" : "Error");
+      if (!res.ok) throw new Error(res.status === 401 ? "Incorrect password" : "Error");
       onLogin();
-      toast({ title: "Logged In", description: "You can now use the dashboard." });
+      toast({ title: "Authorized", description: "Dashboard ready." });
     } catch (err: any) {
-      toast({ title: "Authorization Error", description: err.message, variant: "destructive" });
+      toast({ title: "Authorized Error", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -236,7 +236,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
             <Shield className="w-10 h-10" />
           </div>
           <h1 className="text-4xl font-bold tracking-tighter">Login</h1>
-          <p className="text-blue-600/50 text-[10px] font-bold uppercase tracking-[5px] mt-3">Staff Only</p>
+          <p className="text-blue-600/50 text-[10px] font-bold uppercase tracking-[5px] mt-3">Clinical Staff Only</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
@@ -259,7 +259,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
             type="submit" disabled={loading}
             className="w-full py-5 bg-slate-900 text-white font-bold uppercase text-xs tracking-[4px] rounded-3xl shadow-2xl hover:translate-y-[-2px] transition-all disabled:opacity-50 mt-4"
           >
-            {loading ? "Please wait..." : "Go"}
+            {loading ? "Please wait..." : "Continue"}
           </button>
         </form>
       </div>
@@ -293,7 +293,7 @@ function AdminPanel() {
        if (device?.alertActive) {
           if (sirenRef.current) sirenRef.current.play().catch(() => {});
           Haptics.vibrate({ duration: 1000 }).catch(() => {});
-          toast({ title: "EMERGENCY ALARM", description: `Alert: ${device.patientName || device.slaveId}`, variant: "destructive" });
+          toast({ title: "EMERGENCY ALARM", description: `Helping: ${device.patientName || device.slaveId}`, variant: "destructive" });
        }
     }
   });
@@ -321,7 +321,6 @@ function AdminPanel() {
   });
 
   const isCloud = status?.masterIP === "cloud";
-  // On cloud, we are active if master is online. On local, strictly mode 4 (Online) logic.
   const isCloudActive = isCloud ? !!status?.isMasterOnline : status?.mode === 4;
 
   const logoutMutation = useMutation({
@@ -342,8 +341,8 @@ function AdminPanel() {
             <Shield className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Hospital Link</h1>
-            <p className="text-[10px] font-bold text-blue-600 opacity-60">System Monitoring</p>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">Hospital Dashboard</h1>
+            <p className="text-[10px] font-bold text-blue-600 opacity-60">Live Monitoring</p>
           </div>
         </div>
         
@@ -351,7 +350,7 @@ function AdminPanel() {
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isCloudActive ? "bg-emerald-500" : (isCloud ? "bg-red-500" : "bg-amber-500")}`} />
               <span className="text-[10px] font-bold">
-                {isCloudActive ? (status?.wifiError === "Connected" || !status?.wifiError ? "All Syncing" : `WiFi: ${status.wifiError}`) : (isCloud ? "Main unit off" : "Setup not finished")}
+                {isCloudActive ? (status?.wifiError === "Connected" || !status?.wifiError ? "All Syncing" : `WiFi Error: ${status.wifiError}`) : (isCloud ? "Main unit offline" : "Setup needed")}
               </span>
             </div>
             <div className="flex items-center gap-2 mt-1">
@@ -363,14 +362,13 @@ function AdminPanel() {
                    <span className="text-[9px] text-slate-300 font-bold">|</span>
                    <button 
                      onClick={() => {
-                       const btn = document.getElementById('sync-btn');
-                       if (btn) btn.classList.add('animate-spin');
+                       setIsSyncing(true);
                        apiRequest("POST", "/api/system/sync")
-                         .finally(() => setTimeout(() => btn?.classList.remove('animate-spin'), 1000));
+                         .finally(() => setTimeout(() => setIsSyncing(false), 1000));
                      }}
                      className="flex items-center gap-1 group"
                    >
-                     <RefreshCw id="sync-btn" className="w-[10px] h-[10px] text-blue-600 group-hover:text-blue-700" />
+                     <RefreshCw className={`w-[10px] h-[10px] text-blue-600 group-hover:text-blue-700 ${isSyncing ? "animate-spin" : ""}`} />
                      <span className="text-[9px] text-blue-600 font-bold group-hover:text-blue-700">Sync Now</span>
                    </button>
                  </>
@@ -388,16 +386,16 @@ function AdminPanel() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { l: "Total rooms", v: status?.slaves || 0, i: <Database className="w-5 h-5" />, c: "text-slate-900" },
-              { l: "Rooms connected", v: status?.online || 0, i: <Wifi className="w-5 h-5" />, c: "text-blue-600" },
+              { l: "Rooms online", v: status?.online || 0, i: <Wifi className="w-5 h-5" />, c: "text-blue-600" },
               { l: "Helping cases", v: status?.alerts || 0, i: <AlertTriangle className="w-5 h-5" />, c: "text-red-600" },
-              { l: "New devices", v: pending.length, i: <Settings className="w-5 h-5" />, c: "text-amber-500" }
+              { l: "Found devices", v: pending.length, i: <Settings className="w-5 h-5" />, c: "text-amber-500" }
             ].map((s, idx) => (
               <div key={idx} className="bg-white p-6 rounded-[32px] shadow-[0_10px_20px_-10px_rgba(0,0,0,0.03)] border-b-4 border-slate-100">
                 <div className="flex justify-between items-start mb-2">
                   <div className={`p-2 rounded-xl bg-slate-50 ${s.c}`}>{s.i}</div>
                   <span className={`text-2xl font-bold ${s.c}`}>{s.v}</span>
                 </div>
-                <div className="text-[11px] font-bold text-slate-400 capitalize">{s.l}</div>
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{s.l}</div>
               </div>
             ))}
           </div>
@@ -405,7 +403,7 @@ function AdminPanel() {
           {/* Pending Queue */}
           {pending.length > 0 && (
             <div className="space-y-4">
-              <h2 className="text-[11px] font-bold text-slate-400 ml-2">New Units Detected</h2>
+              <h2 className="text-[11px] font-bold text-slate-400 ml-2 uppercase tracking-widest">New Units Detected</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {pending.map(s => (
                   <div key={s.slaveId} className="bg-amber-50 border-2 border-amber-100 p-6 rounded-[32px] flex justify-between items-center">
@@ -415,7 +413,7 @@ function AdminPanel() {
                       </div>
                       <div>
                         <div className="font-mono font-bold text-amber-900 text-lg uppercase">{s.slaveId}</div>
-                        <p className="text-[10px] font-bold text-amber-700/60 mt-0.5">Device is waiting</p>
+                        <p className="text-[10px] font-bold text-amber-700/60 mt-0.5">Found and waiting</p>
                       </div>
                     </div>
                     <button 
@@ -425,7 +423,7 @@ function AdminPanel() {
                       Connect Patient
                     </button>
                     <button 
-                      onClick={() => { if(confirm(`Dismiss discovery for ${s.slaveId}?`)) apiRequest("DELETE", "/api/slaves/" + s.slaveId); }}
+                      onClick={() => { if(confirm(`Ignore this unit?`)) apiRequest("DELETE", "/api/slaves/" + s.slaveId); }}
                       className="ml-2 w-12 h-12 bg-white text-slate-300 rounded-2xl flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all border border-amber-100"
                     >
                       <Trash2 size={18} />
@@ -438,7 +436,7 @@ function AdminPanel() {
 
           {/* Active Nodes */}
           <div className="space-y-4">
-             <h2 className="text-[11px] font-bold text-slate-400 ml-2">Active units</h2>
+             <h2 className="text-[11px] font-bold text-slate-400 ml-2 uppercase tracking-widest">Active patient units</h2>
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {approved.map(d => (
                   <div key={d.slaveId} className={`group bg-white p-6 rounded-[40px] border-2 transition-all duration-500 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.02)] ${d.alertActive ? "border-red-500 bg-red-50/30 shadow-red-500/10" : "border-slate-50 hover:border-blue-100 hover:shadow-blue-500/5 hover:-translate-y-1"}`}>
@@ -450,13 +448,13 @@ function AdminPanel() {
                         <div>
                           <div className={`font-bold text-xl tracking-tight ${d.alertActive ? "text-red-900" : "text-slate-900"}`}>{d.patientName}</div>
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] font-bold text-slate-400">Room: {d.room}</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Room: {d.room}</span>
                             <span className="w-1 h-1 rounded-full bg-slate-300" />
-                            <span className="text-[10px] font-bold text-slate-400">Bed: {d.bed}</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bed: {d.bed}</span>
                           </div>
                         </div>
                       </div>
-                      <div className={`px-3 py-1.5 rounded-xl text-[9px] font-bold ${d.alertActive ? "bg-red-600 text-white" : "bg-emerald-50 text-emerald-600"}`}>
+                      <div className={`px-3 py-1.5 rounded-xl text-[9px] font-bold uppercase tracking-wider ${d.alertActive ? "bg-red-600 text-white" : "bg-emerald-50 text-emerald-600"}`}>
                         {d.alertActive ? "HELPING" : "OK"}
                       </div>
                     </div>
@@ -471,15 +469,15 @@ function AdminPanel() {
                       {d.alertActive ? (
                         <button 
                           onClick={() => apiRequest("POST", "/api/clearAlert", { slaveId: d.slaveId })}
-                          className="flex-1 bg-red-600 text-white font-bold text-[10px] rounded-2xl shadow-xl shadow-red-600/30 hover:bg-red-700 active:translate-y-1 transition-all"
+                          className="flex-1 bg-red-600 text-white font-bold text-[10px] rounded-2xl shadow-xl shadow-red-600/30 hover:bg-red-700 active:translate-y-1 transition-all uppercase tracking-[2px]"
                         >
-                          Stop Sound
+                          Stop Alarm
                         </button>
                       ) : (
                         <div className="flex-1" />
                       )}
                       <button 
-                        onClick={() => { if(confirm(`Remove ${d.patientName}?`)) apiRequest("DELETE", "/api/slaves/" + d.slaveId); }}
+                        onClick={() => { if(confirm(`Remove patient unit?`)) apiRequest("DELETE", "/api/slaves/" + d.slaveId); }}
                         className="w-12 h-12 bg-slate-50 text-slate-300 rounded-2xl flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all border border-slate-100"
                       >
                         <Trash2 size={18} />
@@ -491,7 +489,7 @@ function AdminPanel() {
              {approved.length === 0 && (
                <div className="text-center py-24 bg-white/50 rounded-[60px] border-4 border-dashed border-slate-100">
                  <Database className="w-16 h-16 text-slate-200 mx-auto mb-6" />
-                 <p className="text-slate-400 font-bold uppercase tracking-[4px] text-xs">No units yet</p>
+                 <p className="text-slate-400 font-bold uppercase tracking-[4px] text-xs">No active units</p>
                </div>
              )}
           </div>
@@ -500,12 +498,12 @@ function AdminPanel() {
         <main className="p-8 max-w-2xl mx-auto space-y-8 animate-in fade-in duration-500">
           <div className="bg-white p-10 rounded-[48px] shadow-sm border border-slate-100">
             <h2 className="text-xl font-bold mb-2">Change connection</h2>
-            <p className="text-slate-500 text-xs mb-8">Switch how your main unit connects to the hospital.</p>
+            <p className="text-slate-500 text-xs mb-8 uppercase tracking-widest font-bold opacity-60">System Mode</p>
             <div className="grid grid-cols-1 gap-4">
               {[
-                { m: 1, t: "Use Master WiFi", d: "Isolated network for just the nodes." },
-                { m: 2, t: "Use Building WiFi", d: "Connect to the hospital's internal network." },
-                { m: 4, t: "Use Cloud Sync", d: "Connect to the internet for remote monitoring." }
+                { m: 1, t: "Master Unit Only", d: "Private network for local monitoring." },
+                { m: 2, t: "Hospital Network", d: "Join the building's existing WiFi." },
+                { m: 4, t: "Cloud Synchronization", d: "Secure internet access for remote view." }
               ].map(opt => (
                 <button 
                   key={opt.m}
@@ -533,7 +531,7 @@ function AdminPanel() {
         >
           <div className={`w-2 h-2 rounded-full mb-1 transition-all ${activeTab === "dashboard" ? "bg-blue-400" : "bg-transparent"}`} />
           <Activity size={24} className="transition-all-duration-200 group-active:scale-95" />
-          <span className="text-[10px] font-bold">Main</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">Monitor</span>
         </button>
         <div className="w-[1px] h-10 bg-white/10" />
         <button 
@@ -542,13 +540,13 @@ function AdminPanel() {
         >
           <div className={`w-2 h-2 rounded-full mb-1 transition-all ${activeTab === "settings" ? "bg-blue-400" : "bg-transparent"}`} />
           <Settings size={24} className="transition-all-duration-200 group-active:scale-95" />
-          <span className="text-[10px] font-bold">Settings</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">Setup</span>
         </button>
       </nav>
 
       {/* Modal Overlay */}
       <SlaveModal
-        title={modalMode === "approve" ? "Add Unit" : "Change Unit"}
+        title={modalMode === "approve" ? "Add Patient" : "Edit Details"}
         open={!!modalSlave}
         onClose={() => setModalSlave(null)}
         onSubmit={(name: string, bed: string, room: string) => {
@@ -604,7 +602,7 @@ function SlaveModal({ title, open, onClose, onSubmit, defaults }: any) {
             onClick={() => onSubmit(name, bed, room)}
             className="w-full py-5 bg-blue-600 text-white font-bold uppercase text-[10px] tracking-[4px] rounded-3xl shadow-2xl shadow-blue-600/30 hover:bg-blue-700 transition-all"
           >
-            Save
+            Save Details
           </button>
           <button onClick={onClose} className="w-full py-5 bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-[4px] rounded-3xl hover:bg-slate-100 transition-all">Cancel</button>
         </div>
