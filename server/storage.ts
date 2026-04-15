@@ -1,7 +1,7 @@
 import type { Slave, InsertSlave, UpdateSlave, ApproveSlave } from "@shared/schema";
 import { slaves, systemSettings } from "@shared/schema";
 import { db } from "./db";
-import { eq, sql, notIn } from "drizzle-orm";
+import { eq, sql, not, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getAllSlaves(): Promise<Slave[]>;
@@ -269,7 +269,7 @@ export class DatabaseStorage implements IStorage {
 
     // PRUNING: Delete slaves that are NOT in the incoming list
     if (incomingIds.length > 0) {
-      const deletedCount = await db.delete(slaves).where(notIn(slaves.slaveId, incomingIds)).returning();
+      const deletedCount = await db.delete(slaves).where(not(inArray(slaves.slaveId, incomingIds))).returning();
       if (deletedCount.length > 0) {
         console.log(`[SYNC] Pruned ${deletedCount.length} ghost slaves from cloud DB`);
       }
