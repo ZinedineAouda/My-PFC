@@ -272,9 +272,9 @@ void publishAlert() {
     String payload;
     serializeJson(doc, payload);
 
-    // Localized cooldown: prevent re-triggering within 2s of a remote clear
-    if (lastClearTime > 0 && millis() - lastClearTime < 2000) {
-        Serial.println("[ALERT] Suppressed: recently cleared (re-arm delay)");
+    // Localized cooldown: prevent re-triggering within 100ms of a remote clear
+    if (lastClearTime > 0 && millis() - lastClearTime < 100) {
+        Serial.println("[ALERT] Suppressed: recently cleared (fast re-arm)");
         return;
     }
 
@@ -317,45 +317,98 @@ void startSetupPortal() {
     Serial.printf("[SETUP] Portal AP: %s @ %s\n",
                   apName.c_str(), WiFi.softAPIP().toString().c_str());
 
-    // Minimal setup page
+    // Premium setup/status page (Mirroring Master UX/UI)
     setupServer.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
         String html = R"rawliteral(
 <!DOCTYPE html><html><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Slave Setup</title>
+<title>Patient Unit</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,sans-serif;background:#0a0e1a;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.card{background:rgba(15,23,42,.85);border:1px solid rgba(255,255,255,.06);border-radius:24px;padding:36px;width:100%;max-width:420px}
-h1{font-size:20px;text-align:center;margin-bottom:8px;font-weight:800}
-.sub{text-align:center;font-size:12px;color:#64748b;margin-bottom:24px;font-family:monospace}
-label{display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:600}
-input{width:100%;padding:12px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.06);border-radius:10px;color:#fff;margin-bottom:14px;outline:none;font-size:14px}
-input:focus{border-color:#6366f1}
-button{width:100%;padding:14px;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
-.msg{text-align:center;padding:12px;border-radius:10px;margin-top:12px;font-size:13px}
-.ok{background:rgba(16,185,129,.1);color:#34d399}
-.err{background:rgba(239,68,68,.1);color:#f87171}
+:root{--pri:#2563eb;--bg:#f8fafc;--card:#ffffff;--text:#0f172a;--muted:#64748b;--danger:#dc2626;--ok:#10b981}
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Inter",sans-serif}
+body{background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--pri);padding:40px;color:#fff;position:relative;overflow:hidden}
+.header-bg{position:absolute;top:-20px;right:-20px;opacity:0.1;transform:rotate(45deg)}
+.header-content{position:relative;z-index:10;display:flex;items-center;gap:16px}
+.icon-box{width:48px;height:48px;background:rgba(255,255,255,0.2);backdrop-filter:blur(8px);border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 10px rgba(255,255,255,0.2)}
+.header h1{font-size:24px;font-weight:900;text-transform:uppercase;letter-spacing:-0.5px}
+.header p{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:3px;opacity:0.7;margin-bottom:4px}
+.content{padding:32px;max-width:500px;margin:0 auto}
+.card{background:var(--card);border-radius:40px;padding:40px;box-shadow:0 40px 80px -15px rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.02)}
+.status-card{text-align:center;padding:60px 20px}
+.status-icon{width:80px;height:80px;border-radius:30px;display:flex;align-items:center;justify-content:center;margin:0 auto 24px}
+.status-ok{background:rgba(16,185,129,0.1);color:var(--ok)}
+.status-help{background:rgba(220,38,38,0.1);color:var(--danger);animation:pulse 2s infinite}
+@keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.05)}100%{transform:scale(1)}}
+.status-label{font-size:40px;font-weight:900;letter-spacing:-1px;margin-bottom:8px}
+.status-sub{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:2px}
+.field{margin-bottom:24px}
+label{display:block;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:8px;padding-left:4px}
+input{width:100%;padding:20px;background:var(--bg);border:2px solid transparent;border-radius:24px;font-size:16px;font-weight:700;outline:none;transition:all 0.3s}
+input:focus{background:#fff;border-color:var(--pri);box-shadow:0 0 0 8px rgba(37,99,235,0.05)}
+button{width:100%;padding:20px;background:#0f172a;color:#fff;border:none;border-radius:24px;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:3px;cursor:pointer;transition:all 0.3s;box-shadow:0 20px 40px -10px rgba(0,0,0,0.1)}
+button:hover{transform:translateY(-2px);box-shadow:0 30px 60px -15px rgba(0,0,0,0.2)}
+button:active{transform:translateY(1px)}
+#msg{margin-top:24px;text-align:center;font-size:12px;font-weight:800;color:var(--ok)}
 </style></head><body>
-<div class="card">
-<h1>&#128276; Slave Setup</h1>
-<div class="sub">)rawliteral" + deviceId + R"rawliteral(</div>
-<label>WiFi Network (Master AP)</label>
-<input id="ssid" value="HospitalAlarm" placeholder="e.g. HospitalAlarm">
-<label>Password</label>
-<input id="pass" type="password" placeholder="Leave empty for open network">
-<label>Master MQTT IP</label>
-<input id="mqtt" value="192.168.4.1" placeholder="192.168.4.1">
-<button onclick="save()">Connect</button>
-<div id="msg"></div>
+<div class="header">
+  <div class="header-bg"><svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+  <div class="header-content">
+    <div class="icon-box"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+    <div><p>System</p><h1>Patient Unit</h1></div>
+  </div>
+</div>
+<div class="content">
+  <div id="main-card" class="card">
+    <div id="loader" style="text-align:center;padding:40px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:2px">Loading...</div>
+  </div>
 </div>
 <script>
+let lastState = null;
+function updateUI(data) {
+  const card = document.getElementById('main-card');
+  if(!data.connected || !data.approved) {
+    // Show Setup Mode
+    card.innerHTML = `
+      <h2 style="font-size:24px;font-weight:900;margin-bottom:8px">Link Unit</h2>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:32px;font-weight:500">Connect this unit to the alarm system.</p>
+      <div class="field"><label>Link to Main Unit</label><input id="ssid" value="HospitalAlarm"></div>
+      <div class="field"><label>Password</label><input id="pass" type="password" placeholder="Empty if none"></div>
+      <div class="field"><label>Main IP Address</label><input id="mqtt" value="192.168.4.1"></div>
+      <button onclick="save()">Save</button>
+      <div id="msg"></div>
+    `;
+  } else {
+    // Show Live Mode
+    fetch('/api/live-status').then(r=>r.json()).then(st => {
+      const isAlt = st.alert;
+      card.innerHTML = `
+        <div class="status-card">
+          <div class="status-icon ${isAlt?'status-help':'status-ok'}">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="${isAlt?'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01':'M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3'}"/></svg>
+          </div>
+          <div class="status-label">${isAlt?'HELP':'OK'}</div>
+          <div class="status-sub">${isAlt?'Push button to stop':'Device is monitoring'}</div>
+          <div style="margin-top:32px;padding-top:32px;border-top:1px solid #f1f5f9">
+            <p style="font-size:9px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:2px">Unit ID: ${data.id}</p>
+          </div>
+        </div>
+      `;
+    });
+  }
+}
 function save(){
   const d={ssid:document.getElementById('ssid').value,password:document.getElementById('pass').value,mqtt:document.getElementById('mqtt').value};
+  document.querySelector('button').innerHTML='Connecting...';
   fetch('/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)})
-  .then(r=>r.json()).then(r=>{document.getElementById('msg').innerHTML='<div class="msg ok">Connecting... Device will restart.</div>'})
-  .catch(()=>{document.getElementById('msg').innerHTML='<div class="msg err">Error</div>'});
+  .then(r=>r.json()).then(r=>{document.getElementById('msg').innerHTML='Done! Connecting...'; setTimeout(poll,3000);})
+  .catch(()=>{document.getElementById('msg').innerHTML='Error. Check details.';});
 }
+function poll() {
+  fetch('/api/status').then(r=>r.json()).then(updateUI).catch(e=>console.error(e));
+}
+poll();
+setInterval(poll, 5000);
 </script></body></html>)rawliteral";
         req->send(200, "text/html", html);
     });

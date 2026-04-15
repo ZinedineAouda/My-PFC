@@ -13,7 +13,7 @@
 #define LED_OFF           HIGH
 
 // ─── Timing ─────────────────────────────────────────────────
-#define DEBOUNCE_MS       300   // Button debounce window
+#define DEBOUNCE_MS       50    // Hair-trigger button debounce
 #define HEARTBEAT_MS      10000 // MQTT heartbeat every 10s
 #define RECONNECT_MS      5000  // WiFi/MQTT reconnect interval
 #define ALERT_LED_MS      30000 // LED stays on 30s after alert

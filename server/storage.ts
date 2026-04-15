@@ -135,6 +135,11 @@ export class DatabaseStorage implements IStorage {
       .set({ alertActive: false, lastUpdatedAt: Date.now() })
       .where(eq(slaves.slaveId, slaveId))
       .returning();
+    
+    if (updated) {
+      // Critical: Queue a command so the Master knows to turn off the physical Slave LED
+      await this.queueCommand("clear_alert", slaveId);
+    }
     return !!updated;
   }
 
