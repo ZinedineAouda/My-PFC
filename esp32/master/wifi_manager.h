@@ -13,7 +13,7 @@ class WifiManager {
 public:
     WifiManager()
         : _mode(MODE_NONE), _staConnected(false),
-          _lastReconnect(0), _reconnectInterval(5000) {
+          _lastReconnect(0), _reconnectInterval(5000), _lastReason(0) {
         memset(_apSSID, 0, sizeof(_apSSID));
         memset(_apPass, 0, sizeof(_apPass));
         memset(_staSSID, 0, sizeof(_staSSID));
@@ -79,16 +79,21 @@ public:
             Serial.printf("[WIFI] STA connected! IP: %s\n", _staIP.c_str());
         } else if (!connected && _staConnected) {
             _staConnected = false;
-            Serial.println("[WIFI] STA disconnected");
+            _lastReason = WiFi.reasonCode();
+            Serial.printf("[WIFI] STA disconnected. Reason: %d - %s\n", 
+                          _lastReason, getLastError().c_str());
         }
 
         // Auto-reconnect STA (non-blocking)
-        if (!connected && strlen(_staSSID) > 0) {
-            unsigned long now = millis();
-            if (now - _lastReconnect > _reconnectInterval) {
-                _lastReconnect = now;
-                Serial.printf("[WIFI] Reconnecting to %s...\n", _staSSID);
-                WiFi.begin(_staSSID, _staPass);
+        if (strlen(_staSSID) > 0) {
+            wl_status_t status = WiFi.status();
+            if (status != WL_CONNECTED && status != WL_IDLE_STATUS) {
+                unsigned long now = millis();
+                if (now - _lastReconnect > _reconnectInterval) {
+                    _lastReconnect = now;
+                    Serial.printf("[WIFI] Reconnecting to %s (Status: %d)...\n", _staSSID, (int)status);
+                    WiFi.begin(_staSSID, _staPass);
+                }
             }
         }
     }
@@ -132,6 +137,23 @@ public:
         return WiFi.softAPIP().toString();
     }
 
+    String getLastError() const {
+        if (_staConnected) return "Connected";
+        
+        wl_status_t status = WiFi.status();
+        switch (status) {
+            case WL_NO_SSID_AVAIL: return "SSID Not Found";
+            case WL_CONNECT_FAILED: {
+                if (_lastReason == 15 || _lastReason == 204) return "Invalid Password";
+                return "Connection Failed (" + String(_lastReason) + ")";
+            }
+            case WL_CONNECTION_LOST: return "Connection Lost";
+            case WL_DISCONNECTED: return "Disconnected";
+            case WL_IDLE_STATUS: return "Connecting...";
+            default: return "Status " + String((int)status);
+        }
+    }
+
     // ── Scan networks (async) ───────────────────────────────
     void startScan() {
         WiFi.scanNetworks(true);
@@ -161,6 +183,7 @@ public:
 private:
     WiFiOpMode _mode;
     bool _staConnected;
+    int  _lastReason;
     unsigned long _lastReconnect;
     unsigned long _reconnectInterval;
     String _staIP;

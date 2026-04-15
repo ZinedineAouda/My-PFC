@@ -35,11 +35,12 @@ public:
         }
     }
 
-    void handle(int currentMode) {
+    void handle(int currentMode, String wifiError = "OK") {
         if (WiFi.status() != WL_CONNECTED) return;
         if (_busy) return;
 
         _currentMode = currentMode;
+        _lastWifiError = wifiError;
         unsigned long now = millis();
         
         // ── 1. Process pending alert queue (highest priority — NO THROTTLE) ─
@@ -220,6 +221,7 @@ private:
         doc["mode"] = _currentMode;
         doc["uptime"] = millis() / 1000;
         doc["rssi"] = WiFi.RSSI();
+        doc["wifiError"] = _lastWifiError;
         String payload;
         serializeJson(doc, payload);
 
@@ -255,6 +257,7 @@ private:
         sendDoc["mode"] = _currentMode;
         sendDoc["uptime"] = millis() / 1000;
         sendDoc["rssi"] = WiFi.RSSI();
+        sendDoc["wifiError"] = _lastWifiError;
 
         JsonArray arr = sendDoc["slaves"].to<JsonArray>();
         for (auto& kv : _registry.devices()) {
@@ -311,6 +314,7 @@ private:
     bool                _forceSyncPending;
     int                 _consecutiveFails;
     int                 _currentMode = 1;
+    String              _lastWifiError = "OK";
     uint64_t            _timeOffset;
     WiFiClientSecure*   _client;
     std::vector<String> _alertQueue;

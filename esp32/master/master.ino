@@ -184,12 +184,22 @@ void loop() {
     // ── WebSocket client cleanup ────────────────────────────
     dashboard.handle();
 
+    // ── Serial Command Interface (Safety Wipe) ────────────────
+    if (Serial.available()) {
+        String input = Serial.readStringUntil('\n');
+        input.trim();
+        if (input == "WIPE_FACTORY_NOW") {
+            Serial.println("[SECURITY] Manual Serial Wipe sequence confirmed!");
+            onFactoryReset();
+        }
+    }
+
     // ── Device timeout detection ────────────────────────────
     registry.checkTimeouts();
 
     // ── Cloud sync (Mode 4 only) ────────────────────────────
     if (setupDone && currentMode == MODE_ONLINE && wifiMgr.staConnected()) {
-        cloudSync.handle((int)currentMode);
+        cloudSync.handle((int)currentMode, wifiMgr.getLastError());
     }
 
     // ── Periodic reminder if setup is pending ───────────────
@@ -314,9 +324,7 @@ void onSetup(int mode, const char* apSSID, const char* apPass) {
 void onRemoteCommand(const String& cmd, const String& params) {
     Serial.printf("[CLOUD] Remote Command Received: %s (params: %s)\n", cmd.c_str(), params.c_str());
     
-    if (cmd == "WIPE_DATA") {
-        onFactoryReset();
-    } else if (cmd == "CHANGE_MODE") {
+    if (cmd == "CHANGE_MODE") {
         int newMode = params.toInt();
         if (newMode >= 1 && newMode <= 4) {
             currentMode = (WiFiOpMode)newMode;

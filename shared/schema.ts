@@ -23,6 +23,7 @@ export const systemSettings = pgTable("system_settings", {
   masterLastSeen: bigint("master_last_seen", { mode: "number" }),
   masterUptime: integer("master_uptime"),
   masterRSSI: integer("master_rssi"),
+  masterWifiError: text("master_wifi_error"),
   wifiMode: integer("wifi_mode").notNull().default(1),
   pendingCommand: text("pending_command"),
   commandParams: text("command_params"),
@@ -89,6 +90,7 @@ export const masterSyncSchema = z.object({
   uptime: z.number().optional(),
   rssi: z.number().optional(),
   mode: z.number().optional(),
+  wifiError: z.string().optional(),
   slaves: z.array(z.object({
     slaveId: z.string(),
     patientName: z.string().optional().default(""),

@@ -308,9 +308,9 @@ function AdminPanel() {
     rssi: number; 
     slaves: number; 
     online: number; 
-    alerts: number;
     isMasterOnline?: boolean;
     masterIP?: string;
+    wifiError?: string;
   }>({
     queryKey: ["/api/status"],
     queryFn: async () => { const res = await fetch(apiUrl("/api/status"), { credentials: "include" }); return res.json(); },
@@ -345,14 +345,17 @@ function AdminPanel() {
         </div>
         
         <div className="flex items-center gap-6">
-          <div className="hidden md:flex flex-col items-end">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isCloudActive ? "bg-emerald-500" : (isCloud ? "bg-red-500" : "bg-amber-500")} animate-pulse`} />
               <span className="text-[10px] font-black uppercase tracking-widest">
-                {isCloudActive ? "Cloud Link Active" : (isCloud ? "Master Offline" : "Local Logic Restricted")}
+                {isCloudActive ? (status?.wifiError === "Connected" || !status?.wifiError ? "Cloud Link Active" : `WiFi: ${status.wifiError}`) : (isCloud ? "Master Offline" : "Local Logic Restricted")}
               </span>
             </div>
-            <p className="text-[9px] text-slate-400 font-bold mt-1">UPTIME: {Math.floor((status?.uptime || 0) / 60)} MIN</p>
+            <div className="flex items-center gap-2 mt-1">
+               <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">UPTIME: {Math.floor((status?.uptime || 0) / 60)} MIN</p>
+               <span className="text-[9px] text-slate-300 font-bold">|</span>
+               <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">RSSI: {status?.rssi || 0} dBm</p>
+            </div>
           </div>
           <button onClick={() => logoutMutation.mutate()} className="w-10 h-10 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all">
             <LogOut className="w-5 h-5" />
@@ -494,16 +497,6 @@ function AdminPanel() {
             </div>
           </div>
 
-          <div className="bg-red-50/50 p-10 rounded-[48px] border-2 border-red-100/50">
-             <h2 className="text-lg font-black text-red-600 mb-2">Wipe Command</h2>
-             <p className="text-red-800/60 text-[11px] font-medium leading-relaxed mb-8 italic">Executes a total cryptographic purge of all patient registries, WiFi credentials, and telemetry. Requires physical site visit for re-setup.</p>
-             <button 
-               onClick={() => { if(confirm("PERMANENT DATA WIPE?")) apiRequest("POST", "/api/system/reset"); }}
-               className="bg-white text-red-600 border-2 border-red-200 px-10 py-5 rounded-[24px] text-xs font-black uppercase tracking-[3px] shadow-xl shadow-red-600/5 hover:bg-red-600 hover:text-white transition-all w-full"
-             >
-               Execute Total Wipe
-             </button>
-          </div>
         </main>
       )}
 

@@ -17,9 +17,9 @@ export interface IStorage {
   getMode(): Promise<number>;
   setMode(mode: number): Promise<void>;
   isSetupDone(): Promise<boolean>;
-  updateMasterHeartbeat(mode?: number, uptime?: number, rssi?: number): Promise<void>;
+  updateMasterHeartbeat(mode?: number, uptime?: number, rssi?: number, wifiError?: string): Promise<void>;
   isMasterOnline(): Promise<boolean>;
-  syncFromMaster(slaves: any[], stats?: { mode?: number, uptime?: number, rssi?: number }): Promise<void>;
+  syncFromMaster(slaves: any[], stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void>;
   queueCommand(command: string, params?: string): Promise<void>;
   getAndClearCommand(): Promise<{ command: string; params: string } | null>;
   reset(): Promise<void>;
@@ -154,12 +154,13 @@ export class DatabaseStorage implements IStorage {
     return mode !== 0;
   }
 
-  async updateMasterHeartbeat(mode?: number, uptime?: number, rssi?: number): Promise<void> {
+  async updateMasterHeartbeat(mode?: number, uptime?: number, rssi?: number, wifiError?: string): Promise<void> {
     const now = Date.now();
     const update: any = { masterLastSeen: now };
     if (mode !== undefined) update.wifiMode = mode;
     if (uptime !== undefined) update.masterUptime = uptime;
     if (rssi !== undefined) update.masterRSSI = rssi;
+    if (wifiError !== undefined) update.masterWifiError = wifiError;
 
     await db.insert(systemSettings)
       .values({ 
@@ -167,7 +168,8 @@ export class DatabaseStorage implements IStorage {
         masterLastSeen: now,
         wifiMode: mode !== undefined ? mode : 1,
         masterUptime: uptime,
-        masterRSSI: rssi
+        masterRSSI: rssi,
+        masterWifiError: wifiError
       })
       .onConflictDoUpdate({
         target: systemSettings.id,
@@ -185,8 +187,8 @@ export class DatabaseStorage implements IStorage {
     return Date.now() - lastSeenNum < 60000;
   }
 
-  async syncFromMaster(incoming: Array<any>, stats?: { mode?: number, uptime?: number, rssi?: number }): Promise<void> {
-    await this.updateMasterHeartbeat(stats?.mode, stats?.uptime, stats?.rssi);
+  async syncFromMaster(incoming: Array<any>, stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void> {
+    await this.updateMasterHeartbeat(stats?.mode, stats?.uptime, stats?.rssi, stats?.wifiError);
     
     // First, set all current slaves to offline (we'll re-enable ones that appear in incoming)
     await db.update(slaves).set({ online: false });

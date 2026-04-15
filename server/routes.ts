@@ -163,6 +163,7 @@ export async function registerRoutes(
       isMasterOnline: await storage.isMasterOnline(),
       uptime: settings?.masterUptime ?? 0,
       rssi: settings?.masterRSSI ?? 0,
+      wifiError: settings?.masterWifiError ?? null,
     });
   }));
 
@@ -175,11 +176,6 @@ export async function registerRoutes(
     return res.json({ success: true, mode: parsed.data.mode });
   }));
 
-  app.post("/api/reset", requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
-    await storage.reset();
-    broadcastAllDevices();
-    return res.json({ success: true, message: "System reset successful" });
-  }));
 
   // ═════════════════════════════════════════════════════════════
   //  WIFI SCAN (mock for cloud dashboard)
@@ -319,7 +315,8 @@ export async function registerRoutes(
     await storage.syncFromMaster(parsed.data.slaves, {
       mode: parsed.data.mode,
       uptime: parsed.data.uptime,
-      rssi: parsed.data.rssi
+      rssi: parsed.data.rssi,
+      wifiError: parsed.data.wifiError
     });
     broadcastAllDevices();
 
@@ -327,22 +324,23 @@ export async function registerRoutes(
   }));
 
   app.post("/api/master-ping", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
-    const { mode, uptime, rssi } = req.body;
-    await storage.updateMasterHeartbeat(mode, uptime, rssi);
-    console.log(`[MASTER] Heartbeat received at ${new Date().toISOString()} (Uptime: ${uptime}s, RSSI: ${rssi}dBm)`);
-    broadcast({ type: "MASTER_STATUS", payload: { online: true, uptime, rssi } });
+    const { mode, uptime, rssi, wifiError } = req.body;
+    await storage.updateMasterHeartbeat(mode, uptime, rssi, wifiError);
+    console.log(`[MASTER] Heartbeat received at ${new Date().toISOString()} (Uptime: ${uptime}s, RSSI: ${rssi}dBm, Error: ${wifiError || "None"})`);
+    broadcast({ type: "MASTER_STATUS", payload: { online: true, uptime, rssi, wifiError } });
     return res.json({ success: true, serverTime: Date.now() });
   }));
 
   // ═════════════════════════════════════════════════════════════
   //  ADMIN ACTIONS (approve, clear alerts)
   // ═════════════════════════════════════════════════════════════
-  app.post("/api/approve/:slaveId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/approve", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const slaveId = req.body.slaveId;
     const parsed = approveSlaveSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
-    const slave = await storage.approveSlave(req.params.slaveId as string, parsed.data);
+    const slave = await storage.approveSlave(slaveId, parsed.data);
     if (!slave) {
       return res.status(404).json({ message: "Slave not found" });
     }
@@ -350,12 +348,27 @@ export async function registerRoutes(
     return res.json({ success: true, slave });
   }));
 
-  app.post("/api/clearAlert/:slaveId", requireAdminOrDevice, asyncHandler(async (req: Request, res: Response) => {
-    const cleared = await storage.clearAlert(req.params.slaveId as string);
+  app.post("/api/update", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const slaveId = req.body.slaveId;
+    const parsed = updateSlaveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+    }
+    const slave = await storage.updateSlave(slaveId, parsed.data);
+    if (!slave) {
+      return res.status(404).json({ message: "Slave not found" });
+    }
+    broadcast({ type: "UPDATE", payload: slave });
+    return res.json({ success: true, slave });
+  }));
+
+  app.post("/api/clearAlert", requireAdminOrDevice, asyncHandler(async (req: Request, res: Response) => {
+    const slaveId = req.body.slaveId || req.params.slaveId;
+    const cleared = await storage.clearAlert(slaveId);
     if (!cleared) {
       return res.status(404).json({ message: "Slave not found" });
     }
-    await broadcastDeviceUpdate(req.params.slaveId as string);
+    await broadcastDeviceUpdate(slaveId);
     return res.json({ success: true, message: "Alert cleared" });
   }));
 
