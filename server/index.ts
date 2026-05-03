@@ -41,87 +41,74 @@ const httpServer = createServer(app);
     log(`Server ready on port ${port} (Status: Healthy)`);
   });
 
-  // ─── STAGE 2: API & Admin Routes ──────────────────────────────────
+  // ─── STAGE 2: Critical DB Migrations (Nomenclature Shift) ──────────
+  try {
+    log("Verifying system schema and terminology...");
+    
+    // Ensure table exists
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        controller_last_seen BIGINT,
+        controller_uptime INTEGER,
+        controller_rssi INTEGER,
+        controller_wifi_error TEXT,
+        wifi_mode INTEGER NOT NULL DEFAULT 1,
+        pending_command TEXT,
+        command_params TEXT
+      );
+    `);
+
+    // Force-rename old columns if they exist
+    const renames = [
+      ["master_last_seen", "controller_last_seen"],
+      ["master_uptime", "controller_uptime"],
+      ["master_rssi", "controller_rssi"]
+    ];
+
+    for (const [oldCol, newCol] of renames) {
+      try {
+        await db.execute(sql.raw(`ALTER TABLE system_settings RENAME COLUMN ${oldCol} TO ${newCol};`));
+        log(`[MIGRATE] Renamed ${oldCol} to ${newCol}`);
+      } catch(e) {}
+    }
+
+    // Force-add new columns if missing
+    const newCols = [
+      ["controller_last_seen", "BIGINT"],
+      ["controller_uptime", "INTEGER"],
+      ["controller_rssi", "INTEGER"],
+      ["controller_wifi_error", "TEXT"],
+      ["wifi_mode", "INTEGER NOT NULL DEFAULT 1"],
+      ["pending_command", "TEXT"],
+      ["command_params", "TEXT"]
+    ];
+
+    for (const [col, type] of newCols) {
+      try {
+        await db.execute(sql.raw(`ALTER TABLE system_settings ADD COLUMN ${col} ${type};`));
+        log(`[MIGRATE] Added column: ${col}`);
+      } catch(e) {}
+    }
+
+    // Ensure the singleton row exists
+    await db.execute(sql`
+      INSERT INTO system_settings (id) 
+      VALUES (1) 
+      ON CONFLICT (id) DO NOTHING;
+    `);
+    log("Database schema is now up to date.");
+  } catch (err) {
+    console.error("[CRITICAL] Migration failed:", err);
+  }
+
+  // ─── STAGE 3: API & Admin Routes ──────────────────────────────────
   try {
     log("Registering API routes...");
     await registerRoutes(httpServer, app);
     
     log("Activating Frontend Dashboard...");
     if (isProd) serveStatic(app);
-
-    log("Connecting to database in background...");
-    try {
-      await Promise.race([
-        db.execute(sql`SELECT 1`),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("DB Timeout")), 8000))
-      ]);
-      log("Database linked successfully.");
-
-      // ─── Auto-Migration: Handle Nomenclature Shift ──────────
-      log("Verifying system schema and terminology...");
-      
-      // 1. Ensure table exists with new names
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS system_settings (
-          id INTEGER PRIMARY KEY DEFAULT 1,
-          controller_last_seen BIGINT,
-          controller_uptime INTEGER,
-          controller_rssi INTEGER,
-          controller_wifi_error TEXT,
-          wifi_mode INTEGER NOT NULL DEFAULT 1,
-          pending_command TEXT,
-          command_params TEXT
-        );
-      `);
-
-      // 2. Migration: Check for legacy column names and rename them
-      try {
-        await db.execute(sql`ALTER TABLE system_settings RENAME COLUMN master_last_seen TO controller_last_seen;`);
-        log("[MIGRATE] Renamed master_last_seen to controller_last_seen");
-      } catch(e) {}
-      
-      try {
-        await db.execute(sql`ALTER TABLE system_settings RENAME COLUMN master_uptime TO controller_uptime;`);
-        log("[MIGRATE] Renamed master_uptime to controller_uptime");
-      } catch(e) {}
-
-      try {
-        await db.execute(sql`ALTER TABLE system_settings RENAME COLUMN master_rssi TO controller_rssi;`);
-        log("[MIGRATE] Renamed master_rssi to controller_rssi");
-      } catch(e) {}
-
-      // 3. Force-add missing columns (Postgres doesn't support IF NOT EXISTS in ALTER TABLE directly for all versions, 
-      // so we use a safe catch-all)
-      const newCols = [
-        ["controller_last_seen", "BIGINT"],
-        ["controller_uptime", "INTEGER"],
-        ["controller_rssi", "INTEGER"],
-        ["controller_wifi_error", "TEXT"],
-        ["wifi_mode", "INTEGER NOT NULL DEFAULT 1"],
-        ["pending_command", "TEXT"],
-        ["command_params", "TEXT"]
-      ];
-
-      for (const [col, type] of newCols) {
-        try {
-          await db.execute(sql.raw(`ALTER TABLE system_settings ADD COLUMN ${col} ${type};`));
-          log(`[MIGRATE] Added missing column: ${col}`);
-        } catch(e) {
-          // Column already exists, ignore
-        }
-      }
-
-      // Ensure the singleton row exists
-      await db.execute(sql`
-        INSERT INTO system_settings (id) 
-        VALUES (1) 
-        ON CONFLICT (id) DO NOTHING;
-      `);
-      log("System schema verified.");
-      
-    } catch (dbErr) {
-      console.warn("[WARN] Database not ready yet, but server is UP. Will retry on next request.");
-    }
 
     if (!isProd) {
       log("Mode: Development — starting Vite");
