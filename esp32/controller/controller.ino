@@ -1,10 +1,10 @@
 /*
  * ══════════════════════════════════════════════════════════════════════
- *  Hospital Patient Alarm System — ESP32-S3 Master
+ *  Hospital Patient Alarm System — ESP32-S3 Controller
  * ══════════════════════════════════════════════════════════════════════
  *
  *  Architecture:
- *    - PicoMQTT embedded broker for slave communication (port 1883)
+ *    - PicoMQTT embedded broker for device communication (port 1883)
  *    - ESPAsyncWebServer + WebSocket for local dashboard (port 80)
  *    - HTTPS sync to Railway cloud server (Mode 4)
  *
@@ -70,7 +70,7 @@ void checkNewFlash() {
 }
 
 void loadSettings() {
-    prefs.begin("master_cfg", true); // Read-only mode
+    prefs.begin("controller_cfg", true); // Read-only mode
     setupDone = prefs.getBool("setupDone", false);
     currentMode = (WiFiOpMode)prefs.getInt("mode", (int)MODE_AP);
     
@@ -92,7 +92,7 @@ void loadSettings() {
 }
 
 void saveSettings() {
-    prefs.begin("master_cfg", false); // Read-write mode
+    prefs.begin("controller_cfg", false); // Read-write mode
     prefs.putBool("setupDone", setupDone);
     prefs.putInt("mode", (int)currentMode);
     prefs.putString("apSSID", wifiMgr.apSSID());
@@ -111,7 +111,7 @@ void setup() {
     delay(500);
     Serial.println();
     Serial.println("╔══════════════════════════════════════════╗");
-    Serial.println("║  Hospital Patient Alarm System — Master  ║");
+    Serial.println("║  Hospital Patient Alarm System — Controller  ║");
     Serial.println("║  MQTT Broker + Web Dashboard + Cloud     ║");
     Serial.println("╚══════════════════════════════════════════╝");
 
@@ -160,7 +160,7 @@ void setup() {
     dashboard.onSetup(onSetup);
     dashboard.onReSetup(onReSetup);
     dashboard.onReset(onFactoryReset);
-    dashboard.onClearSlaves([]() {
+    dashboard.onClearDevices([]() {
         Serial.println("[SYSTEM] Clearing all patient nodes...");
         for (auto const& [id, dev] : registry.devices()) {
             mqttHandler.sendCommand(id, "RESET_UNIT");
@@ -245,12 +245,12 @@ void onDeviceChange(const String& deviceId, const char* eventType) {
         dashboard.broadcastDeviceUpdate(deviceId);
     }
 
-    // Publish MQTT status to the slave (retained)
+    // Publish MQTT status to the device (retained)
     if (strcmp(eventType, "approve") == 0 || strcmp(eventType, "update") == 0) {
         mqttHandler.publishDeviceStatus(deviceId);
     }
 
-    // Send clear command to slave via MQTT
+    // Send clear command to device via MQTT
     if (strcmp(eventType, "clear") == 0) {
         mqttHandler.sendCommand(deviceId, "clear_alert");
     }
@@ -318,10 +318,10 @@ void onSetup(int mode, const char* apSSID, const char* apPass) {
     currentMode = (WiFiOpMode)mode;
     setupDone = true;
 
-    // Migration Broadcast: Alert slaves before we switch networks
+    // Migration Broadcast: Alert devices before we switch networks
     if (strlen(apSSID) > 0) {
         mqttHandler.broadcastMigration(apSSID, apPass);
-        delay(1000); // Give slaves time to receive the packet
+        delay(1000); // Give devices time to receive the packet
         wifiMgr.setAPCredentials(apSSID, apPass);
     }
 
@@ -348,7 +348,7 @@ void onRemoteCommand(const String& cmd, const String& params) {
             currentMode = (WiFiOpMode)newMode;
             saveSettings();
             // Logic: We set the HTTP timeout to 3000ms (3 seconds) using the CLOUD_TIMEOUT constant.
-            // This prevents the Master from hanging if the cloud server is unresponsive, 
+            // This prevents the Controller from hanging if the cloud server is unresponsive, 
             // ensuring the main loop remains responsive for local patient alarms.
             cloudSync.setTimeout(3000); 
             delay(500);
@@ -357,7 +357,7 @@ void onRemoteCommand(const String& cmd, const String& params) {
     } else if (cmd == "CLEAR_ALL_ALERTS") {
         registry.clearAllAlerts();
         dashboard.broadcastFullState();
-    } else if (cmd == "REMOVE_SLAVE") {
+    } else if (cmd == "REMOVE_DEVICE") {
         // Removes unit from hardware memory and NVS persistence
         // The registry.deleteDevice will trigger onDeviceChange -> RESET_UNIT
         if (registry.deleteDevice(params)) {
@@ -397,7 +397,7 @@ void handleBuzzer() {
     }
 }
 
-// Force master to re-enter setup phase
+// Force controller to re-enter setup phase
 void onReSetup() {
     Serial.println("[SYSTEM] Re-entering setup mode...");
     setupDone = false;
@@ -423,8 +423,8 @@ void onFactoryReset() {
     // 2. Wipe Registry NVS
     registry.factoryReset();
     
-    // 3. Clear Master Config (WiFi, Mode, etc)
-    prefs.begin("master_cfg", false);
+    // 3. Clear Controller Config (WiFi, Mode, etc)
+    prefs.begin("controller_cfg", false);
     prefs.clear();
     prefs.end();
 

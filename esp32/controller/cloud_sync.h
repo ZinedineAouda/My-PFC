@@ -27,7 +27,7 @@ public:
         _client->setInsecure();
         _client->setHandshakeTimeout(30000);
         _http = new HTTPClient();
-        _http->setTimeout(3000); // Drastically reduced to prevent Master loop blocking (critical for MQTT server)
+        _http->setTimeout(3000); // Drastically reduced to prevent Controller loop blocking (critical for MQTT server)
     }
 
     void onCommand(CloudCommandCallback cb) { _commandCallback = cb; }
@@ -90,20 +90,20 @@ public:
         _forceSyncPending = true;
     }
 
-    // Send a specific alert to the cloud (called when slave triggers alert)
-    void alertToCloud(const String& slaveId) {
+    // Send a specific alert to the cloud (called when device triggers alert)
+    void alertToCloud(const String& deviceId) {
         // Only queue if not already pending to avoid spamming
         for (const auto& id : _alertQueue) {
-            if (id == slaveId) return;
+            if (id == deviceId) return;
         }
         // Memory safety: limit queue size to 20 pending alerts
         if (_alertQueue.size() >= 20) {
             Serial.println("[CLOUD] Queue FULL, dropping oldest alert");
             _alertQueue.erase(_alertQueue.begin());
         }
-        _alertQueue.push_back(slaveId);
+        _alertQueue.push_back(deviceId);
         Serial.printf("[CLOUD] Alert queued: %s (Queue size: %d)\n", 
-                      slaveId.c_str(), _alertQueue.size());
+                      deviceId.c_str(), _alertQueue.size());
     }
 
 private:
@@ -115,14 +115,14 @@ private:
     void _processAlertQueue() {
         if (_alertQueue.empty()) return;
 
-        String slaveId = _alertQueue[0];
-        if (_sendAlertToCloud(slaveId)) {
+        String deviceId = _alertQueue[0];
+        if (_sendAlertToCloud(deviceId)) {
             _alertQueue.erase(_alertQueue.begin());
             _consecutiveFails = 0;
         } else {
             // Move to back of queue to allow other alerts to try
             _alertQueue.erase(_alertQueue.begin());
-            _alertQueue.push_back(slaveId);
+            _alertQueue.push_back(deviceId);
             _handleFailure();
         }
     }
@@ -188,11 +188,11 @@ private:
                     _registry.updateTimeOffset(_timeOffset);
                 }
 
-                if (path == "/api/master-sync") {
-                    // 1. Merge Slave Updates
-                    JsonArray remoteSlaves = recvDoc["slaves"];
-                    if (!remoteSlaves.isNull()) {
-                        _registry.mergeFromCloud(remoteSlaves);
+                if (path == "/api/controller-sync") {
+                    // 1. Merge Device Updates
+                    JsonArray remoteDevices = recvDoc["devices"];
+                    if (!remoteDevices.isNull()) {
+                        _registry.mergeFromCloud(remoteDevices);
                     }
 
                     // 2. Listen for Remote Commands
@@ -220,7 +220,7 @@ private:
         String payload;
         serializeJson(doc, payload);
 
-        int code = _postWithRetry("/api/master-ping", payload);
+        int code = _postWithRetry("/api/controller-ping", payload);
         if (code == 200) {
             Serial.println("[CLOUD] Ping OK");
         } else {
@@ -229,12 +229,12 @@ private:
     }
 
     // ── Send alert to cloud ────────────────────────────────
-    bool _sendAlertToCloud(const String& slaveId) {
-        String payload = "{\"slaveId\":\"" + slaveId + "\"}";
+    bool _sendAlertToCloud(const String& deviceId) {
+        String payload = "{\"deviceId\":\"" + deviceId + "\"}";
         int code = _postWithRetry("/api/alert", payload);
 
         if (code == 200) {
-            Serial.printf("[CLOUD] Alert sent: %s\n", slaveId.c_str());
+            Serial.printf("[CLOUD] Alert sent: %s\n", deviceId.c_str());
             return true;
         } else {
             Serial.printf("[CLOUD] Alert failed: HTTP %d\n", code);
@@ -254,11 +254,11 @@ private:
         sendDoc["rssi"] = WiFi.RSSI();
         sendDoc["wifiError"] = _lastWifiError;
 
-        JsonArray arr = sendDoc["slaves"].to<JsonArray>();
+        JsonArray arr = sendDoc["devices"].to<JsonArray>();
         for (auto& kv : _registry.devices()) {
-            const SlaveDevice& d = kv.second;
+            const PatientDevice& d = kv.second;
             JsonObject obj = arr.add<JsonObject>();
-            obj["slaveId"]     = d.slaveId;
+            obj["deviceId"]     = d.deviceId;
             obj["patientName"] = d.patientName;
             obj["bed"]         = d.bed;
             obj["room"]        = d.room;
@@ -274,7 +274,7 @@ private:
         serializeJson(sendDoc, payload);
 
         // ── POST to cloud via retry handler ─────────────────
-        int code = _postWithRetry("/api/master-sync", payload);
+        int code = _postWithRetry("/api/controller-sync", payload);
 
         if (code == 200) {
             _consecutiveFails = 0;

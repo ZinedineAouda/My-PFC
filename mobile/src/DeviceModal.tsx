@@ -21,7 +21,7 @@ type Props = {
   defaults?: { patientName?: string; bed?: string; room?: string };
 };
 
-export default function SlaveModal({ visible, title, onClose, onSubmit, loading, defaults }: Props) {
+export default function DeviceModal({ visible, title, onClose, onSubmit, loading, defaults }: Props) {
   const [name, setName] = useState('');
   const [bed, setBed] = useState('');
   const [room, setRoom] = useState('');
@@ -92,7 +92,7 @@ export default function SlaveModal({ visible, title, onClose, onSubmit, loading,
                 disabled={loading}
                 activeOpacity={0.8}
               >
-                <Text style={s.btnSubmitText}>{loading ? 'Saving...' : 'Activate Node'}</Text>
+                <Text style={s.btnSubmitText}>{loading ? 'Saving...' : 'Activate Device'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.btnCancel} onPress={onClose} activeOpacity={0.8}>
                 <Text style={s.btnCancelText}>Cancel</Text>

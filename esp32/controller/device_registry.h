@@ -1,6 +1,6 @@
 /*
  * ══════════════════════════════════════════════════════════════
- *  Device Registry — tracks all slave devices with NVS persistence
+ *  Device Registry — tracks all patient devices with NVS persistence
  * ══════════════════════════════════════════════════════════════
  */
 #ifndef DEVICE_REGISTRY_H
@@ -12,9 +12,9 @@
 #include <Preferences.h>
 #include "config.h"
 
-// ─── Slave Device Data ──────────────────────────────────────
-struct SlaveDevice {
-    String slaveId;
+// ─── Patient Device Data ──────────────────────────────────────
+struct PatientDevice {
+    String deviceId;
     String patientName;
     String bed;
     String room;
@@ -55,7 +55,7 @@ public:
     void load() {
         Preferences prefs;
         prefs.begin("registry", true);
-        String data = prefs.getString("slaves", "");
+        String data = prefs.getString("devices", "");
         prefs.end();
 
         if (data.length() > 0) {
@@ -64,9 +64,9 @@ public:
             if (!error) {
                 JsonArray arr = doc.as<JsonArray>();
                 for (JsonObject obj : arr) {
-                    SlaveDevice dev;
-                    dev.slaveId = obj["id"] | "";
-                    if (dev.slaveId.isEmpty()) continue;
+                    PatientDevice dev;
+                    dev.deviceId = obj["id"] | "";
+                    if (dev.deviceId.isEmpty()) continue;
                     dev.patientName = obj["n"] | "";
                     dev.bed = obj["b"] | "";
                     dev.room = obj["r"] | "";
@@ -74,7 +74,7 @@ public:
                     dev.alertActive = obj["al"] | false; // Restore alert state
                     dev.registered = true;
                     dev.online = false; // Reset to false on reboot
-                    _devices[dev.slaveId] = dev;
+                    _devices[dev.deviceId] = dev;
                 }
                 Serial.printf("[REG] Loaded %d devices from storage\n", _devices.size());
             }
@@ -88,9 +88,9 @@ public:
         JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
         for (auto const& item : _devices) {
-            const SlaveDevice& d = item.second;
+            const PatientDevice& d = item.second;
             JsonObject obj = arr.add<JsonObject>();
-            obj["id"] = d.slaveId;
+            obj["id"] = d.deviceId;
             obj["n"]  = d.patientName;
             obj["b"]  = d.bed;
             obj["r"]  = d.room;
@@ -105,7 +105,7 @@ public:
             Serial.printf("[REG] WARNING: Registry size (%d bytes) is approaching NVS limit (4096)!\n", out.length());
         }
         
-        prefs.putString("slaves", out);
+        prefs.putString("devices", out);
         prefs.end();
         Serial.printf("[REG] Saved %d devices (%d bytes)\n", _devices.size(), out.length());
     }
@@ -120,7 +120,7 @@ public:
     }
 
     // ── Register / heartbeat (creates if new) ───────────────
-    SlaveDevice* registerDevice(const String& id) {
+    PatientDevice* registerDevice(const String& id) {
         auto it = _devices.find(id);
         if (it != _devices.end()) {
             it->second.registered = true;
@@ -128,16 +128,16 @@ public:
             it->second.online = true;
             return &it->second;
         }
-        if (_devices.size() >= MAX_SLAVES) return nullptr;
+        if (_devices.size() >= MAX_DEVICES) return nullptr;
 
-        SlaveDevice dev;
-        dev.slaveId    = id;
+        PatientDevice dev;
+        dev.deviceId    = id;
         dev.registered = true;
         dev.lastSeen   = millis();
         dev.online     = true;
         _devices[id]   = dev;
 
-        Serial.printf("[REG] New slave: %s\n", id.c_str());
+        Serial.printf("[REG] New device: %s\n", id.c_str());
         save();
         _notify(id, "register");
         return &_devices[id];
@@ -190,7 +190,7 @@ public:
                 kv.second.alertActive = false;
                 kv.second.lastClearTime = millis();
                 kv.second.lastUpdatedAt = getCurrentTime();
-                _notify(kv.second.slaveId, "clear");
+                _notify(kv.second.deviceId, "clear");
             }
         }
         save();
@@ -232,7 +232,7 @@ public:
         return true;
     }
 
-    SlaveDevice* getDevice(const String& id) {
+    PatientDevice* getDevice(const String& id) {
         auto it = _devices.find(id);
         return (it != _devices.end()) ? &it->second : nullptr;
     }
@@ -274,7 +274,7 @@ public:
         for (auto& kv : _devices) {
             if (kv.second.online && (now - kv.second.lastSeen > HEARTBEAT_TIMEOUT_MS)) {
                 kv.second.online = false;
-                _notify(kv.second.slaveId, "offline");
+                _notify(kv.second.deviceId, "offline");
             }
         }
     }
@@ -283,7 +283,7 @@ public:
         JsonDocument doc;
         JsonArray arr = doc.to<JsonArray>();
         for (auto const& kv : _devices) {
-            const SlaveDevice& d = kv.second;
+            const PatientDevice& d = kv.second;
             if (onlyApproved && !d.approved) continue;
             JsonObject obj = arr.add<JsonObject>();
             _serializeDevice(d, obj);
@@ -293,10 +293,10 @@ public:
         return out;
     }
 
-    void mergeFromCloud(JsonArray& remoteSlaves) {
+    void mergeFromCloud(JsonArray& remoteDevices) {
         bool changed = false;
-        for (JsonObject remote : remoteSlaves) {
-            String rid = remote["slaveId"] | "";
+        for (JsonObject remote : remoteDevices) {
+            String rid = remote["deviceId"] | "";
             if (rid.isEmpty()) continue;
 
             auto it = _devices.find(rid);
@@ -335,9 +335,9 @@ public:
                     }
                 }
             } else {
-                if (_devices.size() < MAX_SLAVES) {
-                    SlaveDevice dev;
-                    dev.slaveId     = rid;
+                if (_devices.size() < MAX_DEVICES) {
+                    PatientDevice dev;
+                    dev.deviceId    = rid;
                     dev.patientName = remote["patientName"] | "";
                     dev.bed         = remote["bed"] | "";
                     dev.room        = remote["room"] | "";
@@ -353,10 +353,10 @@ public:
         if (changed) save();
     }
 
-    const std::map<String, SlaveDevice>& devices() const { return _devices; }
+    const std::map<String, PatientDevice>& devices() const { return _devices; }
 
 private:
-    std::map<String, SlaveDevice> _devices;
+    std::map<String, PatientDevice> _devices;
     unsigned long _lastTimeoutCheck;
     RegistryChangeCallback _changeCallback;
     uint64_t _timeOffset;
@@ -365,8 +365,8 @@ private:
         if (_changeCallback) _changeCallback(id, event);
     }
 
-    static void _serializeDevice(const SlaveDevice& d, JsonObject& obj) {
-        obj["slaveId"]       = d.slaveId;
+    static void _serializeDevice(const PatientDevice& d, JsonObject& obj) {
+        obj["deviceId"]      = d.deviceId;
         obj["patientName"]   = d.patientName;
         obj["bed"]           = d.bed;
         obj["room"]          = d.room;

@@ -14,7 +14,7 @@
 #include "device_registry.h"
 #include "dashboard_static.h"
 
-// Forward declarations — the MqttHandler reference is set from master.ino
+// Forward declarations — the MqttHandler reference is set from controller.ino
 class MqttHandler;
 extern MqttHandler mqttHandler;
 
@@ -59,10 +59,10 @@ public:
             doc["mode"]     = (int)_mode;
             doc["setup"]    = _setupDone;
             doc["authenticated"] = _checkAuth(req);
-            doc["masterIP"] = WiFi.localIP().toString(); 
+            doc["controllerIP"] = WiFi.localIP().toString(); 
             doc["uptime"]   = millis() / 1000;
             doc["rssi"]     = WiFi.RSSI();
-            doc["slaves"]   = (int)_registry.count();
+            doc["devices"]  = (int)_registry.count();
             doc["online"]   = (int)_registry.onlineCount();
             doc["alerts"]   = (int)_registry.alertCount();
             String out;
@@ -104,8 +104,8 @@ public:
             req->send(200, "application/json", out);
         });
 
-        // ── API: Get slaves ─────────────────────────────────
-        _server.on("/api/slaves", HTTP_GET, [this](AsyncWebServerRequest* req) {
+        // ── API: Get devices ─────────────────────────────────
+        _server.on("/api/devices", HTTP_GET, [this](AsyncWebServerRequest* req) {
             bool onlyApproved = !req->hasParam("all");
             req->send(200, "application/json", _registry.toJson(onlyApproved));
         });
@@ -118,12 +118,12 @@ public:
                 const char* pass = obj["password"] | "";
                 if (strlen(ssid) == 0) {
                     req->send(400, "application/json",
-                              "{\"success\":false,\"message\":\"Missing SSID\"}");
+                               "{\"success\":false,\"message\":\"Missing SSID\"}");
                     return;
                 }
                 if (_connectCallback) _connectCallback(ssid, pass);
                 req->send(200, "application/json",
-                          "{\"success\":true,\"message\":\"Connecting...\"}");
+                           "{\"success\":true,\"message\":\"Connecting...\"}");
             });
         _server.addHandler(connectHandler);
 
@@ -146,19 +146,19 @@ public:
             });
         _server.addHandler(setupHandler);
 
-        // ── API: Register slave ─────────────────────────────
+        // ── API: Register device ─────────────────────────────
         auto* registerHandler = new AsyncCallbackJsonWebHandler("/api/register",
             [this](AsyncWebServerRequest* req, JsonVariant& json) {
-                const char* id = json["slaveId"] | "";
+                const char* id = json["deviceId"] | "";
                 if (strlen(id) == 0) {
                     req->send(400, "application/json",
-                              "{\"success\":false,\"message\":\"Missing slaveId\"}");
+                               "{\"success\":false,\"message\":\"Missing deviceId\"}");
                     return;
                 }
-                SlaveDevice* dev = _registry.registerDevice(String(id));
+                PatientDevice* dev = _registry.registerDevice(String(id));
                 if (!dev) {
                     req->send(507, "application/json",
-                              "{\"success\":false,\"message\":\"Max devices\"}");
+                               "{\"success\":false,\"message\":\"Max devices\"}");
                     return;
                 }
                 req->send(200, "application/json", "{\"success\":true}");
@@ -168,26 +168,26 @@ public:
         // ── API: Alert ──────────────────────────────────────
         auto* alertHandler = new AsyncCallbackJsonWebHandler("/api/alert",
             [this](AsyncWebServerRequest* req, JsonVariant& json) {
-                const char* id = json["slaveId"] | "";
+                const char* id = json["deviceId"] | "";
                 if (strlen(id) == 0) {
                     req->send(400, "application/json",
-                              "{\"success\":false,\"message\":\"Missing slaveId\"}");
+                               "{\"success\":false,\"message\":\"Missing deviceId\"}");
                     return;
                 }
-                SlaveDevice* dev = _registry.getDevice(String(id));
+                PatientDevice* dev = _registry.getDevice(String(id));
                 if (!dev) {
                     req->send(200, "application/json",
-                              "{\"success\":false,\"reason\":\"unknown slave\"}");
+                               "{\"success\":false,\"reason\":\"unknown device\"}");
                     return;
                 }
                 if (!dev->approved) {
                     req->send(200, "application/json",
-                              "{\"success\":false,\"reason\":\"not approved\"}");
+                               "{\"success\":false,\"reason\":\"not approved\"}");
                     return;
                 }
                 if (dev->alertActive) {
                     req->send(200, "application/json",
-                              "{\"success\":false,\"reason\":\"alert already active\"}");
+                               "{\"success\":false,\"reason\":\"alert already active\"}");
                     return;
                 }
                 _registry.triggerAlert(String(id));
@@ -204,12 +204,12 @@ public:
                     req->send(200, "application/json", "{\"success\":true}");
                 } else {
                     req->send(401, "application/json",
-                              "{\"message\":\"Invalid credentials\"}");
+                               "{\"message\":\"Invalid credentials\"}");
                 }
             });
         _server.addHandler(loginHandler);
 
-        // ── API: Approve slave ──────────────────────────────
+        // ── API: Approve device ──────────────────────────────
         auto* approveHandler = new AsyncCallbackJsonWebHandler("/api/approve",
             [this](AsyncWebServerRequest* req, JsonVariant& json) {
                 if (!_checkAuth(req)) {
@@ -217,19 +217,19 @@ public:
                     return;
                 }
                 JsonObject obj = json.as<JsonObject>();
-                String slaveId = obj["slaveId"] | "";
-                bool ok = _registry.approveDevice(slaveId,
+                String deviceId = obj["deviceId"] | "";
+                bool ok = _registry.approveDevice(deviceId,
                     obj["patientName"] | "", obj["bed"] | "", obj["room"] | "");
                 if (!ok) {
                     req->send(404, "application/json", "{\"message\":\"Not found\"}");
                     return;
                 }
-                broadcastDeviceUpdate(slaveId);
+                broadcastDeviceUpdate(deviceId);
                 req->send(200, "application/json", "{\"success\":true}");
             });
         _server.addHandler(approveHandler);
 
-        // ── API: Update slave ───────────────────────────────
+        // ── API: Update device ───────────────────────────────
         auto* updateHandler = new AsyncCallbackJsonWebHandler("/api/update",
             [this](AsyncWebServerRequest* req, JsonVariant& json) {
                 if (!_checkAuth(req)) {
@@ -237,14 +237,14 @@ public:
                     return;
                 }
                 JsonObject obj = json.as<JsonObject>();
-                String slaveId = obj["slaveId"] | "";
-                bool ok = _registry.updateDevice(slaveId,
+                String deviceId = obj["deviceId"] | "";
+                bool ok = _registry.updateDevice(deviceId,
                     obj["patientName"] | "", obj["bed"] | "", obj["room"] | "");
                 if (!ok) {
                     req->send(404, "application/json", "{\"message\":\"Not found\"}");
                     return;
                 }
-                broadcastDeviceUpdate(slaveId);
+                broadcastDeviceUpdate(deviceId);
                 req->send(200, "application/json", "{\"success\":true}");
             });
         _server.addHandler(updateHandler);
@@ -257,24 +257,24 @@ public:
                     return;
                 }
                 JsonObject obj = json.as<JsonObject>();
-                String slaveId = obj["slaveId"] | "";
-                _registry.clearAlert(slaveId);
-                broadcastDeviceUpdate(slaveId);
+                String deviceId = obj["deviceId"] | "";
+                _registry.clearAlert(deviceId);
+                broadcastDeviceUpdate(deviceId);
                 req->send(200, "application/json", "{\"success\":true}");
             });
         _server.addHandler(clearHandler);
 
-        // ── API: Delete slave ───────────────────────────────
-        auto* deleteHandler = new AsyncCallbackJsonWebHandler("/api/delete-slave",
+        // ── API: Delete device ───────────────────────────────
+        auto* deleteHandler = new AsyncCallbackJsonWebHandler("/api/delete-device",
             [this](AsyncWebServerRequest* req, JsonVariant& json) {
                 if (!_checkAuth(req)) {
                     req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
                     return;
                 }
                 JsonObject obj = json.as<JsonObject>();
-                String slaveId = obj["slaveId"] | "";
-                if (_registry.deleteDevice(slaveId)) {
-                    broadcastDelete(slaveId);
+                String deviceId = obj["deviceId"] | "";
+                if (_registry.deleteDevice(deviceId)) {
+                    broadcastDelete(deviceId);
                     req->send(200, "application/json", "{\"success\":true}");
                 } else {
                     req->send(404, "application/json", "{\"message\":\"Not found\"}");
@@ -302,13 +302,13 @@ public:
             req->send(200, "application/json", "{\"success\":true}");
         });
 
-        // ── API: Clear Slave Registry ────────────────────────
-        _server.on("/api/system/clear-slaves", HTTP_POST, [this](AsyncWebServerRequest* req) {
+        // ── API: Clear Device Registry ────────────────────────
+        _server.on("/api/system/clear-devices", HTTP_POST, [this](AsyncWebServerRequest* req) {
             if (!_checkAuth(req)) {
                 req->send(401, "application/json", "{\"message\":\"Unauthorized\"}");
                 return;
             }
-            if (_clearSlavesCallback) _clearSlavesCallback();
+            if (_clearDevicesCallback) _clearDevicesCallback();
             req->send(200, "application/json", "{\"success\":true}");
         });
 
@@ -360,23 +360,23 @@ public:
     }
 
     void broadcastDelete(const String& deviceId) {
-        String json = "{\"type\":\"DELETE\",\"slaveId\":\"" + deviceId + "\"}";
+        String json = "{\"type\":\"DELETE\",\"deviceId\":\"" + deviceId + "\"}";
         _ws.textAll(json);
     }
 
-    // ── Callbacks for master.ino to wire up ─────────────────
+    // ── Callbacks for controller.ino to wire up ─────────────────
     typedef void (*ConnectCallback)(const char* ssid, const char* pass);
     typedef void (*SetupCallback)(int mode, const char* apSSID, const char* apPass);
     typedef void (*ResetCallback)();
     typedef void (*ReSetupCallback)();
-    typedef void (*ClearSlavesCallback)();
+    typedef void (*ClearDevicesCallback)();
     typedef void (*SyncCallback)();
 
     void onConnect(ConnectCallback cb) { _connectCallback = cb; }
     void onSetup(SetupCallback cb)     { _setupCallback = cb; }
     void onReSetup(ReSetupCallback cb) { _reSetupCallback = cb; }
     void onReset(ResetCallback cb)     { _resetCallback = cb; }
-    void onClearSlaves(ClearSlavesCallback cb) { _clearSlavesCallback = cb; }
+    void onClearDevices(ClearDevicesCallback cb) { _clearDevicesCallback = cb; }
     void onSync(SyncCallback cb)       { _syncCallback = cb; }
 
     void setSetupDone(bool done) { _setupDone = done; }
@@ -392,7 +392,7 @@ private:
     SetupCallback   _setupCallback = nullptr;
     ResetCallback   _resetCallback = nullptr;
     ReSetupCallback _reSetupCallback = nullptr;
-    ClearSlavesCallback _clearSlavesCallback = nullptr;
+    ClearDevicesCallback _clearDevicesCallback = nullptr;
     SyncCallback    _syncCallback = nullptr;
 
     // ── Auth check ──────────────────────────────────────────

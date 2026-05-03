@@ -1,6 +1,6 @@
 /*
  * ══════════════════════════════════════════════════════════════
- *  Hospital Patient Alarm System — Master Configuration
+ *  Hospital Patient Alarm System — Controller Configuration
  *  Board: ESP32-S3
  * ══════════════════════════════════════════════════════════════
  */
@@ -26,13 +26,13 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 #define MDNS_NAME            "hospital-alarm"
 
 // ─── Device Management ──────────────────────────────────────
-#define MAX_SLAVES            200
-#define HEARTBEAT_TIMEOUT_MS  30000   // Mark slave offline after 30s silence
+#define MAX_DEVICES           200
+#define HEARTBEAT_TIMEOUT_MS  30000   // Mark device offline after 30s silence
 #define TIMEOUT_CHECK_MS      5000    // Run timeout scan every 5s
 
 // ─── Cloud Sync (Mode 4 only) ───────────────────────────────
 #define CLOUD_SERVER_URL      "https://my-pfc-production.up.railway.app"
-#define CLOUD_DEVICE_KEY      "esp32_master_super_secure_key_123"
+#define CLOUD_DEVICE_KEY      "esp32_controller_super_secure_key_123"
 #define CLOUD_SYNC_INTERVAL   3000    // Reduced to 3s for faster "Stop Alert" response
 #define CLOUD_PING_INTERVAL   1500    // Reduced to 1.5s for "Live" status feel
 #define CLOUD_HTTP_TIMEOUT    10000   // Reduced to 10s to fail/retry faster on bad connections
@@ -53,21 +53,21 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 // ─── Operating Modes ────────────────────────────────────────
 enum WiFiOpMode : uint8_t {
     MODE_NONE    = 0,   // Not yet configured (Setup Wizard)
-    MODE_AP      = 1,   // Standalone: Master creates WiFi
-    MODE_STA     = 2,   // Facility: Master joins Hospital WiFi
-    MODE_AP_STA  = 3,   // Hybrid: Master creates WiFi + joins Hospital WiFi
+    MODE_AP      = 1,   // Standalone: Controller creates WiFi
+    MODE_STA     = 2,   // Facility: Controller joins Hospital WiFi
+    MODE_AP_STA  = 3,   // Hybrid: Controller creates WiFi + joins Hospital WiFi
     MODE_ONLINE  = 4    // Cloud: AP_STA + Active Railway Sync
 };
 
-// ─── Slave Migration Settings ──────────────────────────────
+// ─── Device Migration Settings ──────────────────────────────
 #define DISCOVERY_TOPIC       "hospital/discovery"
 #define FALLBACK_SSID         "HospitalAlarm"
 
 // ─── MQTT Topics ────────────────────────────────────────────
-// Slaves publish to:
+// Devices publish to:
 //   device/{id}/alert          — button pressed
 //   device/{id}/heartbeat      — alive ping
-// Master publishes to:
+// Controller publishes to:
 //   device/{id}/status         — approval info (retained)
 //   device/{id}/command        — clear alert, etc.
 

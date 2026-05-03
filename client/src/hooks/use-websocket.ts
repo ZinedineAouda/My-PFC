@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 export type WsMessage = {
-  type: "ALERT" | "REGISTER" | "UPDATE" | "DELETE" | "MASTER_STATUS" | "FULL_STATE";
+  type: "ALERT" | "REGISTER" | "UPDATE" | "DELETE" | "CONTROLLER_STATUS" | "FULL_STATE";
   payload: any;
 };
 

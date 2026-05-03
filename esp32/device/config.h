@@ -1,10 +1,10 @@
 /*
  * ══════════════════════════════════════════════════════════════
- *  Hospital Alarm — ESP8266 Slave Configuration
+ *  Hospital Alarm — ESP8266 Device Configuration
  * ══════════════════════════════════════════════════════════════
  */
-#ifndef SLAVE_CONFIG_H
-#define SLAVE_CONFIG_H
+#ifndef DEVICE_CONFIG_H
+#define DEVICE_CONFIG_H
 
 // ─── Hardware Pins ──────────────────────────────────────────
 #define BUTTON_PIN        5     // GPIO5 / D1 on NodeMCU
@@ -19,12 +19,12 @@
 #define ALERT_LED_MS      30000 // LED stays on 30s after alert
 #define MQTT_KEEPALIVE    15    // MQTT keepalive in seconds
 
-// ─── MQTT Broker (Master ESP32) ─────────────────────────────
+// ─── MQTT Broker (Controller ESP32) ─────────────────────────────
 #define MQTT_BROKER_IP    "192.168.4.1"
 #define MQTT_BROKER_PORT  1883
 #define DISCOVERY_TOPIC   "hospital/discovery"
 
-// ─── Default WiFi (Master AP) ───────────────────────────────
+// ─── Default WiFi (Controller AP) ───────────────────────────────
 // Change these before flashing, or use the setup portal
 #define DEFAULT_WIFI_SSID "HospitalAlarm"
 #define DEFAULT_WIFI_PASS ""
@@ -32,4 +32,4 @@
 // Set to true to skip the setup portal and use the defaults above
 #define USE_HARDCODED_WIFI false
 
-#endif // SLAVE_CONFIG_H
+#endif // DEVICE_CONFIG_H

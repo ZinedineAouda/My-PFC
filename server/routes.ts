@@ -7,14 +7,14 @@ import { storage } from "./storage";
 import { initWss, broadcast, broadcastDeviceUpdate, broadcastAllDevices } from "./wss";
 import { log } from "./index";
 import {
-  insertSlaveSchema,
-  updateSlaveSchema,
-  approveSlaveSchema,
+  insertDeviceSchema,
+  updateDeviceSchema,
+  approveDeviceSchema,
   alertRequestSchema,
   registerRequestSchema,
   setupSchema,
   connectWifiSchema,
-  masterSyncSchema,
+  controllerSyncSchema,
 } from "@shared/schema";
 
 // ─── Utility: Async Error Wrapper ─────────────────────────────────────
@@ -39,7 +39,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   return res.status(401).json({ message: "Unauthorized" });
 }
 
-// ─── Middleware: Require device API key (ESP32 master) ───────────────
+// ─── Middleware: Require device API key (ESP32 controller) ───────────────
 function requireDeviceKey(req: Request, res: Response, next: NextFunction) {
   const key = req.headers["x-device-key"] as string;
   const expected = process.env.DEVICE_API_KEY;
@@ -150,20 +150,20 @@ export async function registerRoutes(
   //  SYSTEM STATUS
   // ═════════════════════════════════════════════════════════════
   app.get("/api/status", asyncHandler(async (_req: Request, res: Response) => {
-    const all = await storage.getAllSlaves();
+    const all = await storage.getAllDevices();
     const settings = await storage.getSettings();
     return res.json({
       mode: settings?.wifiMode ?? await storage.getMode(),
       setup: await storage.isSetupDone(),
-      masterIP: "cloud",
-      slaves: all.length,
+      controllerIP: "cloud",
+      devices: all.length,
       online: all.filter((s) => s.online).length,
       alerts: all.filter((s) => s.alertActive).length,
       pending: all.filter((s) => !s.approved).length,
-      isMasterOnline: await storage.isMasterOnline(),
-      uptime: settings?.masterUptime ?? 0,
-      rssi: settings?.masterRSSI ?? 0,
-      wifiError: settings?.masterWifiError ?? null,
+      isControllerOnline: await storage.isControllerOnline(),
+      uptime: settings?.controllerUptime ?? 0,
+      rssi: settings?.controllerRSSI ?? 0,
+      wifiError: settings?.controllerWifiError ?? null,
     });
   }));
 
@@ -197,65 +197,65 @@ export async function registerRoutes(
   });
 
   // ═════════════════════════════════════════════════════════════
-  //  SLAVE MANAGEMENT
+  //  DEVICE MANAGEMENT
   // ═════════════════════════════════════════════════════════════
-  app.get("/api/slaves", asyncHandler(async (req: Request, res: Response) => {
+  app.get("/api/devices", asyncHandler(async (req: Request, res: Response) => {
     if (req.query.all === "1" || req.query.all === "") {
-      return res.json(await storage.getAllSlaves());
+      return res.json(await storage.getAllDevices());
     }
-    return res.json(await storage.getApprovedSlaves());
+    return res.json(await storage.getApprovedDevices());
   }));
 
-  app.post("/api/slaves", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const parsed = insertSlaveSchema.safeParse(req.body);
+  app.post("/api/devices", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const parsed = insertDeviceSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
     try {
-      const slave = await storage.addSlave(parsed.data);
-      broadcast({ type: "REGISTER", payload: slave });
-      return res.json({ success: true, slave });
+      const device = await storage.addDevice(parsed.data);
+      broadcast({ type: "REGISTER", payload: device });
+      return res.json({ success: true, device });
     } catch (err: any) {
       return res.status(409).json({ message: err.message });
     }
   }));
 
-  app.put("/api/slaves/:slaveId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const parsed = updateSlaveSchema.safeParse(req.body);
+  app.put("/api/devices/:deviceId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const parsed = updateDeviceSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
-    const slave = await storage.updateSlave(req.params.slaveId as string, parsed.data);
-    if (!slave) {
-      return res.status(404).json({ message: "Slave not found" });
+    const device = await storage.updateDevice(req.params.deviceId as string, parsed.data);
+    if (!device) {
+      return res.status(404).json({ message: "Device not found" });
     }
-    broadcast({ type: "UPDATE", payload: slave });
-    return res.json({ success: true, slave });
+    broadcast({ type: "UPDATE", payload: device });
+    return res.json({ success: true, device });
   }));
 
-  app.delete("/api/slaves/:slaveId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const deleted = await storage.deleteSlave(req.params.slaveId as string);
+  app.delete("/api/devices/:deviceId", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const deleted = await storage.deleteDevice(req.params.deviceId as string);
     if (!deleted) {
-      return res.status(404).json({ message: "Slave not found" });
+      return res.status(404).json({ message: "Device not found" });
     }
-    broadcast({ type: "DELETE", payload: { slaveId: req.params.slaveId as string } });
+    broadcast({ type: "DELETE", payload: { deviceId: req.params.deviceId as string } });
     return res.json({ success: true, message: "Deleted" });
   }));
 
   // ═════════════════════════════════════════════════════════════
-  //  DEVICE REGISTRATION & ALERTS (from ESP32 master)
+  //  DEVICE REGISTRATION & ALERTS (from ESP32 controller)
   // ═════════════════════════════════════════════════════════════
   app.post("/api/register", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
     const parsed = registerRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid body" });
     }
-    const slave = await storage.registerSlave(parsed.data.slaveId);
-    await storage.updateMasterHeartbeat();
-    broadcast({ type: "REGISTER", payload: slave });
+    const device = await storage.registerDevice(parsed.data.deviceId);
+    await storage.updateControllerHeartbeat();
+    broadcast({ type: "REGISTER", payload: device });
     return res.json({
       success: true,
-      message: slave.approved ? "Registered" : "Pending approval",
+      message: device.approved ? "Registered" : "Pending approval",
     });
   }));
 
@@ -264,13 +264,13 @@ export async function registerRoutes(
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid body" });
     }
-    const result = await storage.triggerAlert(parsed.data.slaveId);
-    await storage.updateMasterHeartbeat();
+    const result = await storage.triggerAlert(parsed.data.deviceId);
+    await storage.updateControllerHeartbeat();
     if (!result.success) {
       return res.json({ success: false, reason: result.reason });
     }
-    broadcast({ type: "ALERT", payload: { slaveId: parsed.data.slaveId } });
-    broadcastDeviceUpdate(parsed.data.slaveId);
+    broadcast({ type: "ALERT", payload: { deviceId: parsed.data.deviceId } });
+    broadcastDeviceUpdate(parsed.data.deviceId);
     return res.json({ success: true });
   }));
 
@@ -279,37 +279,37 @@ export async function registerRoutes(
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid body" });
     }
-    const slave = await storage.registerSlave(parsed.data.slaveId);
-    await storage.updateMasterHeartbeat();
+    const device = await storage.registerDevice(parsed.data.deviceId);
+    await storage.updateControllerHeartbeat();
     return res.json({
       success: true,
-      approved: slave.approved,
-      alertActive: slave.alertActive,
+      approved: device.approved,
+      alertActive: device.alertActive,
     });
   }));
 
   // ═════════════════════════════════════════════════════════════
-  //  MASTER SYNC (bidirectional state exchange)
+  //  CONTROLLER SYNC (bidirectional state exchange)
   // ═════════════════════════════════════════════════════════════
-  app.post("/api/master-sync", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/controller-sync", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
     try {
       const cmd = await storage.getAndClearCommand();
-      const parsed = masterSyncSchema.safeParse(req.body);
+      const parsed = controllerSyncSchema.safeParse(req.body);
 
       if (!parsed.success) {
         console.warn("[SYNC] Validation failed:", parsed.error.format());
-        await storage.updateMasterHeartbeat();
+        await storage.updateControllerHeartbeat();
         return res.json({
           success: true,
           mode: await storage.getMode(),
-          slaves: await storage.getAllSlaves(),
+          devices: await storage.getAllDevices(),
           command: cmd?.command,
           params: cmd?.params
         });
       }
 
       // 1. Authoritative Merge & Pruning FIRST
-      await storage.syncFromMaster(parsed.data.slaves, {
+      await storage.syncFromController(parsed.data.devices, {
         mode: parsed.data.mode,
         uptime: parsed.data.uptime,
         rssi: parsed.data.rssi,
@@ -320,13 +320,13 @@ export async function registerRoutes(
       const responseData: any = {
         success: true,
         mode: await storage.getMode(),
-        slaves: await storage.getAllSlaves(),
+        devices: await storage.getAllDevices(),
       };
 
       if (cmd) {
         responseData.command = cmd.command;
         responseData.params = cmd.params;
-        console.log(`[SYNC] Delivering command to Master: ${cmd.command}`);
+        console.log(`[SYNC] Delivering command to Controller: ${cmd.command}`);
       }
 
       broadcastAllDevices();
@@ -338,11 +338,11 @@ export async function registerRoutes(
     }
   }));
 
-  app.post("/api/master-ping", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
+  app.post("/api/controller-ping", requireDeviceKey, asyncHandler(async (req: Request, res: Response) => {
     const { mode, uptime, rssi, wifiError } = req.body;
-    await storage.updateMasterHeartbeat(mode, uptime, rssi, wifiError);
-    console.log(`[MASTER] Heartbeat received at ${new Date().toISOString()} (Uptime: ${uptime}s, RSSI: ${rssi}dBm, Error: ${wifiError || "None"})`);
-    broadcast({ type: "MASTER_STATUS", payload: { online: true, uptime, rssi, wifiError } });
+    await storage.updateControllerHeartbeat(mode, uptime, rssi, wifiError);
+    console.log(`[CONTROLLER] Heartbeat received at ${new Date().toISOString()} (Uptime: ${uptime}s, RSSI: ${rssi}dBm, Error: ${wifiError || "None"})`);
+    broadcast({ type: "CONTROLLER_STATUS", payload: { online: true, uptime, rssi, wifiError } });
     return res.json({ success: true, serverTime: Date.now() });
   }));
 
@@ -350,40 +350,40 @@ export async function registerRoutes(
   //  ADMIN ACTIONS (approve, clear alerts)
   // ═════════════════════════════════════════════════════════════
   app.post("/api/approve", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const slaveId = req.body.slaveId;
-    const parsed = approveSlaveSchema.safeParse(req.body);
+    const deviceId = req.body.deviceId;
+    const parsed = approveDeviceSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
-    const slave = await storage.approveSlave(slaveId, parsed.data);
-    if (!slave) {
-      return res.status(404).json({ message: "Slave not found" });
+    const device = await storage.approveDevice(deviceId, parsed.data);
+    if (!device) {
+      return res.status(404).json({ message: "Device not found" });
     }
-    broadcast({ type: "UPDATE", payload: slave });
-    return res.json({ success: true, slave });
+    broadcast({ type: "UPDATE", payload: device });
+    return res.json({ success: true, device });
   }));
 
   app.post("/api/update", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-    const slaveId = req.body.slaveId;
-    const parsed = updateSlaveSchema.safeParse(req.body);
+    const deviceId = req.body.deviceId;
+    const parsed = updateDeviceSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
     }
-    const slave = await storage.updateSlave(slaveId, parsed.data);
-    if (!slave) {
-      return res.status(404).json({ message: "Slave not found" });
+    const device = await storage.updateDevice(deviceId, parsed.data);
+    if (!device) {
+      return res.status(404).json({ message: "Device not found" });
     }
-    broadcast({ type: "UPDATE", payload: slave });
-    return res.json({ success: true, slave });
+    broadcast({ type: "UPDATE", payload: device });
+    return res.json({ success: true, device });
   }));
 
   app.post("/api/clearAlert", requireAdminOrDevice, asyncHandler(async (req: Request, res: Response) => {
-    const slaveId = req.body.slaveId || req.params.slaveId;
-    const cleared = await storage.clearAlert(slaveId);
+    const deviceId = req.body.deviceId || req.params.deviceId;
+    const cleared = await storage.clearAlert(deviceId);
     if (!cleared) {
-      return res.status(404).json({ message: "Slave not found" });
+      return res.status(404).json({ message: "Device not found" });
     }
-    await broadcastDeviceUpdate(slaveId);
+    await broadcastDeviceUpdate(deviceId);
     return res.json({ success: true, message: "Alert cleared" });
   }));
 

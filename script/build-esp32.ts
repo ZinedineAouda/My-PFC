@@ -47,7 +47,7 @@ const uint8_t react_index_html_gz[] PROGMEM = {\n`;
 #endif // DASHBOARD_STATIC_H
 `;
 
-  const outPath = path.resolve(process.cwd(), "esp32/master/dashboard_static.h");
+  const outPath = path.resolve(process.cwd(), "esp32/controller/dashboard_static.h");
   await writeFile(outPath, headerContent, "utf-8");
   
   console.log(`Successfully wrote to ${outPath}!`);

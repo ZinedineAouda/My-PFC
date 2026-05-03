@@ -17,7 +17,7 @@ public:
     MqttHandler(DeviceRegistry& reg) : _registry(reg), _broker(MQTT_PORT) {}
 
     void begin() {
-        // ── Subscribe to slave alerts ───────────────────────
+        // ── Subscribe to device alerts ───────────────────────
         _broker.subscribe("device/+/alert", [this](const char* topic, const char* payload) {
             String deviceId = _extractDeviceId(topic);
             if (deviceId.isEmpty()) return;
@@ -33,15 +33,15 @@ public:
             }
         });
 
-        // ── Subscribe to slave heartbeats ───────────────────
+        // ── Subscribe to device heartbeats ───────────────────
         _broker.subscribe("device/+/heartbeat", [this](const char* topic, const char* payload) {
             String deviceId = _extractDeviceId(topic);
             if (deviceId.isEmpty()) return;
             
             _registry.heartbeat(deviceId);
             
-            // Refresh approval status for the slave on every heartbeat
-            // This fixes the "ghost setup page" after a slave reboots
+            // Refresh approval status for the device on every heartbeat
+            // This fixes the "ghost setup page" after a device reboots
             publishDeviceStatus(deviceId);
         });
 
@@ -54,9 +54,9 @@ public:
         _broker.loop();
     }
 
-    // ── Publish approval status to a slave (retained) ───────
+    // ── Publish approval status to a device (retained) ───────
     void publishDeviceStatus(const String& deviceId) {
-        SlaveDevice* dev = _registry.getDevice(deviceId);
+        PatientDevice* dev = _registry.getDevice(deviceId);
         if (!dev) return;
 
         JsonDocument doc;
@@ -73,7 +73,7 @@ public:
         Serial.printf("[MQTT] Published status for %s\n", deviceId.c_str());
     }
 
-    // ── Send command to a specific slave ────────────────────
+    // ── Send command to a specific device ────────────────────
     void sendCommand(const String& deviceId, const char* action) {
         JsonDocument doc;
         doc["action"] = action;
@@ -85,7 +85,7 @@ public:
 
     // ── Broadcast to all: system announcement ───────────────
     void broadcast(const char* message) {
-        _broker.publish("master/broadcast", message, 0, false);
+        _broker.publish("controller/broadcast", message, 0, false);
     }
 
     // ── Migration Broadcast (New in 4D Rebuild) ──────────────

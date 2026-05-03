@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Slave } from "@shared/schema";
+import type { Device } from "@shared/schema";
 import { apiRequest, apiUrl, getQueryFn } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWebsocket } from "@/hooks/use-websocket";
@@ -51,7 +51,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
         await apiRequest("POST", "/api/connect-wifi", { ssid: staSsid, password: staPass });
       }
       await apiRequest("POST", "/api/setup", { mode, apSSID: apSsid, apPass: apPass });
-      toast({ title: "Configuration Deployed", description: "Node is re-provisioning. Re-link to the new Master SSID." });
+      toast({ title: "Configuration Deployed", description: "Node is re-provisioning. Re-link to the new Controller SSID." });
       onComplete();
     } catch (e) {
       toast({ title: "Sync Failed", description: "Hardware was unreachable.", variant: "destructive" });
@@ -72,7 +72,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[4px] opacity-70">System</p>
-              <h1 className="text-3xl font-bold tracking-tight uppercase">Setup Master</h1>
+              <h1 className="text-3xl font-bold tracking-tight uppercase">Setup Controller</h1>
             </div>
           </div>
           <div className="flex gap-2">
@@ -91,7 +91,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
               </header>
               <div className="grid gap-3">
                 {[
-                   { m: 1, t: "Use just Master Unit", d: "Private network for this building. No cloud.", icon: <Shield className="w-4 h-4" /> },
+                   { m: 1, t: "Use just Controller Unit", d: "Private network for this building. No cloud.", icon: <Shield className="w-4 h-4" /> },
                    { m: 2, t: "Join Hospital WiFi", d: "Connect to the building's existing network.", icon: <Database className="w-4 h-4" /> },
                    { m: 3, t: "Bridge Mode", d: "Hybrid: Joins hospital WiFi while creating its own.", icon: <Wifi className="w-4 h-4" /> },
                    { m: 4, t: "Full Cloud Access", d: "Securely link to the internet for remote access.", icon: <Activity className="w-4 h-4" /> }
@@ -118,7 +118,7 @@ function SetupWizard({ onComplete }: { onComplete: () => void }) {
             <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
               <header>
                 <h2 className="text-2xl font-bold">WiFi Setup</h2>
-                <p className="text-slate-500 text-sm mt-1">Choose a name for your new Master unit.</p>
+                <p className="text-slate-500 text-sm mt-1">Choose a name for your new Controller unit.</p>
               </header>
               <div className="space-y-5">
                 <div className="space-y-2">
@@ -273,7 +273,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
 function AdminPanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [modalSlave, setModalSlave] = useState<Slave | null>(null);
+  const [modalDevice, setModalDevice] = useState<Device | null>(null);
   const [modalMode, setModalMode] = useState<"approve" | "edit">("approve");
   const [isSyncing, setIsSyncing] = useState(false);
   const sirenRef = useRef<HTMLAudioElement | null>(null);
@@ -285,21 +285,21 @@ function AdminPanel() {
   }, []);
 
   useWebsocket((msg) => {
-    queryClient.invalidateQueries({ queryKey: ["/api/slaves"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/devices"] });
     queryClient.invalidateQueries({ queryKey: ["/api/status"] });
     if (msg.type === "ALERT" || msg.type === "UPDATE") {
        const device = msg.payload;
        if (device?.alertActive) {
           if (sirenRef.current) sirenRef.current.play().catch(() => {});
           Haptics.vibrate({ duration: 1000 }).catch(() => {});
-          toast({ title: "EMERGENCY ALARM", description: `Helping: ${device.patientName || device.slaveId}`, variant: "destructive" });
+          toast({ title: "EMERGENCY ALARM", description: `Helping: ${device.patientName || device.deviceId}`, variant: "destructive" });
        }
     }
   });
 
-  const { data: slaves } = useQuery<Slave[]>({
-    queryKey: ["/api/slaves", "all"],
-    queryFn: async () => { const res = await fetch(apiUrl("/api/slaves?all=1"), { credentials: "include" }); return res.json(); },
+  const { data: devices } = useQuery<Device[]>({
+    queryKey: ["/api/devices", "all"],
+    queryFn: async () => { const res = await fetch(apiUrl("/api/devices?all=1"), { credentials: "include" }); return res.json(); },
     refetchInterval: 5000,
   });
 
@@ -307,11 +307,11 @@ function AdminPanel() {
     mode: number; 
     uptime: number; 
     rssi: number; 
-    slaves: number; 
+    devices: number; 
     online: number; 
     alerts: number;
-    isMasterOnline?: boolean;
-    masterIP?: string;
+    isControllerOnline?: boolean;
+    controllerIP?: string;
     wifiError?: string;
   }>({
     queryKey: ["/api/status"],
@@ -319,17 +319,17 @@ function AdminPanel() {
     refetchInterval: 2000,
   });
 
-  const isCloud = status?.masterIP === "cloud";
-  const isCloudActive = isCloud ? !!status?.isMasterOnline : status?.mode === 4;
+  const isCloud = status?.controllerIP === "cloud";
+  const isCloudActive = isCloud ? !!status?.isControllerOnline : status?.mode === 4;
 
   const logoutMutation = useMutation({
     mutationFn: async () => { await apiRequest("POST", "/api/admin/logout"); },
     onSuccess: () => window.location.reload(),
   });
 
-  const safeSlaves = Array.isArray(slaves) ? slaves : [];
-  const pending = safeSlaves.filter(s => !s.approved);
-  const approved = safeSlaves.filter(s => s.approved);
+  const safeDevices = Array.isArray(devices) ? devices : [];
+  const pending = safeDevices.filter(s => !s.approved);
+  const approved = safeDevices.filter(s => s.approved);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-32 font-sans">
@@ -382,7 +382,7 @@ function AdminPanel() {
           {/* Stats Grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { l: "Total rooms", v: status?.slaves || 0, i: <Database className="w-5 h-5" />, c: "text-slate-900" },
+              { l: "Total rooms", v: status?.devices || 0, i: <Database className="w-5 h-5" />, c: "text-slate-900" },
               { l: "Rooms online", v: status?.online || 0, i: <Wifi className="w-5 h-5" />, c: "text-blue-600" },
               { l: "Helping cases", v: status?.alerts || 0, i: <AlertTriangle className="w-5 h-5" />, c: "text-red-600" },
               { l: "Found devices", v: pending.length, i: <Settings className="w-5 h-5" />, c: "text-amber-500" }
@@ -403,24 +403,24 @@ function AdminPanel() {
               <h2 className="text-[11px] font-bold text-slate-400 ml-2 uppercase tracking-widest">New Units Detected</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {pending.map(s => (
-                  <div key={s.slaveId} className="bg-amber-50 border-2 border-amber-100 p-6 rounded-[32px] flex justify-between items-center">
+                  <div key={s.deviceId} className="bg-amber-50 border-2 border-amber-100 p-6 rounded-[32px] flex justify-between items-center">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-amber-600 shadow-sm border border-amber-100">
                         <Wifi className="w-6 h-6" />
                       </div>
                       <div>
-                        <div className="font-mono font-bold text-amber-900 text-lg uppercase">{s.slaveId}</div>
+                        <div className="font-mono font-bold text-amber-900 text-lg uppercase">{s.deviceId}</div>
                         <p className="text-[10px] font-bold text-amber-700/60 mt-0.5">Found and waiting</p>
                       </div>
                     </div>
                     <button 
-                      onClick={() => { setModalSlave(s); setModalMode("approve"); }}
+                      onClick={() => { setModalDevice(s); setModalMode("approve"); }}
                       className="bg-amber-600 text-white px-8 py-3 rounded-2xl text-[11px] font-bold shadow-lg shadow-amber-600/30 hover:scale-[1.02] active:scale-[0.98] transition-all"
                     >
                       Connect Patient
                     </button>
                     <button 
-                      onClick={() => { if(confirm(`Ignore this unit?`)) apiRequest("DELETE", "/api/slaves/" + s.slaveId); }}
+                      onClick={() => { if(confirm(`Ignore this unit?`)) apiRequest("DELETE", "/api/devices/" + s.deviceId); }}
                       className="ml-2 w-12 h-12 bg-white text-slate-300 rounded-2xl flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all border border-amber-100"
                     >
                       <Trash2 size={18} />
@@ -436,7 +436,7 @@ function AdminPanel() {
              <h2 className="text-[11px] font-bold text-slate-400 ml-2 uppercase tracking-widest">Active patient units</h2>
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {approved.map(d => (
-                  <div key={d.slaveId} className={`group bg-white p-6 rounded-[40px] border-2 transition-all duration-500 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.02)] ${d.alertActive ? "border-red-500 bg-red-50/30 shadow-red-500/10" : "border-slate-50 hover:border-blue-100 hover:shadow-blue-500/5 hover:-translate-y-1"}`}>
+                  <div key={d.deviceId} className={`group bg-white p-6 rounded-[40px] border-2 transition-all duration-500 shadow-[0_20px_40px_-10px_rgba(0,0,0,0.02)] ${d.alertActive ? "border-red-500 bg-red-50/30 shadow-red-500/10" : "border-slate-50 hover:border-blue-100 hover:shadow-blue-500/5 hover:-translate-y-1"}`}>
                     <div className="flex justify-between items-start mb-6">
                       <div className="flex items-center gap-4">
                         <div className={`w-14 h-14 rounded-3xl flex items-center justify-center transition-colors ${d.alertActive ? "bg-red-600 text-white" : "bg-blue-50 text-blue-600"}`}>
@@ -458,14 +458,14 @@ function AdminPanel() {
 
                     <div className="flex gap-3">
                       <button 
-                        onClick={() => { setModalSlave(d); setModalMode("edit"); }}
+                        onClick={() => { setModalDevice(d); setModalMode("edit"); }}
                         className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center hover:bg-slate-100 hover:text-slate-900 transition-all border border-slate-100"
                       >
                         <Pencil size={18} />
                       </button>
                       {d.alertActive ? (
                         <button 
-                          onClick={() => apiRequest("POST", "/api/clearAlert", { slaveId: d.slaveId })}
+                          onClick={() => apiRequest("POST", "/api/clearAlert", { deviceId: d.deviceId })}
                           className="flex-1 bg-red-600 text-white font-bold text-[10px] rounded-2xl shadow-xl shadow-red-600/30 hover:bg-red-700 active:translate-y-1 transition-all uppercase tracking-[2px]"
                         >
                           Stop Alarm
@@ -477,9 +477,9 @@ function AdminPanel() {
                         onClick={() => { 
                           if(confirm(`Remove patient unit?`)) {
                             if (isCloud) {
-                              apiRequest("DELETE", "/api/slaves/" + d.slaveId);
+                              apiRequest("DELETE", "/api/devices/" + d.deviceId);
                             } else {
-                              apiRequest("POST", "/api/delete-slave", { slaveId: d.slaveId });
+                              apiRequest("POST", "/api/delete-device", { deviceId: d.deviceId });
                             }
                           }
                         }}
@@ -537,24 +537,24 @@ function AdminPanel() {
         </main>
 
       {/* Modal Overlay */}
-      <SlaveModal
+      <DeviceModal
         title={modalMode === "approve" ? "Add Patient" : "Edit Details"}
-        open={!!modalSlave}
-        onClose={() => setModalSlave(null)}
+        open={!!modalDevice}
+        onClose={() => setModalDevice(null)}
         onSubmit={(name: string, bed: string, room: string) => {
-          if (!modalSlave) return;
+          if (!modalDevice) return;
           const url = modalMode === "approve" ? `/api/approve` : `/api/update`;
-          apiRequest("POST", url, { slaveId: modalSlave.slaveId, patientName: name, bed, room })
-            .then(() => { queryClient.invalidateQueries(); setModalSlave(null); });
+          apiRequest("POST", url, { deviceId: modalDevice.deviceId, patientName: name, bed, room })
+            .then(() => { queryClient.invalidateQueries(); setModalDevice(null); });
         }}
         loading={false}
-        defaults={modalMode === "edit" ? (modalSlave ?? undefined) : undefined}
+        defaults={modalMode === "edit" ? (modalDevice ?? undefined) : undefined}
       />
     </div>
   );
 }
 
-function SlaveModal({ title, open, onClose, onSubmit, defaults }: any) {
+function DeviceModal({ title, open, onClose, onSubmit, defaults }: any) {
   const [name, setName] = useState(defaults?.patientName || "");
   const [bed, setBed] = useState(defaults?.bed || "");
   const [room, setRoom] = useState(defaults?.room || "");
@@ -630,7 +630,7 @@ export default function AdminPage() {
   const setupDone = localSetupDone ?? status?.setup;
 
   // 1. First Boot Logic (Only on local gateway, cloud bypasses setup)
-  const isCloud = status?.masterIP === "cloud";
+  const isCloud = status?.controllerIP === "cloud";
   if (setupDone === false && !isCloud) {
     return <SetupWizard onComplete={() => setLocalSetupDone(true)} />;
   }

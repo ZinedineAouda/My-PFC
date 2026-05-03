@@ -35,9 +35,9 @@ export const C = {
   borderLight:   '#ffffff0d',   // rgba(255,255,255,0.05)
 };
 
-// ── Slave device type (matches shared/schema.ts) ──
-export type Slave = {
-  slaveId: string;
+// ── Patient device type (matches shared/schema.ts) ──
+export type Device = {
+  deviceId: string;
   patientName: string;
   bed: string;
   room: string;
@@ -51,10 +51,10 @@ export type Slave = {
 
 export type StatusData = {
   mode: number;
-  isMasterOnline?: boolean;
+  isControllerOnline?: boolean;
 };
 
 export type WsMessage = {
-  type: 'ALERT' | 'REGISTER' | 'UPDATE' | 'DELETE' | 'MASTER_STATUS' | 'FULL_STATE' | 'CLEAR';
+  type: 'ALERT' | 'REGISTER' | 'UPDATE' | 'DELETE' | 'CONTROLLER_STATUS' | 'FULL_STATE' | 'CLEAR';
   payload: any;
 };

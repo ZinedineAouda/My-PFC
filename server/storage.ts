@@ -1,25 +1,25 @@
-import type { Slave, InsertSlave, UpdateSlave, ApproveSlave } from "@shared/schema";
-import { slaves, systemSettings } from "@shared/schema";
+import type { Device, InsertDevice, UpdateDevice, ApproveDevice } from "@shared/schema";
+import { devices, systemSettings } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, not, inArray } from "drizzle-orm";
 
 export interface IStorage {
-  getAllSlaves(): Promise<Slave[]>;
-  getApprovedSlaves(): Promise<Slave[]>;
-  getSlave(slaveId: string): Promise<Slave | undefined>;
-  addSlave(data: InsertSlave): Promise<Slave>;
-  approveSlave(slaveId: string, data: ApproveSlave): Promise<Slave | undefined>;
-  updateSlave(slaveId: string, data: UpdateSlave): Promise<Slave | undefined>;
-  deleteSlave(slaveId: string): Promise<boolean>;
-  registerSlave(slaveId: string): Promise<Slave>;
-  triggerAlert(slaveId: string): Promise<{ success: boolean; slave?: Slave; reason?: string }>;
-  clearAlert(slaveId: string): Promise<boolean>;
+  getAllDevices(): Promise<Device[]>;
+  getApprovedDevices(): Promise<Device[]>;
+  getDevice(deviceId: string): Promise<Device | undefined>;
+  addDevice(data: InsertDevice): Promise<Device>;
+  approveDevice(deviceId: string, data: ApproveDevice): Promise<Device | undefined>;
+  updateDevice(deviceId: string, data: UpdateDevice): Promise<Device | undefined>;
+  deleteDevice(deviceId: string): Promise<boolean>;
+  registerDevice(deviceId: string): Promise<Device>;
+  triggerAlert(deviceId: string): Promise<{ success: boolean; device?: Device; reason?: string }>;
+  clearAlert(deviceId: string): Promise<boolean>;
   getMode(): Promise<number>;
   setMode(mode: number): Promise<void>;
   isSetupDone(): Promise<boolean>;
-  updateMasterHeartbeat(mode?: number, uptime?: number, rssi?: number, wifiError?: string): Promise<void>;
-  isMasterOnline(): Promise<boolean>;
-  syncFromMaster(slaves: any[], stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void>;
+  updateControllerHeartbeat(mode?: number, uptime?: number, rssi?: number, wifiError?: string): Promise<void>;
+  isControllerOnline(): Promise<boolean>;
+  syncFromController(devices: any[], stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void>;
   queueCommand(command: string, params?: string): Promise<void>;
   getAndClearCommand(): Promise<{ command: string; params: string } | null>;
   getSettings(): Promise<any>;
@@ -38,21 +38,21 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getAllSlaves(): Promise<Slave[]> {
-    return await db.select().from(slaves);
+  async getAllDevices(): Promise<Device[]> {
+    return await db.select().from(devices);
   }
 
-  async getApprovedSlaves(): Promise<Slave[]> {
-    return await db.select().from(slaves).where(eq(slaves.approved, true));
+  async getApprovedDevices(): Promise<Device[]> {
+    return await db.select().from(devices).where(eq(devices.approved, true));
   }
 
-  async getSlave(slaveId: string): Promise<Slave | undefined> {
-    const [slave] = await db.select().from(slaves).where(eq(slaves.slaveId, slaveId));
-    return slave;
+  async getDevice(deviceId: string): Promise<Device | undefined> {
+    const [device] = await db.select().from(devices).where(eq(devices.deviceId, deviceId));
+    return device;
   }
 
-  async addSlave(data: InsertSlave): Promise<Slave> {
-    const [slave] = await db.insert(slaves).values({
+  async addDevice(data: InsertDevice): Promise<Device> {
+    const [device] = await db.insert(devices).values({
       ...data,
       patientName: data.patientName || "",
       bed: data.bed || "",
@@ -63,50 +63,50 @@ export class DatabaseStorage implements IStorage {
       online: false,
       lastUpdatedAt: Date.now(),
     }).returning();
-    return slave;
+    return device;
   }
 
-  async approveSlave(slaveId: string, data: ApproveSlave): Promise<Slave | undefined> {
-    const [slave] = await db.update(slaves)
+  async approveDevice(deviceId: string, data: ApproveDevice): Promise<Device | undefined> {
+    const [device] = await db.update(devices)
       .set({ ...data, approved: true, lastUpdatedAt: Date.now() })
-      .where(eq(slaves.slaveId, slaveId))
+      .where(eq(devices.deviceId, deviceId))
       .returning();
-    return slave;
+    return device;
   }
 
-  async updateSlave(slaveId: string, data: UpdateSlave): Promise<Slave | undefined> {
-    const [slave] = await db.update(slaves)
+  async updateDevice(deviceId: string, data: UpdateDevice): Promise<Device | undefined> {
+    const [device] = await db.update(devices)
       .set({ ...data, lastUpdatedAt: Date.now() })
-      .where(eq(slaves.slaveId, slaveId))
+      .where(eq(devices.deviceId, deviceId))
       .returning();
-    return slave;
+    return device;
   }
 
-  async deleteSlave(slaveId: string): Promise<boolean> {
-    const [existing] = await db.select().from(slaves).where(eq(slaves.slaveId, slaveId));
+  async deleteDevice(deviceId: string): Promise<boolean> {
+    const [existing] = await db.select().from(devices).where(eq(devices.deviceId, deviceId));
     if (!existing) return false;
 
     // First delete from DB
-    await db.delete(slaves).where(eq(slaves.slaveId, slaveId));
+    await db.delete(devices).where(eq(devices.deviceId, deviceId));
     
-    // Then queue command for Master to delete locally
+    // Then queue command for Controller to delete locally
     // This completes the bidirectional sync: Cloud -> Local propagation
-    await this.queueCommand("REMOVE_SLAVE", slaveId);
+    await this.queueCommand("REMOVE_DEVICE", deviceId);
     
     return true;
   }
 
-  async registerSlave(slaveId: string): Promise<Slave> {
-    const [existing] = await db.select().from(slaves).where(eq(slaves.slaveId, slaveId));
+  async registerDevice(deviceId: string): Promise<Device> {
+    const [existing] = await db.select().from(devices).where(eq(devices.deviceId, deviceId));
     if (existing) {
-      const [updated] = await db.update(slaves)
+      const [updated] = await db.update(devices)
         .set({ registered: true, online: true, lastSeen: Date.now() })
-        .where(eq(slaves.slaveId, slaveId))
+        .where(eq(devices.deviceId, deviceId))
         .returning();
       return updated;
     }
-    const [inserted] = await db.insert(slaves).values({
-      slaveId,
+    const [inserted] = await db.insert(devices).values({
+      deviceId,
       registered: true,
       online: true,
       lastSeen: Date.now(),
@@ -120,13 +120,13 @@ export class DatabaseStorage implements IStorage {
     return inserted;
   }
 
-  async triggerAlert(slaveId: string): Promise<{ success: boolean; slave?: Slave; reason?: string }> {
-    const slave = await this.getSlave(slaveId);
-    if (!slave) return { success: false, reason: "unknown slave" };
-    if (!slave.approved) return { success: false, reason: "not approved" };
-    if (slave.alertActive) return { success: false, slave, reason: "alert already active" };
+  async triggerAlert(deviceId: string): Promise<{ success: boolean; device?: Device; reason?: string }> {
+    const device = await this.getDevice(deviceId);
+    if (!device) return { success: false, reason: "unknown device" };
+    if (!device.approved) return { success: false, reason: "not approved" };
+    if (device.alertActive) return { success: false, device, reason: "alert already active" };
 
-    const [updated] = await db.update(slaves)
+    const [updated] = await db.update(devices)
       .set({ 
         alertActive: true, 
         lastAlertTime: new Date().toISOString(),
@@ -134,20 +134,20 @@ export class DatabaseStorage implements IStorage {
         online: true,
         lastUpdatedAt: Date.now()
       })
-      .where(eq(slaves.slaveId, slaveId))
+      .where(eq(devices.deviceId, deviceId))
       .returning();
-    return { success: true, slave: updated };
+    return { success: true, device: updated };
   }
 
-  async clearAlert(slaveId: string): Promise<boolean> {
-    const [updated] = await db.update(slaves)
+  async clearAlert(deviceId: string): Promise<boolean> {
+    const [updated] = await db.update(devices)
       .set({ alertActive: false, lastUpdatedAt: Date.now() })
-      .where(eq(slaves.slaveId, slaveId))
+      .where(eq(devices.deviceId, deviceId))
       .returning();
     
     if (updated) {
-      // Critical: Queue a command so the Master knows to turn off the physical Slave LED
-      await this.queueCommand("clear_alert", slaveId);
+      // Critical: Queue a command so the Controller knows to turn off the physical Device LED
+      await this.queueCommand("clear_alert", deviceId);
     }
     return !!updated;
   }
@@ -169,34 +169,34 @@ export class DatabaseStorage implements IStorage {
     return mode !== 0;
   }
 
-  async updateMasterHeartbeat(mode?: number, uptime?: number, rssi?: number, wifiError?: string): Promise<void> {
+  async updateControllerHeartbeat(mode?: number, uptime?: number, rssi?: number, wifiError?: string): Promise<void> {
     const now = Date.now();
-    const update: any = { masterLastSeen: now };
+    const update: any = { controllerLastSeen: now };
     if (mode !== undefined) update.wifiMode = mode;
-    if (uptime !== undefined) update.masterUptime = uptime;
-    if (rssi !== undefined) update.masterRSSI = rssi;
-    if (wifiError !== undefined) update.masterWifiError = wifiError;
+    if (uptime !== undefined) update.controllerUptime = uptime;
+    if (rssi !== undefined) update.controllerRSSI = rssi;
+    if (wifiError !== undefined) update.controllerWifiError = wifiError;
 
     try {
       await db.insert(systemSettings)
         .values({ 
           id: 1, 
-          masterLastSeen: now,
+          controllerLastSeen: now,
           wifiMode: mode !== undefined ? mode : 1,
-          masterUptime: uptime,
-          masterRSSI: rssi,
-          masterWifiError: wifiError
+          controllerUptime: uptime,
+          controllerRSSI: rssi,
+          controllerWifiError: wifiError
         })
         .onConflictDoUpdate({
           target: systemSettings.id,
           set: update
         });
     } catch (err) {
-      console.warn("[DB] Failed to update Master heartbeat (schema mismatch?):", err);
+      console.warn("[DB] Failed to update Controller heartbeat (schema mismatch?):", err);
       // Fallback: minimal update of just the 'last seen' timestamp if possible
       try {
         await db.update(systemSettings)
-          .set({ masterLastSeen: now })
+          .set({ controllerLastSeen: now })
           .where(eq(systemSettings.id, 1));
       } catch (e) {
         console.error("[DB] Critical: Heartbeat fallback failed:", e);
@@ -204,9 +204,9 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async isMasterOnline(): Promise<boolean> {
+  async isControllerOnline(): Promise<boolean> {
     const settings = await this.getSettings();
-    const lastSeen = settings.masterLastSeen;
+    const lastSeen = settings.controllerLastSeen;
     if (!lastSeen) return false;
     
     // 12 second timeout for "Ultra-Live" feel (ESP32 pings every 5s)
@@ -214,31 +214,31 @@ export class DatabaseStorage implements IStorage {
     return Date.now() - lastSeenNum < 12000;
   }
 
-  async syncFromMaster(incoming: Array<any>, stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void> {
-    await this.updateMasterHeartbeat(stats?.mode, stats?.uptime, stats?.rssi, stats?.wifiError);
+  async syncFromController(incoming: Array<any>, stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void> {
+    await this.updateControllerHeartbeat(stats?.mode, stats?.uptime, stats?.rssi, stats?.wifiError);
     
-    console.log(`[SYNC] Starting bidir sync for ${incoming.length} slaves`);
+    console.log(`[SYNC] Starting bidir sync for ${incoming.length} devices`);
     
     // Track incoming IDs to prune deleted nodes
-    const incomingIds = incoming.map(s => s.slaveId);
+    const incomingIds = incoming.map(s => s.deviceId);
 
-    // First, set all current slaves to offline (temporary state)
+    // First, set all current devices to offline (temporary state)
     try {
-      await db.update(slaves).set({ online: false });
+      await db.update(devices).set({ online: false });
     } catch (err) {
-      console.error("[SYNC] Failed to set slaves offline:", err);
+      console.error("[SYNC] Failed to set devices offline:", err);
     }
 
     for (const remote of incoming) {
-      const [existing] = await db.select().from(slaves).where(eq(slaves.slaveId, remote.slaveId));
+      const [existing] = await db.select().from(devices).where(eq(devices.deviceId, remote.deviceId));
       
       if (existing) {
         const tRemote = remote.lastUpdatedAt || 0;
         const tLocal = existing.lastUpdatedAt || 0;
 
         if (tRemote >= tLocal) {
-          // Master wins (or timestamps equal = trust master as authoritative source)
-          await db.update(slaves)
+          // Controller wins (or timestamps equal = trust controller as authoritative source)
+          await db.update(devices)
             .set({
               online: true,
               alertActive: remote.alertActive !== undefined ? remote.alertActive : existing.alertActive,
@@ -249,19 +249,19 @@ export class DatabaseStorage implements IStorage {
               lastSeen: Date.now(),
               lastUpdatedAt: tRemote > 0 ? tRemote : tLocal
             })
-            .where(eq(slaves.slaveId, remote.slaveId));
+            .where(eq(devices.deviceId, remote.deviceId));
         } else {
           // Local DB has a newer manual change (e.g. admin just clicked 'clear')
-          await db.update(slaves)
+          await db.update(devices)
             .set({
               online: true,
               lastSeen: Date.now()
             })
-            .where(eq(slaves.slaveId, remote.slaveId));
+            .where(eq(devices.deviceId, remote.deviceId));
         }
       } else {
-        await db.insert(slaves).values({
-          slaveId: remote.slaveId,
+        await db.insert(devices).values({
+          deviceId: remote.deviceId,
           patientName: remote.patientName || "",
           bed: remote.bed || "",
           room: remote.room || "",
@@ -275,17 +275,17 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // PRUNING: Delete slaves that are NOT in the incoming list
+    // PRUNING: Delete devices that are NOT in the incoming list
     if (incomingIds.length > 0) {
-      const deletedCount = await db.delete(slaves).where(not(inArray(slaves.slaveId, incomingIds))).returning();
+      const deletedCount = await db.delete(devices).where(not(inArray(devices.deviceId, incomingIds))).returning();
       if (deletedCount.length > 0) {
-        console.log(`[SYNC] Pruned ${deletedCount.length} ghost slaves from cloud DB`);
+        console.log(`[SYNC] Pruned ${deletedCount.length} ghost devices from cloud DB`);
       }
     } else {
-      // If incoming list is empty (e.g. Wipe Data just happened), clear all slaves
-      const deletedCount = await db.delete(slaves).returning();
+      // If incoming list is empty (e.g. Wipe Data just happened), clear all devices
+      const deletedCount = await db.delete(devices).returning();
       if (deletedCount.length > 0) {
-        console.log(`[SYNC] Cleared all ${deletedCount.length} slaves (empty sync bundle)`);
+        console.log(`[SYNC] Cleared all ${deletedCount.length} devices (empty sync bundle)`);
       }
     }
   }
@@ -295,7 +295,7 @@ export class DatabaseStorage implements IStorage {
     await db.update(systemSettings)
       .set({ pendingCommand: command, commandParams: params })
       .where(eq(systemSettings.id, 1));
-    console.log(`[STORAGE] Queued command for Master: ${command} (${params})`);
+    console.log(`[STORAGE] Queued command for Controller: ${command} (${params})`);
   }
 
   async getAndClearCommand(): Promise<{ command: string; params: string } | null> {
@@ -316,9 +316,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async reset(): Promise<void> {
-    await db.delete(slaves);
+    await db.delete(devices);
     await db.update(systemSettings)
-      .set({ wifiMode: 0, masterLastSeen: null, pendingCommand: null, commandParams: null })
+      .set({ wifiMode: 0, controllerLastSeen: null, pendingCommand: null, commandParams: null })
       .where(eq(systemSettings.id, 1));
   }
 }

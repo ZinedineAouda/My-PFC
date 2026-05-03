@@ -70,7 +70,7 @@ Once deployed, test with:
 curl https://YOUR-RAILWAY-URL/api/status
 
 # Expected response:
-# {"mode":0,"setup":false,"masterIP":"localhost","slaves":0}
+# {"mode":0,"setup":false,"controllerIP":"localhost","devices":0}
 ```
 
 If you get a JSON response, the backend is working.
@@ -85,7 +85,7 @@ Then open your Railway URL in a browser — the dashboard should load.
 curl -X POST https://YOUR-RAILWAY-URL/api/register \
   -H "Content-Type: application/json" \
   -H "X-Device-Key: YOUR_DEVICE_API_KEY" \
-  -d '{"slaveId": "test-device"}'
+  -d '{"deviceId": "test-device"}'
 
 # Expected: {"success":true,"message":"Pending approval"}
 ```

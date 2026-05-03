@@ -13,6 +13,10 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { C, API_BASE } from './constants';
 
+type Props = {
+  onLogin: (baseUrl: string) => void;
+};
+
 export default function LoginScreen({ onLogin }: Props) {
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');

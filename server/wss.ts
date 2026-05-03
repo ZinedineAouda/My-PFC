@@ -4,7 +4,7 @@ import { log } from "./index";
 import { storage } from "./storage";
 
 export type WsMessage = {
-  type: "ALERT" | "REGISTER" | "UPDATE" | "DELETE" | "MASTER_STATUS" | "FULL_STATE";
+  type: "ALERT" | "REGISTER" | "UPDATE" | "DELETE" | "CONTROLLER_STATUS" | "FULL_STATE";
   payload: any;
 };
 
@@ -20,8 +20,8 @@ export function initWss(server: Server) {
     const fullState: WsMessage = {
       type: "FULL_STATE",
       payload: {
-        devices: await storage.getAllSlaves(),
-        masterOnline: await storage.isMasterOnline(),
+        devices: await storage.getAllDevices(),
+        controllerOnline: await storage.isControllerOnline(),
         mode: await storage.getMode(),
       },
     };
@@ -33,14 +33,14 @@ export function initWss(server: Server) {
         log(`Received ${msg.type}`, "WS");
 
         if (msg.type === "REGISTER") {
-          await storage.registerSlave(msg.payload.slaveId);
+          await storage.registerDevice(msg.payload.deviceId);
           await broadcastAllDevices();
         } else if (msg.type === "ALERT") {
-          await storage.triggerAlert(msg.payload.slaveId);
+          await storage.triggerAlert(msg.payload.deviceId);
           await broadcastAllDevices();
         } else if (msg.type === "UPDATE") {
           if (Array.isArray(msg.payload)) {
-            await storage.syncFromMaster(msg.payload);
+            await storage.syncFromController(msg.payload);
             await broadcastAllDevices();
           }
         }
@@ -78,10 +78,10 @@ export function broadcast(msg: WsMessage) {
   });
 }
 
-export async function broadcastDeviceUpdate(slaveId: string) {
-  const slave = await storage.getSlave(slaveId);
-  if (slave) {
-    broadcast({ type: "UPDATE", payload: slave });
+export async function broadcastDeviceUpdate(deviceId: string) {
+  const device = await storage.getDevice(deviceId);
+  if (device) {
+    broadcast({ type: "UPDATE", payload: device });
   }
 }
 
@@ -89,8 +89,8 @@ export async function broadcastAllDevices() {
   broadcast({
     type: "FULL_STATE",
     payload: {
-      devices: await storage.getAllSlaves(),
-      masterOnline: await storage.isMasterOnline(),
+      devices: await storage.getAllDevices(),
+      controllerOnline: await storage.isControllerOnline(),
       mode: await storage.getMode(),
     },
   });

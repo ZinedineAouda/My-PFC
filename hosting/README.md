@@ -5,7 +5,7 @@ This folder walks you through deploying the Hospital Alarm System online so it c
 ## Architecture Overview
 
 ```
-[ESP32 Master]
+[ESP32 Controller]
     │
     │  HTTP POST (alerts, heartbeats, registration)
     ▼
@@ -25,7 +25,7 @@ This folder walks you through deploying the Hospital Alarm System online so it c
 Deploy the full-stack app (backend + frontend) on Railway. This is the only hosting step needed.
 
 ### 2. [Configure ESP32 for Online Mode](./esp32-online-setup.md)
-After hosting, flash and configure your ESP32 master to point to your hosted Railway server.
+After hosting, flash and configure your ESP32 controller to point to your hosted Railway server.
 
 ---
 
@@ -33,7 +33,7 @@ After hosting, flash and configure your ESP32 master to point to your hosted Rai
 
 - [ ] Code pushed to a GitHub repository
 - [ ] App deployed on Railway with correct environment variables
-- [ ] ESP32 flashed with `online/master/master.ino`
+- [ ] ESP32 flashed with `controller/controller.ino`
 - [ ] ESP32 configured with Railway URL and device API key
 - [ ] Test: open `https://your-app.up.railway.app` → dashboard loads
 - [ ] Test: open `https://your-app.up.railway.app/admin` → login with `admin / admin1234`

@@ -1,6 +1,6 @@
 # Configure ESP32 for Online Mode
 
-After deploying the backend and frontend, you need to flash and configure the ESP32 master to send data to your hosted server.
+After deploying the backend and frontend, you need to flash and configure the ESP32 controller to send data to your hosted server.
 
 ---
 
@@ -14,7 +14,7 @@ After deploying the backend and frontend, you need to flash and configure the ES
 
 ## Step 1 — Flash the Firmware
 
-1. Open **`esp32/online/master/master.ino`** in Arduino IDE.
+1. Open **`esp32/controller/controller.ino`** in Arduino IDE.
 2. Select your board: **ESP32-S3 Dev Module**.
 3. Connect the ESP32 via USB and click **Upload**.
 
@@ -56,11 +56,11 @@ Choose the mode that fits your hospital setup:
 
 | Mode | When to use |
 |---|---|
-| **STA Mode** | All devices (master + slaves) connect to hospital Wi-Fi |
-| **AP + STA Mode** | Slaves connect to the master's own AP, master connects to hospital Wi-Fi |
+| **STA Mode** | All devices (controller + units) connect to hospital Wi-Fi |
+| **AP + STA Mode** | Devices connect to the controller's own AP, controller connects to hospital Wi-Fi |
 | **Online + AP + STA** | Same as AP+STA but explicitly for direct cloud forwarding — internet required |
 
-> **Recommended for online use:** Select **"Online + AP + STA"** if slaves are close to the master but you need cloud access. Select **"STA Mode"** if the whole hospital has good Wi-Fi coverage.
+> **Recommended for online use:** Select **"Online + AP + STA"** if devices are close to the controller but you need cloud access. Select **"STA Mode"** if the whole hospital has good Wi-Fi coverage.
 
 ---
 
@@ -74,7 +74,7 @@ For **STA**, **AP+STA**, and **Online+AP+STA** modes:
 4. The ESP32 connects and displays its IP address.
 
 For **Online + AP + STA** mode specifically, you will also be asked to:
-- Set the **AP name** (default: `HospitalAlarm`) for slaves to connect to.
+- Set the **AP name** (default: `HospitalAlarm`) for devices to connect to.
 - Set an **AP password** (optional, must be 8+ characters or leave empty for open).
 
 ---
@@ -83,18 +83,18 @@ For **Online + AP + STA** mode specifically, you will also be asked to:
 
 The wizard confirms setup is complete. The ESP32 will now:
 
-- ✅ Accept connections from slave call buttons
+- ✅ Accept connections from patient devices (call buttons)
 - ✅ Forward all alerts, registrations, and heartbeats to your Railway server
 - ✅ Trigger the local buzzer on alerts
-- ✅ Sync all slaves every 30 seconds
+- ✅ Sync all devices every 30 seconds
 
 ---
 
-## Step 7 — Approve Slave Devices
+## Step 7 — Approve Patient Devices
 
 1. Open your Railway dashboard: `https://your-app.up.railway.app/admin`
 2. Login: `admin` / `admin1234`
-3. Any slave that pressed its button or powered on will appear under **"Pending Approval"**.
+3. Any device that pressed its button or powered on will appear under **"Pending Approval"**.
 4. Click **"Approve"**, enter the patient name, bed, and room number.
 5. The device is now active and will appear on the main dashboard.
 
@@ -106,6 +106,6 @@ The wizard confirms setup is complete. The ESP32 will now:
 |---|---|
 | Setup wizard not loading | Make sure you are connected to `HospitalAlarm` Wi-Fi and open `http://192.168.4.1` |
 | "Test Connection" fails | Check the Railway URL has `https://` and no trailing slash. Check `DEVICE_API_KEY` matches. |
-| Master can't connect to Wi-Fi | Move master closer to router. Check password. |
-| Slaves not appearing on dashboard | Make sure slaves are powered and connected to master. Check slave is on same network as master. |
-| Alerts not forwarding | Check Railway backend logs. Check `hasInternet` on the master status page at `http://MASTER_IP` |
+| Controller can't connect to Wi-Fi | Move controller closer to router. Check password. |
+| Devices not appearing on dashboard | Make sure devices are powered and connected to controller. Check device is on same network as controller. |
+| Alerts not forwarding | Check Railway backend logs. Check `hasInternet` on the controller status page at `http://CONTROLLER_IP` |

@@ -131,7 +131,7 @@ public:
     const char*    apPass()       const { return _apPass; }
     const char*    staSSID()      const { return _staSSID; }
     const char*    staPass()      const { return _staPass; }
-    String masterIP() const {
+    String controllerIP() const {
         if (_staConnected) return _staIP;
         return WiFi.softAPIP().toString();
     }

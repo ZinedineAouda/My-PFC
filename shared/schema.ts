@@ -3,8 +3,8 @@ import { pgTable, text, boolean, integer, timestamp, bigint } from "drizzle-orm/
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 // ─── Drizzle Database Table ─────────────────────────────────────────
-export const slaves = pgTable("slaves", {
-  slaveId: text("slave_id").primaryKey(),
+export const devices = pgTable("devices", {
+  deviceId: text("device_id").primaryKey(),
   patientName: text("patient_name").notNull().default(""),
   bed: text("bed").notNull().default(""),
   room: text("room").notNull().default(""),
@@ -20,18 +20,18 @@ export const slaves = pgTable("slaves", {
 // ─── System Settings Table (Global Persistence) ─────────────────────
 export const systemSettings = pgTable("system_settings", {
   id: integer("id").primaryKey().default(1),
-  masterLastSeen: bigint("master_last_seen", { mode: "number" }),
-  masterUptime: integer("master_uptime"),
-  masterRSSI: integer("master_rssi"),
-  masterWifiError: text("master_wifi_error"),
+  controllerLastSeen: bigint("controller_last_seen", { mode: "number" }),
+  controllerUptime: integer("controller_uptime"),
+  controllerRSSI: integer("controller_rssi"),
+  controllerWifiError: text("controller_wifi_error"),
   wifiMode: integer("wifi_mode").notNull().default(1),
   pendingCommand: text("pending_command"),
   commandParams: text("command_params"),
 });
 
-// ─── Slave Device Schema (Zod) ──────────────────────────────────────
-export const slaveSchema = z.object({
-  slaveId: z.string().min(1),
+// ─── Device Device Schema (Zod) ──────────────────────────────────────
+export const deviceSchema = z.object({
+  deviceId: z.string().min(1),
   patientName: z.string().default(""),
   bed: z.string().default(""),
   room: z.string().default(""),
@@ -44,20 +44,20 @@ export const slaveSchema = z.object({
   lastUpdatedAt: z.number().nullable().default(null),
 });
 
-export const insertSlaveSchema = z.object({
-  slaveId: z.string().min(1, "Slave ID is required"),
+export const insertDeviceSchema = z.object({
+  deviceId: z.string().min(1, "Device ID is required"),
   patientName: z.string().optional().default(""),
   bed: z.string().optional().default(""),
   room: z.string().optional().default(""),
 });
 
-export const approveSlaveSchema = z.object({
+export const approveDeviceSchema = z.object({
   patientName: z.string().min(1, "Patient name is required"),
   bed: z.string().min(1, "Bed number is required"),
   room: z.string().min(1, "Room is required"),
 });
 
-export const updateSlaveSchema = z.object({
+export const updateDeviceSchema = z.object({
   patientName: z.string().min(1).optional(),
   bed: z.string().min(1).optional(),
   room: z.string().min(1).optional(),
@@ -69,11 +69,11 @@ export const loginSchema = z.object({
 });
 
 export const alertRequestSchema = z.object({
-  slaveId: z.string().min(1),
+  deviceId: z.string().min(1),
 });
 
 export const registerRequestSchema = z.object({
-  slaveId: z.string().min(1),
+  deviceId: z.string().min(1),
 });
 
 export const setupSchema = z.object({
@@ -85,14 +85,14 @@ export const connectWifiSchema = z.object({
   password: z.string().optional().default(""),
 });
 
-// Master sync: array of slave states from ESP32 + master stats
-export const masterSyncSchema = z.object({
+// Controller sync: array of device states from ESP32 + controller stats
+export const controllerSyncSchema = z.object({
   uptime: z.number().optional(),
   rssi: z.number().optional(),
   mode: z.number().optional(),
   wifiError: z.string().optional(),
-  slaves: z.array(z.object({
-    slaveId: z.string(),
+  devices: z.array(z.object({
+    deviceId: z.string(),
     patientName: z.string().optional().default(""),
     bed: z.string().optional().default(""),
     room: z.string().optional().default(""),
@@ -103,9 +103,9 @@ export const masterSyncSchema = z.object({
   })),
 });
 
-export type Slave = z.infer<typeof slaveSchema>;
-export type InsertSlave = z.infer<typeof insertSlaveSchema>;
-export type ApproveSlave = z.infer<typeof approveSlaveSchema>;
-export type UpdateSlave = z.infer<typeof updateSlaveSchema>;
+export type Device = z.infer<typeof deviceSchema>;
+export type InsertDevice = z.infer<typeof insertDeviceSchema>;
+export type ApproveDevice = z.infer<typeof approveDeviceSchema>;
+export type UpdateDevice = z.infer<typeof updateDeviceSchema>;
 export type LoginData = z.infer<typeof loginSchema>;
-export type MasterSync = z.infer<typeof masterSyncSchema>;
+export type ControllerSync = z.infer<typeof controllerSyncSchema>;

@@ -4,8 +4,8 @@
 1. [Architecture Overview](#architecture-overview)
 2. [Hardware Requirements](#hardware-requirements)
 3. [Software Requirements](#software-requirements)
-4. [ESP32-S3 Master Setup](#esp32-s3-master-setup)
-5. [ESP8266 Slave Setup](#esp8266-slave-setup)
+4. [ESP32-S3 Controller Setup](#esp32-s3-controller-setup)
+5. [ESP8266 Device Setup](#esp8266-device-setup)
 6. [Railway Cloud Server](#railway-cloud-server)
 7. [Operating Modes](#operating-modes)
 8. [MQTT Topic Reference](#mqtt-topic-reference)
@@ -24,7 +24,7 @@
 └───────────────────────┬────────────────────────────────────┘
                         │ HTTPS sync (Mode 4 only)
 ┌───────────────────────┴────────────────────────────────────┐
-│                 ESP32-S3 MASTER                             │
+│                 ESP32-S3 CONTROLLER                         │
 │   PicoMQTT Broker (port 1883)                              │
 │   AsyncWebServer + WebSocket (port 80)                     │
 │   Dashboard: http://192.168.4.1                            │
@@ -46,7 +46,7 @@
 
 ## Hardware Requirements
 
-### Master (ESP32-S3)
+### Controller (ESP32-S3)
 | Component | Specification |
 |-----------|---------------|
 | Board | ESP32-S3 DevKitC-1 (or equivalent) |
@@ -55,7 +55,7 @@
 | Buzzer | Active buzzer on GPIO4 |
 | Power | USB-C or 5V supply |
 
-### Slave (ESP8266)
+### Device (ESP8266)
 | Component | Specification |
 |-----------|---------------|
 | Board | NodeMCU v1.0 / ESP-12E / ESP-01 |
@@ -65,13 +65,13 @@
 
 ### Wiring
 
-**Master (ESP32-S3)**:
+**Controller (ESP32-S3)**:
 ```
 GPIO4 ──── Buzzer (+)
 GND   ──── Buzzer (-)
 ```
 
-**Slave (ESP8266 NodeMCU)**:
+**Device (ESP8266 NodeMCU)**:
 ```
 D3 (GPIO0) ──── Button ──── GND
 D4 (GPIO2) ──── Built-in LED (already on board)
@@ -105,19 +105,19 @@ D4 (GPIO2) ──── Built-in LED (already on board)
 
    | Library | Used By | Version |
    |---------|---------|---------|
-   | **PicoMQTT** | Master | Latest |
-   | **ESPAsyncWebServer** | Master + Slave | Latest |
-   | **AsyncTCP** | Master | Latest |
-   | **ESPAsyncTCP** | Slave | Latest |
-   | **ArduinoJson** | Master + Slave | 7.x |
-   | **PubSubClient** | Slave | Latest |
+   | **PicoMQTT** | Controller | Latest |
+   | **ESPAsyncWebServer** | Controller + Device | Latest |
+   | **AsyncTCP** | Controller | Latest |
+   | **ESPAsyncTCP** | Device | Latest |
+   | **ArduinoJson** | Controller + Device | 7.x |
+   | **PubSubClient** | Device | Latest |
 
    > **Important**: For ESPAsyncWebServer, you may need to install from GitHub if the Library Manager version is outdated:
    > https://github.com/me-no-dev/ESPAsyncWebServer
 
 ---
 
-## ESP32-S3 Master Setup
+## ESP32-S3 Controller Setup
 
 ### Board Configuration
 
@@ -132,9 +132,9 @@ D4 (GPIO2) ──── Built-in LED (already on board)
 
 ### Flashing
 
-1. Open `esp32/master/master.ino` in Arduino IDE
+1. Open `esp32/controller/controller.ino` in Arduino IDE
 2. Select the correct board and port
-3. Edit `esp32/master/config.h` if needed:
+3. Edit `esp32/controller/config.h` if needed:
    - `AP_SSID_DEFAULT` — WiFi network name
    - `CLOUD_SERVER_URL` — Railway server URL
    - `CLOUD_DEVICE_KEY` — API key for cloud auth
@@ -144,7 +144,7 @@ D4 (GPIO2) ──── Built-in LED (already on board)
 
 ### First Boot
 
-1. Master starts in **AP mode** automatically
+1. Controller starts in **AP mode** automatically
 2. A WiFi network named **"HospitalAlarm"** appears
 3. Connect to it from your phone/laptop
 4. Open **http://192.168.4.1** in a browser
@@ -153,12 +153,12 @@ D4 (GPIO2) ──── Built-in LED (already on board)
 ### File Structure
 
 ```
-esp32/master/
-├── master.ino          ← Main entry (setup + loop)
+esp32/controller/
+├── controller.ino      ← Main entry (setup + loop)
 ├── config.h            ← All configuration constants
 ├── wifi_manager.h      ← WiFi AP/STA/Hybrid management
 ├── mqtt_handler.h      ← PicoMQTT embedded broker
-├── device_registry.h   ← Slave tracking & timeout detection
+├── device_registry.h   ← Device tracking & timeout detection
 ├── web_dashboard.h     ← AsyncWebServer + WebSocket + REST API
 ├── cloud_sync.h        ← HTTPS sync to Railway (Mode 4)
 └── dashboard.h         ← Embedded HTML/CSS/JS (PROGMEM)
@@ -166,7 +166,7 @@ esp32/master/
 
 ---
 
-## ESP8266 Slave Setup
+## ESP8266 Device Setup
 
 ### Board Configuration
 
@@ -181,41 +181,41 @@ esp32/master/
 
 **Option A: Setup Portal (default)**
 
-Set in `esp32/slave/config.h`:
+Set in `esp32/device/config.h`:
 ```cpp
 #define USE_HARDCODED_WIFI false
 ```
-- Slave starts its own AP named `Alarm-slave-XXXXXX`
+- Device starts its own AP named `Alarm-device-XXXXXX`
 - Connect and open `http://192.168.4.1`
-- Enter the master's WiFi name and MQTT IP
-- Slave connects and registers automatically
+- Enter the controller's WiFi name and MQTT IP
+- Device connects and registers automatically
 
 **Option B: Hardcoded Credentials (mass deployment)**
 
-Set in `esp32/slave/config.h`:
+Set in `esp32/device/config.h`:
 ```cpp
 #define USE_HARDCODED_WIFI true
 #define DEFAULT_WIFI_SSID  "HospitalAlarm"
 #define DEFAULT_WIFI_PASS  ""
 #define MQTT_BROKER_IP     "192.168.4.1"
 ```
-- Slave connects immediately on boot
+- Device connects immediately on boot
 - Best for flashing many devices quickly
 
 ### Flashing
 
-1. Open `esp32/slave/slave.ino` in Arduino IDE
+1. Open `esp32/device/device.ino` in Arduino IDE
 2. Select board: **NodeMCU 1.0**
-3. Edit `esp32/slave/config.h` with your settings
+3. Edit `esp32/device/config.h` with your settings
 4. Click **Upload**
 5. Open Serial Monitor (115200 baud) to verify
 
 ### File Structure
 
 ```
-esp32/slave/
-├── slave.ino    ← Main firmware (MQTT client + button)
-└── config.h     ← Configuration constants
+esp32/device/
+├── device.ino    ← Main firmware (MQTT client + button)
+└── config.h      ← Configuration constants
 ```
 
 ---
@@ -266,40 +266,27 @@ restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
 ```
 
-### API Reference
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/health` | GET | None | Health check |
-| `/api/status` | GET | None | System status |
-| `/api/slaves?all=1` | GET | None | List all devices |
-| `/api/admin/login` | POST | Body | Admin login |
-| `/api/approve/:id` | POST | Session | Approve device |
-| `/api/clearAlert/:id` | POST | Session/Key | Clear alert |
-| `/api/master-sync` | POST | API Key | ESP32 state sync |
-| `/ws` | WS | None | Real-time updates |
-
 ---
 
 ## Operating Modes
 
 ### Mode 1: AP Only
-- Master creates WiFi network `HospitalAlarm`
-- All slaves connect to this network
+- Controller creates WiFi network `HospitalAlarm`
+- All devices connect to this network
 - Dashboard at `http://192.168.4.1`
 - **No internet required**
 - Best for: isolated deployments, testing
 
 ### Mode 2: STA Only
-- Master joins an existing WiFi router
-- Slaves also join the same router
-- Dashboard at master's DHCP IP
+- Controller joins an existing WiFi router
+- Devices also join the same router
+- Dashboard at controller's DHCP IP
 - **Requires hospital WiFi**
 - Best for: wider coverage via existing infrastructure
 
 ### Mode 3: AP + STA (Hybrid)
-- Master runs AP AND joins router simultaneously
-- Slaves can connect to either AP or router
+- Controller runs AP AND joins router simultaneously
+- Devices can connect to either AP or router
 - Dashboard at `192.168.4.1` (AP) or router IP (STA)
 - **Recommended for production**
 - Best for: reliability with fallback
@@ -318,30 +305,30 @@ restartPolicyMaxRetries = 5
 
 | Topic | Direction | QoS | Retained | Payload |
 |-------|-----------|-----|----------|---------|
-| `device/{id}/alert` | Slave → Master | 1 | No | `{"status":"pressed","deviceId":"...","timestamp":...}` |
-| `device/{id}/heartbeat` | Slave → Master | 0 | No | `{"deviceId":"...","uptime":...,"rssi":...}` |
-| `device/{id}/status` | Master → Slave | 1 | Yes | `{"approved":true,"patientName":"...","bed":"...","room":"..."}` |
-| `device/{id}/command` | Master → Slave | 1 | No | `{"action":"clear_alert"}` |
+| `device/{id}/alert` | Device → Controller | 1 | No | `{"status":"pressed","deviceId":"...","timestamp":...}` |
+| `device/{id}/heartbeat` | Device → Controller | 0 | No | `{"deviceId":"...","uptime":...,"rssi":...}` |
+| `device/{id}/status` | Controller → Device | 1 | Yes | `{"approved":true,"patientName":"...","bed":"...","room":"..."}` |
+| `device/{id}/command` | Controller → Device | 1 | No | `{"action":"clear_alert"}` |
 
 ---
 
 ## Troubleshooting
 
-### Master won't start AP
+### Controller won't start AP
 - Check `config.h` — `AP_SSID_DEFAULT` must not be empty
 - Check Serial Monitor for WiFi errors
 - Try resetting the board
 
-### Slave can't connect to Master
-- Verify WiFi credentials match Master's AP
-- Check slave's Serial Monitor for connection attempts
-- Ensure master is in AP or AP+STA mode
+### Device can't connect to Controller
+- Verify WiFi credentials match Controller's AP
+- Check device's Serial Monitor for connection attempts
+- Ensure controller is in AP or AP+STA mode
 - Try the fallback IP: `192.168.4.1`
 
 ### MQTT connection fails
-- Verify PicoMQTT broker is running (check master Serial Monitor)
-- Ensure slave is on the same network as master
-- Check `MQTT_BROKER_IP` in slave's `config.h`
+- Verify PicoMQTT broker is running (check controller Serial Monitor)
+- Ensure device is on the same network as controller
+- Check `MQTT_BROKER_IP` in device's `config.h`
 - Verify port 1883 is not blocked
 
 ### Dashboard not loading
@@ -350,15 +337,15 @@ restartPolicyMaxRetries = 5
 - Check that WebSocket connects (green dot in header)
 
 ### Cloud sync not working (Mode 4)
-- Verify `CLOUD_SERVER_URL` in master's `config.h`
+- Verify `CLOUD_SERVER_URL` in controller's `config.h`
 - Check Railway deployment status
 - Verify `DEVICE_API_KEY` matches on both sides
-- Check master Serial Monitor for HTTP error codes
+- Check controller Serial Monitor for HTTP error codes
 
 ### Alert not triggering
-- Check slave is approved in admin panel
+- Check device is approved in admin panel
 - Verify button wiring (GPIO0 to GND)
-- Check MQTT connection status in slave Serial Monitor
+- Check MQTT connection status in device Serial Monitor
 - Ensure alert isn't already active
 
 ---
@@ -377,7 +364,7 @@ restartPolicyMaxRetries = 5
 
 ### Memory Usage (ESP32-S3)
 - Free heap at boot: ~250KB
-- Per-slave overhead: ~200 bytes
+- Per-device overhead: ~200 bytes
 - Dashboard HTML: ~25KB flash
 
 ### Power Optimization

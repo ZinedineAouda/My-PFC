@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { db } from "./db";
-import { slaves } from "@shared/schema";
+import { devices } from "@shared/schema";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -62,7 +62,7 @@ const httpServer = createServer(app);
       await db.execute(sql`
         CREATE TABLE IF NOT EXISTS system_settings (
           id INTEGER PRIMARY KEY DEFAULT 1,
-          master_last_seen BIGINT,
+          controller_last_seen BIGINT,
           wifi_mode INTEGER NOT NULL DEFAULT 1
         );
       `);

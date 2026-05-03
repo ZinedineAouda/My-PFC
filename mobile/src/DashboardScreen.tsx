@@ -15,8 +15,8 @@ import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { C, API_BASE, WS_URL, type Slave, type StatusData, type WsMessage } from './constants';
-import SlaveModal from './SlaveModal';
+import { C, API_BASE, WS_URL, type Device as PatientDevice, type StatusData, type WsMessage } from './constants';
+import DeviceModal from './DeviceModal';
 
 // ── Configure notification handler ──
 try {
@@ -40,10 +40,10 @@ type Props = {
 
 export default function DashboardScreen({ onLogout, baseUrl }: Props) {
   // ── State ──
-  const [slaves, setSlaves] = useState<Slave[]>([]);
+  const [devices, setDevices] = useState<PatientDevice[]>([]);
   const [status, setStatus] = useState<StatusData>({ mode: 0 });
   const [refreshing, setRefreshing] = useState(false);
-  const [modalSlave, setModalSlave] = useState<Slave | null>(null);
+  const [modalDevice, setModalDevice] = useState<PatientDevice | null>(null);
   const [modalMode, setModalMode] = useState<'approve' | 'edit'>('approve');
   const [modalLoading, setModalLoading] = useState(false);
 
@@ -55,11 +55,11 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
   const alertPulse = useRef(new Animated.Value(0)).current;
 
   // ── Derived ──
-  const pending = slaves.filter(s => !s.approved);
-  const approved = slaves.filter(s => s.approved);
-  const onlineCount = slaves.filter(s => s.online).length;
-  const alertCount = slaves.filter(s => s.alertActive).length;
-  const isMasterOnline = status?.isMasterOnline ?? false;
+  const pending = devices.filter(s => !s.approved);
+  const approved = devices.filter(s => s.approved);
+  const onlineCount = devices.filter(s => s.online).length;
+  const alertCount = devices.filter(s => s.alertActive).length;
+  const isControllerOnline = status?.isControllerOnline ?? false;
 
   // ── Alert pulse animation ──
   useEffect(() => {
@@ -120,18 +120,18 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
   }, []);
 
   // ── Data fetching ──
-  const fetchSlaves = useCallback(async () => {
+  const fetchDevices = useCallback(async () => {
     try {
-      const res = await fetch(`${baseUrl}/api/slaves?all=1`, { 
+      const res = await fetch(`${baseUrl}/api/devices?all=1`, { 
         headers: { 'X-Admin-Token': 'admin1234' },
         credentials: 'include' 
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) setSlaves(data);
+        if (Array.isArray(data)) setDevices(data);
       }
     } catch (e) {
-      console.log('Fetch slaves error:', e);
+      console.log('Fetch devices error:', e);
     }
   }, [baseUrl]);
 
@@ -152,20 +152,20 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
 
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([fetchSlaves(), fetchStatus()]);
+    await Promise.all([fetchDevices(), fetchStatus()]);
     setRefreshing(false);
-  }, [fetchSlaves, fetchStatus]);
+  }, [fetchDevices, fetchStatus]);
 
   // ── Initial load + polling ──
   useEffect(() => {
-    fetchSlaves();
+    fetchDevices();
     fetchStatus();
     const interval = setInterval(() => {
-      fetchSlaves();
+      fetchDevices();
       fetchStatus();
     }, 10000);
     return () => clearInterval(interval);
-  }, [fetchSlaves, fetchStatus]);
+  }, [fetchDevices, fetchStatus]);
 
   // ── WebSocket ──
   useEffect(() => {
@@ -182,11 +182,11 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
         try {
           const msg: WsMessage = JSON.parse(event.data);
           // Refresh data on any update
-          fetchSlaves();
+          fetchDevices();
           fetchStatus();
 
           if (msg.type === 'ALERT') {
-            handleAlertReceived(msg.payload?.slaveId || 'Unknown');
+            handleAlertReceived(msg.payload?.deviceId || 'Unknown');
           }
           if (msg.type === 'CLEAR') {
             stopSiren();
@@ -213,7 +213,7 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
   }, []);
 
   // ── Alert handling ──
-  const handleAlertReceived = async (slaveId: string) => {
+  const handleAlertReceived = async (deviceId: string) => {
     // 1. Play siren
     try {
       await sirenRef.current?.playAsync();
@@ -229,7 +229,7 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '🚨 EMERGENCY ALERT',
-          body: `Patient Alert from ${slaveId}`,
+          body: `Patient Alert from ${deviceId}`,
           sound: true,
           priority: Notifications.AndroidNotificationPriority.MAX,
         },
@@ -264,12 +264,12 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
   };
 
   const handleApprove = async (name: string, bed: string, room: string) => {
-    if (!modalSlave) return;
+    if (!modalDevice) return;
     setModalLoading(true);
     try {
-      await apiRequest('POST', `/api/approve/${modalSlave.slaveId}`, { patientName: name, bed, room });
-      setModalSlave(null);
-      fetchSlaves();
+      await apiRequest('POST', `/api/approve/${modalDevice.deviceId}`, { patientName: name, bed, room });
+      setModalDevice(null);
+      fetchDevices();
     } catch (e: any) {
       Alert.alert('Failed', e.message);
     } finally {
@@ -278,12 +278,12 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
   };
 
   const handleUpdate = async (name: string, bed: string, room: string) => {
-    if (!modalSlave) return;
+    if (!modalDevice) return;
     setModalLoading(true);
     try {
-      await apiRequest('PUT', `/api/slaves/${modalSlave.slaveId}`, { patientName: name, bed, room });
-      setModalSlave(null);
-      fetchSlaves();
+      await apiRequest('PUT', `/api/devices/${modalDevice.deviceId}`, { patientName: name, bed, room });
+      setModalDevice(null);
+      fetchDevices();
     } catch (e: any) {
       Alert.alert('Failed', e.message);
     } finally {
@@ -291,16 +291,16 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
     }
   };
 
-  const handleDelete = (slaveId: string) => {
-    Alert.alert('Confirm', `Delete ${slaveId}?`, [
+  const handleDelete = (deviceId: string) => {
+    Alert.alert('Confirm', `Delete ${deviceId}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           try {
-            await apiRequest('DELETE', `/api/slaves/${slaveId}`);
-            fetchSlaves();
+            await apiRequest('DELETE', `/api/devices/${deviceId}`);
+            fetchDevices();
           } catch (e: any) {
             Alert.alert('Failed', e.message);
           }
@@ -309,11 +309,11 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
     ]);
   };
 
-  const handleClearAlert = async (slaveId: string) => {
+  const handleClearAlert = async (deviceId: string) => {
     try {
-      await apiRequest('POST', `/api/clearAlert/${slaveId}`);
+      await apiRequest('POST', `/api/clearAlert/${deviceId}`);
       stopSiren();
-      fetchSlaves();
+      fetchDevices();
     } catch (e: any) {
       Alert.alert('Failed', e.message);
     }
@@ -353,15 +353,15 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
           </View>
         </View>
         <View style={s.headerRight}>
-          <View style={[s.statusBadge, isMasterOnline ? s.statusOnline : s.statusOffline]}>
-            <View style={[s.statusDot, isMasterOnline ? s.dotOnline : s.dotOffline]} />
+          <View style={[s.statusBadge, isControllerOnline ? s.statusOnline : s.statusOffline]}>
+            <View style={[s.statusDot, isControllerOnline ? s.dotOnline : s.dotOffline]} />
             <MaterialCommunityIcons
               name="refresh"
               size={12}
-              color={isMasterOnline ? C.emerald : C.red}
+              color={isControllerOnline ? C.emerald : C.red}
             />
-            <Text style={[s.statusText, { color: isMasterOnline ? C.emerald : C.red }]}>
-              {isMasterOnline ? 'CONNECTED' : 'OFFLINE'}
+            <Text style={[s.statusText, { color: isControllerOnline ? C.emerald : C.red }]}>
+              {isControllerOnline ? 'CONNECTED' : 'OFFLINE'}
             </Text>
           </View>
           <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
@@ -414,23 +414,23 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
                 <Text style={s.badgeText}>{pending.length} NEW</Text>
               </View>
             </View>
-            {pending.map(slave => (
-              <View key={slave.slaveId} style={s.pendingCard}>
+            {pending.map(device => (
+              <View key={device.deviceId} style={s.pendingCard}>
                 <View>
-                  <Text style={s.pendingId}>{slave.slaveId}</Text>
+                  <Text style={s.pendingId}>{device.deviceId}</Text>
                   <Text style={s.pendingSub}>Signal Detected</Text>
                 </View>
                 <View style={s.pendingActions}>
                   <TouchableOpacity
                     style={s.approveBtn}
-                    onPress={() => { setModalMode('approve'); setModalSlave(slave); }}
+                    onPress={() => { setModalMode('approve'); setModalDevice(device); }}
                     activeOpacity={0.8}
                   >
                     <Text style={s.approveBtnText}>Authorize</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={s.deleteMiniBtn}
-                    onPress={() => handleDelete(slave.slaveId)}
+                    onPress={() => handleDelete(device.deviceId)}
                     activeOpacity={0.8}
                   >
                     <MaterialCommunityIcons name="delete-outline" size={14} color={C.red} />
@@ -455,7 +455,7 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
             <View style={s.emptyCard}>
               <Text style={s.emptyEmoji}>📡</Text>
               <Text style={s.emptyText}>
-                Scanning for new hardware...{'\n'}Connect a slave device to begin monitoring.
+                Scanning for new hardware...{'\n'}Connect a device to begin monitoring.
               </Text>
             </View>
           ) : (
@@ -467,7 +467,7 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
 
               return (
                 <View
-                  key={d.slaveId}
+                  key={d.deviceId}
                   style={[
                     s.deviceCard,
                     isAlert && s.deviceAlert,
@@ -486,7 +486,7 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
                   <View style={s.deviceHeader}>
                     <View>
                       <Text style={s.deviceName}>{d.patientName || 'Unnamed'}</Text>
-                      <Text style={s.deviceId}>ID: {d.slaveId}</Text>
+                      <Text style={s.deviceId}>ID: {d.deviceId}</Text>
                     </View>
                     <View style={[
                       s.deviceBadge,
@@ -517,7 +517,7 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
                   <View style={s.deviceActions}>
                     <TouchableOpacity
                       style={s.modifyBtn}
-                      onPress={() => { setModalMode('edit'); setModalSlave(d); }}
+                      onPress={() => { setModalMode('edit'); setModalDevice(d); }}
                       activeOpacity={0.7}
                     >
                       <MaterialCommunityIcons name="pencil-outline" size={12} color={C.slate400} />
@@ -526,7 +526,7 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
                     {isAlert && (
                       <TouchableOpacity
                         style={s.silenceBtn}
-                        onPress={() => handleClearAlert(d.slaveId)}
+                        onPress={() => handleClearAlert(d.deviceId)}
                         activeOpacity={0.7}
                       >
                         <MaterialCommunityIcons name="bell-off-outline" size={12} color={C.red} />
@@ -535,7 +535,7 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
                     )}
                     <TouchableOpacity
                       style={s.deleteBtn}
-                      onPress={() => handleDelete(d.slaveId)}
+                      onPress={() => handleDelete(d.deviceId)}
                       activeOpacity={0.7}
                     >
                       <MaterialCommunityIcons name="delete-outline" size={12} color={C.red} />
@@ -563,15 +563,15 @@ export default function DashboardScreen({ onLogout, baseUrl }: Props) {
       </ScrollView>
 
       {/* ═══ MODAL ═══ */}
-      <SlaveModal
-        visible={!!modalSlave}
+      <DeviceModal
+        visible={!!modalDevice}
         title={modalMode === 'approve'
-          ? `Node Authorization: ${modalSlave?.slaveId}`
-          : `Modify: ${modalSlave?.slaveId}`}
-        onClose={() => setModalSlave(null)}
+          ? `Device Authorization: ${modalDevice?.deviceId}`
+          : `Modify: ${modalDevice?.deviceId}`}
+        onClose={() => setModalDevice(null)}
         onSubmit={modalMode === 'approve' ? handleApprove : handleUpdate}
         loading={modalLoading}
-        defaults={modalMode === 'edit' ? modalSlave ?? undefined : undefined}
+        defaults={modalMode === 'edit' ? modalDevice ?? undefined : undefined}
       />
     </SafeAreaView>
   );

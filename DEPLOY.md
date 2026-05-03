@@ -85,7 +85,7 @@ After both are deployed, you need to link them:
 
 ## Step 5: Configure ESP32
 
-Open `esp32/online/master/master.ino` and update:
+Open `esp32/controller/controller.ino` and update:
 
 ```cpp
 char serverURL[128] = "https://your-app.up.railway.app";  // Railway backend URL
@@ -99,12 +99,12 @@ Flash to your ESP32-S3 and it will send data directly to the Railway backend.
 ## How It Works
 
 ```
-[ESP32 Slaves] → [ESP32 Master] → [Railway Backend API]
-                                          ↑
-                                   [Vercel Frontend] ← [Browser/Phone]
+[ESP32 Devices] → [ESP32 Controller] → [Railway Backend API]
+                                           ↑
+                                    [Vercel Frontend] ← [Browser/Phone]
 ```
 
-- ESP32 master sends device data to Railway backend via HTTP
+- ESP32 controller sends device data to Railway backend via HTTP
 - Users open the Vercel frontend in their browser
 - Frontend fetches data from Railway backend via API calls
 - Railway handles all authentication, device registration, and alerts
@@ -124,7 +124,7 @@ curl https://YOUR-RAILWAY-URL/api/status
 curl -X POST https://YOUR-RAILWAY-URL/api/register \
   -H "Content-Type: application/json" \
   -H "X-Device-Key: YOUR_KEY" \
-  -d '{"slaveId": "test-device"}'
+  -d '{"deviceId": "test-device"}'
 ```
 
 ### Test Frontend (Vercel)
