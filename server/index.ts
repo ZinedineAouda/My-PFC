@@ -57,15 +57,39 @@ const httpServer = createServer(app);
       ]);
       log("Database linked successfully.");
 
-      // ─── Auto-Migration: Ensure settings table exists ──────────
-      log("Verifying system schema...");
+      // ─── Auto-Migration: Handle Nomenclature Shift ──────────
+      log("Verifying system schema and terminology...");
+      
+      // 1. Ensure table exists with new names
       await db.execute(sql`
         CREATE TABLE IF NOT EXISTS system_settings (
           id INTEGER PRIMARY KEY DEFAULT 1,
           controller_last_seen BIGINT,
-          wifi_mode INTEGER NOT NULL DEFAULT 1
+          controller_uptime INTEGER,
+          controller_rssi INTEGER,
+          controller_wifi_error TEXT,
+          wifi_mode INTEGER NOT NULL DEFAULT 1,
+          pending_command TEXT,
+          command_params TEXT
         );
       `);
+
+      // 2. Migration: Check for legacy column names and rename them
+      try {
+        await db.execute(sql`ALTER TABLE system_settings RENAME COLUMN master_last_seen TO controller_last_seen;`);
+        log("[MIGRATE] Renamed master_last_seen to controller_last_seen");
+      } catch(e) {}
+      
+      try {
+        await db.execute(sql`ALTER TABLE system_settings RENAME COLUMN master_uptime TO controller_uptime;`);
+        log("[MIGRATE] Renamed master_uptime to controller_uptime");
+      } catch(e) {}
+
+      try {
+        await db.execute(sql`ALTER TABLE system_settings RENAME COLUMN master_rssi TO controller_rssi;`);
+        log("[MIGRATE] Renamed master_rssi to controller_rssi");
+      } catch(e) {}
+
       // Ensure the singleton row exists
       await db.execute(sql`
         INSERT INTO system_settings (id) 

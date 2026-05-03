@@ -32,7 +32,7 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 
 // ─── Cloud Sync (Mode 4 only) ───────────────────────────────
 #define CLOUD_SERVER_URL      "https://my-pfc-production.up.railway.app"
-#define CLOUD_DEVICE_KEY      "esp32_controller_super_secure_key_123"
+#define CLOUD_DEVICE_KEY      "super"
 #define CLOUD_SYNC_INTERVAL   3000    // Reduced to 3s for faster "Stop Alert" response
 #define CLOUD_PING_INTERVAL   1500    // Reduced to 1.5s for "Live" status feel
 #define CLOUD_HTTP_TIMEOUT    10000   // Reduced to 10s to fail/retry faster on bad connections
