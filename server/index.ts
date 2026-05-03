@@ -43,9 +43,24 @@ const httpServer = createServer(app);
 
   // ─── STAGE 2: Critical DB Migrations (Nomenclature Shift) ──────────
   try {
-    log("Verifying system schema and terminology...");
-    
-    // Ensure table exists
+    // 1. Ensure 'devices' table exists
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS devices (
+        device_id TEXT PRIMARY KEY,
+        patient_name TEXT NOT NULL DEFAULT '',
+        bed TEXT NOT NULL DEFAULT '',
+        room TEXT NOT NULL DEFAULT '',
+        alert_active BOOLEAN NOT NULL DEFAULT false,
+        last_alert_time TEXT,
+        registered BOOLEAN NOT NULL DEFAULT false,
+        approved BOOLEAN NOT NULL DEFAULT false,
+        online BOOLEAN NOT NULL DEFAULT false,
+        last_seen BIGINT,
+        last_updated_at BIGINT
+      );
+    `);
+
+    // 2. Ensure 'system_settings' table exists
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS system_settings (
         id INTEGER PRIMARY KEY DEFAULT 1,
