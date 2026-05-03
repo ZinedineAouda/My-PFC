@@ -90,6 +90,27 @@ const httpServer = createServer(app);
         log("[MIGRATE] Renamed master_rssi to controller_rssi");
       } catch(e) {}
 
+      // 3. Force-add missing columns (Postgres doesn't support IF NOT EXISTS in ALTER TABLE directly for all versions, 
+      // so we use a safe catch-all)
+      const newCols = [
+        ["controller_last_seen", "BIGINT"],
+        ["controller_uptime", "INTEGER"],
+        ["controller_rssi", "INTEGER"],
+        ["controller_wifi_error", "TEXT"],
+        ["wifi_mode", "INTEGER NOT NULL DEFAULT 1"],
+        ["pending_command", "TEXT"],
+        ["command_params", "TEXT"]
+      ];
+
+      for (const [col, type] of newCols) {
+        try {
+          await db.execute(sql.raw(`ALTER TABLE system_settings ADD COLUMN ${col} ${type};`));
+          log(`[MIGRATE] Added missing column: ${col}`);
+        } catch(e) {
+          // Column already exists, ignore
+        }
+      }
+
       // Ensure the singleton row exists
       await db.execute(sql`
         INSERT INTO system_settings (id) 
