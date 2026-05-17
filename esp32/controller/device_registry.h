@@ -34,10 +34,19 @@ typedef void (*RegistryChangeCallback)(const String& deviceId, const char* event
 // ─── Device Registry Class ──────────────────────────────────
 class DeviceRegistry {
 public:
-    DeviceRegistry() : _lastTimeoutCheck(0), _changeCallback(nullptr), _timeOffset(0) {}
-
+    DeviceRegistry() : _lastTimeoutCheck(0), _lastSaveTime(0), _changeCallback(nullptr), _timeOffset(0), _dirty(false) {}
     void begin() {
+        _dirty = false;
         load();
+    }
+
+    void handle() {
+        checkTimeouts();
+        // Periodically save if dirty (every 1 minute)
+        if (_dirty && (millis() - _lastSaveTime > 60000)) {
+            save();
+            _lastSaveTime = millis();
+        }
     }
 
     void onDeviceChange(RegistryChangeCallback cb) {
@@ -65,23 +74,25 @@ public:
                 JsonArray arr = doc.as<JsonArray>();
                 for (JsonObject obj : arr) {
                     PatientDevice dev;
-                    dev.deviceId = obj["id"] | "";
+                    dev.deviceId = obj["i"] | ""; // 'i' for id
                     if (dev.deviceId.isEmpty()) continue;
-                    dev.patientName = obj["n"] | "";
-                    dev.bed = obj["b"] | "";
-                    dev.room = obj["r"] | "";
-                    dev.approved = obj["a"] | false;
-                    dev.alertActive = obj["al"] | false; // Restore alert state
+                    dev.patientName = obj["n"] | ""; // 'n' for name
+                    dev.bed = obj["b"] | "";         // 'b' for bed
+                    dev.room = obj["r"] | "";        // 'r' for room
+                    dev.approved = obj["a"] | false; // 'a' for approved
+                    dev.alertActive = obj["l"] | false; // 'l' for aLert
                     dev.registered = true;
-                    dev.online = false; // Reset to false on reboot
+                    dev.online = false;
                     _devices[dev.deviceId] = dev;
                 }
-                Serial.printf("[REG] Loaded %d devices from storage\n", _devices.size());
+                Serial.printf("[REG] Loaded %d devices\n", _devices.size());
             }
         }
     }
 
-    void save() {
+    void save(bool force = false) {
+        if (!force && !_dirty) return;
+        
         Preferences prefs;
         prefs.begin("registry", false);
         
@@ -90,24 +101,19 @@ public:
         for (auto const& item : _devices) {
             const PatientDevice& d = item.second;
             JsonObject obj = arr.add<JsonObject>();
-            obj["id"] = d.deviceId;
-            obj["n"]  = d.patientName;
-            obj["b"]  = d.bed;
-            obj["r"]  = d.room;
-            obj["a"]  = d.approved;
-            obj["al"] = d.alertActive;
+            obj["i"] = d.deviceId;
+            obj["n"] = d.patientName;
+            obj["b"] = d.bed;
+            obj["r"] = d.room;
+            obj["a"] = d.approved;
+            obj["l"] = d.alertActive;
         }
         
         String out;
         serializeJson(doc, out);
-        
-        if (out.length() > 3800) {
-            Serial.printf("[REG] WARNING: Registry size (%d bytes) is approaching NVS limit (4096)!\n", out.length());
-        }
-        
         prefs.putString("devices", out);
         prefs.end();
-        Serial.printf("[REG] Saved %d devices (%d bytes)\n", _devices.size(), out.length());
+        _dirty = false;
     }
 
     void factoryReset() {
@@ -138,7 +144,7 @@ public:
         _devices[id]   = dev;
 
         Serial.printf("[REG] New device: %s\n", id.c_str());
-        save();
+        _dirty = true;
         _notify(id, "register");
         return &_devices[id];
     }
@@ -168,7 +174,7 @@ public:
         it->second.lastUpdatedAt = getCurrentTime();
 
         Serial.printf("[ALERT] Active: %s\n", id.c_str());
-        save(); // Persist alert state
+        _dirty = true;
         _notify(id, "alert");
         return true;
     }
@@ -179,7 +185,7 @@ public:
         it->second.alertActive = false;
         it->second.lastClearTime = millis();
         it->second.lastUpdatedAt = getCurrentTime();
-        save(); // Persist clear state
+        _dirty = true;
         _notify(id, "clear");
         return true;
     }
@@ -205,7 +211,7 @@ public:
         it->second.room = room;
         it->second.approved = true;
         it->second.lastUpdatedAt = getCurrentTime();
-        save();
+        _dirty = true;
         _notify(id, "approve");
         return true;
     }
@@ -227,7 +233,7 @@ public:
         auto it = _devices.find(id);
         if (it == _devices.end()) return false;
         _devices.erase(it);
-        save();
+        _dirty = true;
         _notify(id, "delete");
         return true;
     }
@@ -357,9 +363,11 @@ public:
 
 private:
     std::map<String, PatientDevice> _devices;
-    unsigned long _lastTimeoutCheck;
+    unsigned long _lastTimeoutCheck = 0;
+    unsigned long _lastSaveTime = 0;
     RegistryChangeCallback _changeCallback;
     uint64_t _timeOffset;
+    bool     _dirty = false;
 
     void _notify(const String& id, const char* event) const {
         if (_changeCallback) _changeCallback(id, event);

@@ -28,6 +28,7 @@ public:
         WiFi.mode(WIFI_AP);
         WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
         WiFi.softAP(_apSSID);
+        WiFi.setAutoReconnect(true); // Hardware-level reliability
         Serial.printf("[WIFI] Setup AP started: %s @ %s\n",
                       _apSSID, WiFi.softAPIP().toString().c_str());
     }
@@ -86,11 +87,14 @@ public:
         // Auto-reconnect STA (non-blocking)
         if (strlen(_staSSID) > 0) {
             wl_status_t status = WiFi.status();
+            // In Core 3.x, Status 6 (WL_DISCONNECTED) can mean it's still "trying"
+            // We only hammer WiFi.begin if it's truly failed or idle for too long.
+            // IMPORTANT: Never call begin() if it's already in WL_IDLE_STATUS (connecting)
             if (status != WL_CONNECTED && status != WL_IDLE_STATUS) {
                 unsigned long now = millis();
-                if (now - _lastReconnect > _reconnectInterval) {
+                if (now - _lastReconnect > 20000) { // Increase to 20s for slow hotspots
                     _lastReconnect = now;
-                    Serial.printf("[WIFI] Reconnecting to %s (Status: %d)...\n", _staSSID, (int)status);
+                    Serial.printf("[WIFI] Re-asserting connection to %s (Status: %d)...\n", _staSSID, (int)status);
                     WiFi.begin(_staSSID, _staPass);
                 }
             }
@@ -118,9 +122,17 @@ public:
             WiFi.mode(WIFI_AP_STA);
         }
         setSTACredentials(ssid, pass);
-        WiFi.disconnect();
-        WiFi.begin(_staSSID, _staPass);
-        Serial.printf("[WIFI] Initiating connection to: %s\n", _staSSID);
+        
+        // Only call begin if not already connecting
+        if (WiFi.status() != WL_IDLE_STATUS) {
+            WiFi.disconnect();
+            delay(100);
+            WiFi.begin(_staSSID, _staPass);
+            _lastReconnect = millis();
+            Serial.printf("[WIFI] Initiating connection to: %s\n", _staSSID);
+        } else {
+            Serial.println("[WIFI] Already connecting, skipping redundant begin()");
+        }
     }
 
     // ── Getters ─────────────────────────────────────────────
@@ -201,6 +213,25 @@ private:
     }
 
     void _connectSTA() {
+        if (strlen(_staSSID) == 0) return;
+
+        wl_status_t status = WiFi.status();
+        if (status == WL_CONNECTED || status == WL_IDLE_STATUS) {
+            return;
+        }
+
+        WiFi.setAutoReconnect(true); 
+        
+        // FORCE RELIABLE DNS: Bypass potentially buggy hotspot DNS relays.
+        // Diagnostics show 1.1.1.1 (Cloudflare) is much faster for Railway domains.
+        IPAddress dns1(1, 1, 1, 1); // Cloudflare (Primary)
+        IPAddress dns2(8, 8, 8, 8); // Google (Secondary)
+        WiFi.config(IPAddress(0,0,0,0), IPAddress(0,0,0,0), IPAddress(0,0,0,0), dns1, dns2);
+        
+        // HOTSPOT OPTIMIZATION: Set MTU to 1400 to prevent TLS handshake fragmentation
+        // This is supported in ESP32 Core 3.x
+        // WiFi.setMTU(1400); // Not supported by this core version
+        
         WiFi.begin(_staSSID, _staPass);
         _lastReconnect = millis();
     }

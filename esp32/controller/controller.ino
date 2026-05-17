@@ -33,13 +33,14 @@
 // ─── Global State ───────────────────────────────────────────────────
 WiFiOpMode   currentMode = MODE_NONE;
 bool         setupDone   = false;
+bool         pendingSetup = false;
 Preferences  prefs;
 
 // ─── Module Instances ───────────────────────────────────────────────
 DeviceRegistry registry;
 WifiManager    wifiMgr;
 MqttHandler    mqttHandler(registry);
-WebDashboard   dashboard(registry);
+WebDashboard   dashboard(registry, wifiMgr);
 CloudSync      cloudSync(registry);
 
 // ─── Buzzer State (non-blocking) ────────────────────────────────────
@@ -152,6 +153,10 @@ void setup() {
     // ── MQTT Broker: start on port 1883 ─────────────────────
     mqttHandler.begin();
 
+    // NEW: Sync time for TLS stability
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    Serial.println("[NTP] Syncing time...");
+
     // ── Cloud Sync: handle remote commands ──────────────────
     cloudSync.onCommand(onRemoteCommand);
 
@@ -190,14 +195,16 @@ void loop() {
     // ── WiFi management (auto-reconnect) ────────────────────
     wifiMgr.handle();
 
-    // ── MQTT broker processing ──────────────────────────────
+    // ── Module handlers ────────────────────────────────
+    registry.handle();
     mqttHandler.handle();
+    dashboard.handle();
+    if (setupDone && currentMode == MODE_ONLINE && wifiMgr.staConnected()) {
+        cloudSync.handle((int)currentMode, wifiMgr.getLastError());
+    }
 
     // ── Local hardware feedback (Buzzer/LED) ───────────────
     handleHardwareFeedback();
-
-    // ── WebSocket client cleanup ────────────────────────────
-    dashboard.handle();
 
     // ── Serial Command Interface (Safety Wipe) ────────────────
     if (Serial.available()) {
@@ -209,12 +216,27 @@ void loop() {
         }
     }
 
-    // ── Device timeout detection ────────────────────────────
-    registry.checkTimeouts();
+    // ── Setup Validation Logic ─────────────────────────────
+    if (pendingSetup) {
+        bool isValid = false;
+        if (currentMode == MODE_AP) {
+            isValid = true; // Mode 1 is always valid
+        } else if (wifiMgr.staConnected()) {
+            isValid = true; // WiFi modes (2, 3, 4) are valid if connected
+        }
 
-    // ── Cloud sync (Mode 4 only) ────────────────────────────
-    if (setupDone && currentMode == MODE_ONLINE && wifiMgr.staConnected()) {
-        cloudSync.handle((int)currentMode, wifiMgr.getLastError());
+        if (isValid) {
+            Serial.println("[SETUP] Verification Success! Applying final configuration...");
+            pendingSetup = false;
+            setupDone = true;
+            saveSettings();
+            
+            // Apply the FINAL mode (important for Mode 2 to turn off AP)
+            wifiMgr.applyMode(currentMode);
+            
+            dashboard.setSetupDone(true);
+            Serial.println("[SETUP] Configuration saved. Setup Complete.");
+        }
     }
 
     // ── Periodic reminder if setup is pending ───────────────
@@ -234,7 +256,7 @@ void loop() {
 
 // Called by DeviceRegistry on any state change
 void onDeviceChange(const String& deviceId, const char* eventType) {
-    Serial.printf("[EVENT] %s → %s\n", deviceId.c_str(), eventType);
+    // Routine event - silent in production
 
     // Push update to all WebSocket clients
     if (strcmp(eventType, "delete") == 0) {
@@ -283,10 +305,7 @@ void handleHardwareFeedback() {
         }
     }
 
-    // 2. Drive Buzzer
-    digitalWrite(BUZZER_PIN, anyAlert ? HIGH : LOW);
-
-    // 3. Drive Status LED
+    // 2. Drive Status LED
     if (anyAlert) {
         // Fast blink during emergency
         if (now - lastToggle > 150) {
@@ -310,32 +329,48 @@ void handleHardwareFeedback() {
 // Called by setup page: connect to WiFi
 void onWifiConnect(const char* ssid, const char* pass) {
     wifiMgr.connectSTA(ssid, pass);
-    saveSettings(); // Save STA credentials immediately
+    // REMOVED: saveSettings() - credentials only saved after successful validation in loop()
 }
 
 // Called by setup page: finalize mode selection
 void onSetup(int mode, const char* apSSID, const char* apPass) {
-    currentMode = (WiFiOpMode)mode;
-    setupDone = true;
+    WiFiOpMode newMode = (WiFiOpMode)mode;
+    
+    Serial.printf("[SETUP] New Mode Request: %d. Entering Universal Validation...\n", mode);
 
     // Migration Broadcast: Alert devices before we switch networks
     if (strlen(apSSID) > 0) {
-        mqttHandler.broadcastMigration(apSSID, apPass);
-        delay(1000); // Give devices time to receive the packet
+        String myIP = wifiMgr.controllerIP();
+        mqttHandler.broadcastMigration(apSSID, apPass, myIP);
+        delay(1000); 
         wifiMgr.setAPCredentials(apSSID, apPass);
     }
 
-    // Save to Non-Volatile Storage so configuration survives reboots!
-    saveSettings();
+    // Standard Procedure for ALL modes:
+    // 1. Set currentMode but DON'T mark setupDone yet
+    currentMode = newMode;
+    setupDone = false;
+    pendingSetup = true;
 
-    // Apply WiFi mode
-    wifiMgr.applyMode(currentMode);
+    // 2. Apply a "Safe Test Mode" (Always keep AP open during test)
+    if (newMode == MODE_STA) {
+        // Even if the user wants STA-only, we use AP_STA during validation
+        // so they don't get locked out if the password is wrong!
+        wifiMgr.applyMode(MODE_AP_STA);
+    } else {
+        wifiMgr.applyMode(newMode);
+    }
 
-    // Update dashboard state
-    dashboard.setSetupDone(true);
-    dashboard.setMode(currentMode);
+    // 3. Update dashboard to "Testing" state
+    dashboard.setMode(newMode);
+    dashboard.setSetupDone(false);
 
-    Serial.printf("[SETUP] Mode %d applied. Setup complete.\n", mode);
+    // Special case: Mode 1 (AP Only) is "pre-validated"
+    if (newMode == MODE_AP) {
+        Serial.println("[SETUP] Mode 1 (AP) validated immediately.");
+        // The loop will pick this up or we can force it here
+        // But for consistency, let's let the loop see that it's "ready"
+    }
 }
 
 // Handler for commands received from the Railway Cloud server

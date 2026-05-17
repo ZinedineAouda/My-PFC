@@ -15,13 +15,12 @@
 #include "dashboard_static.h"
 
 // Forward declarations — the MqttHandler reference is set from controller.ino
-class MqttHandler;
-extern MqttHandler mqttHandler;
+class WifiManager;
 
 class WebDashboard {
 public:
-    WebDashboard(DeviceRegistry& reg)
-        : _registry(reg), _server(WEB_PORT), _ws("/ws") {}
+    WebDashboard(DeviceRegistry& reg, WifiManager& wifi)
+        : _registry(reg), _wifi(wifi), _server(WEB_PORT), _ws("/ws") {}
 
     void begin(bool setupDone, WiFiOpMode mode) {
         _setupDone = setupDone;
@@ -71,9 +70,11 @@ public:
         });
 
         // ── API: WiFi Connection Status ─────────────────────
-        _server.on("/api/wifi-status", HTTP_GET, [](AsyncWebServerRequest* req) {
+        _server.on("/api/wifi-status", HTTP_GET, [this](AsyncWebServerRequest* req) {
             int status = WiFi.status();
-            String json = "{\"status\":" + String(status) + "}";
+            String message = _wifi.getLastError();
+            
+            String json = "{\"status\":" + String(status) + ",\"message\":\"" + message + "\"}";
             req->send(200, "application/json", json);
         });
 
@@ -384,6 +385,7 @@ public:
 
 private:
     DeviceRegistry& _registry;
+    WifiManager&    _wifi;
     AsyncWebServer  _server;
     AsyncWebSocket  _ws;
     bool            _setupDone = false;

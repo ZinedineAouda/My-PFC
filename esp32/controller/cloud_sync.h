@@ -22,12 +22,13 @@ public:
     CloudSync(DeviceRegistry& reg)
         : _registry(reg), _lastSync(0), _lastPing(0), _lastOpTime(0),
           _busy(false), _forceSyncPending(false),
-          _consecutiveFails(0), _timeOffset(0) {
+          _consecutiveFails(0), _consecutiveDnsFails(0),
+          _dnsBackoffUntil(0), _timeOffset(0) {
         _client = new WiFiClientSecure();
         _client->setInsecure();
-        _client->setHandshakeTimeout(30000);
+        _client->setHandshakeTimeout(30000); // 30s for heavy Cloudflare/Railway handshakes
         _http = new HTTPClient();
-        _http->setTimeout(3000); // Drastically reduced to prevent Controller loop blocking (critical for MQTT server)
+        _http->setTimeout(30000); 
     }
 
     void onCommand(CloudCommandCallback cb) { _commandCallback = cb; }
@@ -49,7 +50,15 @@ public:
 
     void handle(int currentMode, String wifiError = "OK") {
         if (WiFi.status() != WL_CONNECTED) return;
+        
+        // Safety: Wait until NTP syncs (> year 2020) to ensure TLS handshake works
+        time_t now_time = time(nullptr);
+        if (now_time < 1600000000) return; 
+
         if (_busy) return;
+
+        // DNS backoff: skip all cloud ops if server hostname was recently unreachable
+        if (_dnsBackoffUntil > 0 && millis() < _dnsBackoffUntil) return;
 
         _currentMode = currentMode;
         _lastWifiError = wifiError;
@@ -59,7 +68,6 @@ public:
         if (!_alertQueue.empty()) {
             _processAlertQueue();
             _lastOpTime = now; 
-            delay(100); // Settle network stack after critical TX
             return;
         }
 
@@ -67,7 +75,10 @@ public:
         if (now - _lastOpTime < 1000) return; 
 
         // ── 3. Lightweight heartbeat ping every 10s ──────────
-        if (now - _lastPing >= CLOUD_PING_INTERVAL) {
+        // Lighter load during alerts: skip pings/syncs if registry has active alerts
+        bool hasAlerts = _registry.alertCount() > 0;
+
+        if (!hasAlerts && (now - _lastPing >= CLOUD_PING_INTERVAL)) {
             _lastPing = now;
             _lastOpTime = now;
             _sendPing();
@@ -75,7 +86,7 @@ public:
         }
 
         // ── 4. Full state sync ───────────────────────────────
-        if (_forceSyncPending || (now - _lastSync >= CLOUD_SYNC_INTERVAL)) {
+        if (_forceSyncPending || (!hasAlerts && (now - _lastSync >= CLOUD_SYNC_INTERVAL))) {
             _forceSyncPending = false;
             _lastSync = now;
             _lastOpTime = now;
@@ -150,20 +161,70 @@ private:
         return code;
     }
 
-    int _executePost(const String& path, const String& payload) {
-        if (!_client || !_http) return -3;
+    // Extract hostname from a URL like "https://host.example.com/path"
+    static String _extractHost(const char* url) {
+        String s(url);
+        int start = s.indexOf("://");
+        if (start < 0) start = 0; else start += 3;
+        int end = s.indexOf('/', start);
+        if (end < 0) end = s.length();
+        return s.substring(start, end);
+    }
 
+    int _executePost(const String& path, const String& payload) {
         String url = String(CLOUD_SERVER_URL) + path;
-        Serial.printf("[CLOUD] Requesting: %s\n", url.c_str());
+        String serverHost = _extractHost(CLOUD_SERVER_URL);
         
-        _http->setReuse(true); 
-        if (!_http->begin(*_client, url)) {
-            Serial.println("[CLOUD] Failed to init HTTPClient");
-            return -2;
+        // 1. DNS check with retries (Railway CNAME chains can be slow/complex)
+        IPAddress serverIP;
+        bool serverDNS = false;
+        for (int i = 0; i < 3; i++) {
+            if (WiFi.hostByName(serverHost.c_str(), serverIP) && serverIP[0] != 0) {
+                serverDNS = true;
+                break;
+            }
+            if (i < 2) {
+                delay(1000);
+            }
+        }
+        
+        time_t now_time = time(nullptr);
+
+        if (!serverDNS) {
+            _consecutiveDnsFails++;
+            // FALLBACK: Use confirmed IP if DNS is failing.
+            serverIP = IPAddress(66, 33, 22, 34); 
+            serverDNS = true;
+        } else {
+            _consecutiveDnsFails = 0;
+            _dnsBackoffUntil = 0;
         }
 
+        // 2. Persistent Client management
+        // MOBILE HOTSPOT OPTIMIZATION: Set MTU to 1400 to avoid fragmentation
+        _client->setInsecure();
+        _client->setHandshakeTimeout(30000); 
+        
+        delay(50); 
+        
+        // In Core 3.3.0, SNI is set by using this specific connect overload.
+        // We pre-connect to the IP so HTTPClient doesn't have to resolve DNS.
+        if (!_client->connected()) {
+            if (!_client->connect(serverIP, 443, serverHost.c_str(), NULL, NULL, NULL)) {
+                Serial.printf("[CLOUD] Socket connect to %s FAILED\n", serverIP.toString().c_str());
+            }
+        }
+        
+        // Use the original URL here. Because _client is already connected, 
+        // HTTPClient will skip DNS and reuse the active secure socket.
+        _http->begin(*_client, url);
+        _http->setTimeout(CLOUD_HTTP_TIMEOUT);
+        _http->setReuse(true);
+        
         _http->addHeader("Content-Type", "application/json");
         _http->addHeader("x-device-key", CLOUD_DEVICE_KEY);
+        _http->addHeader("Host", serverHost.c_str());  // Derived from URL, not hardcoded
+        _http->setUserAgent("ESP32-SmartChair/1.1"); 
         _http->addHeader("Connection", "keep-alive"); 
         
         unsigned long startReq = millis();
@@ -178,6 +239,7 @@ private:
             Serial.printf("[CLOUD] Error Response (%d): %s\n", code, errorBody.c_str());
         } else {
             // Success — Process Response
+            Serial.printf("[CLOUD] HTTP 200 OK (%lums)\n", dur);
             String response = _http->getString();
             JsonDocument recvDoc;
             if (deserializeJson(recvDoc, response) == DeserializationError::Ok) {
@@ -206,7 +268,7 @@ private:
             }
         }
         
-        // Note: NO http->end() here to keep socket open
+        _http->end(); // Always end to clean up resources
         return code;
     }
 
@@ -234,7 +296,6 @@ private:
         int code = _postWithRetry("/api/alert", payload);
 
         if (code == 200) {
-            Serial.printf("[CLOUD] Alert sent: %s\n", deviceId.c_str());
             return true;
         } else {
             Serial.printf("[CLOUD] Alert failed: HTTP %d\n", code);
@@ -308,6 +369,8 @@ private:
     bool                _busy;
     bool                _forceSyncPending;
     int                 _consecutiveFails;
+    int                 _consecutiveDnsFails;
+    unsigned long       _dnsBackoffUntil;
     int                 _currentMode = 1;
     String              _lastWifiError = "OK";
     uint64_t            _timeOffset;

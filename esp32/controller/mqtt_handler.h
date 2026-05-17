@@ -33,16 +33,20 @@ public:
             }
         });
 
-        // ── Subscribe to device heartbeats ───────────────────
         _broker.subscribe("device/+/heartbeat", [this](const char* topic, const char* payload) {
             String deviceId = _extractDeviceId(topic);
             if (deviceId.isEmpty()) return;
             
+            PatientDevice* dev = _registry.getDevice(deviceId);
+            bool wasOffline = (dev && !dev->online);
+            
             _registry.heartbeat(deviceId);
             
-            // Refresh approval status for the device on every heartbeat
-            // This fixes the "ghost setup page" after a device reboots
-            publishDeviceStatus(deviceId);
+            // Refresh approval status only if the device just came back online
+            // or if it's a new registration
+            if (wasOffline) {
+                publishDeviceStatus(deviceId);
+            }
         });
 
         // ── Start broker ────────────────────────────────────
@@ -70,7 +74,6 @@ public:
         String topic = "device/" + deviceId + "/status";
 
         _broker.publish(topic.c_str(), payload.c_str(), 1, true);
-        Serial.printf("[MQTT] Published status for %s\n", deviceId.c_str());
     }
 
     // ── Send command to a specific device ────────────────────
@@ -88,18 +91,18 @@ public:
         _broker.publish("controller/broadcast", message, 0, false);
     }
 
-    // ── Migration Broadcast (New in 4D Rebuild) ──────────────
-    void broadcastMigration(const char* newSSID, const char* newPass) {
+    // ── Migration Broadcast (Improved for reliability) ──────────────
+    void broadcastMigration(const char* newSSID, const char* newPass, const String& currentIP) {
         JsonDocument doc;
         doc["type"] = "MIGRATION";
         doc["ssid"] = newSSID;
         doc["pass"] = newPass;
-        doc["ip"]   = String(MDNS_NAME) + ".local"; 
+        doc["ip"]   = currentIP; // Send actual IP to avoid mDNS failures
 
         String payload;
         serializeJson(doc, payload);
         _broker.publish(DISCOVERY_TOPIC, payload.c_str(), 1, true); // Retained for late joiners
-        Serial.printf("[MQTT] Migration Broadcast Sent: target=%s\n", newSSID);
+        Serial.printf("[MQTT] Migration Broadcast Sent: target=%s, ip=%s\n", newSSID, currentIP.c_str());
     }
 
     size_t connectedClients() const {
