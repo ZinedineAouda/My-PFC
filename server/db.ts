@@ -11,12 +11,15 @@ if (!databaseUrl && process.env.NODE_ENV === "production") {
 // Use a placeholder for local development if DB is not available
 const connectionString = databaseUrl || "postgres://localhost:5432/postgres";
 
+const isProduction = process.env.NODE_ENV === "production";
+const isInternal = connectionString.includes(".railway.internal") || connectionString.includes("localhost") || connectionString.includes("127.0.0.1");
+
 export const pool = new Pool({ 
   connectionString,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  ssl: isProduction && !isInternal ? { rejectUnauthorized: false } : false,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000, // Increase slightly for slower cloud startups
+  connectionTimeoutMillis: 15000, // Increased to 15s to prevent cloud cold-start connection timeouts
 });
 
 // Event listener to prevent pool-level unhandled errors from crashing the app
