@@ -5,6 +5,8 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { db } from "./db";
 import { devices } from "@shared/schema";
+import { initMqtt } from "./mqtt";
+import { log } from "./log";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -19,16 +21,6 @@ app.get("/api/health", (_req, res) => res.status(200).json({ status: "ok" }));
 // ─── Body parsers ──
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-
-export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-  console.log(`${formattedTime} [${source}] ${message}`);
-}
 
 const httpServer = createServer(app);
 
@@ -121,6 +113,11 @@ const httpServer = createServer(app);
   try {
     log("Registering API routes...");
     await registerRoutes(httpServer, app);
+
+    log("Initializing MQTT service...");
+    await initMqtt().catch((err) => {
+      console.error("[CRITICAL] MQTT service initialization failed:", err);
+    });
     
     log("Activating Frontend Dashboard...");
     if (isProd) serveStatic(app);

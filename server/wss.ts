@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
-import { log } from "./index";
+import { log } from "./log";
 import { storage } from "./storage";
 
 export type WsMessage = {

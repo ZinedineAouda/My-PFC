@@ -5,7 +5,8 @@ import MemoryStore from "memorystore";
 import cors from "cors";
 import { storage } from "./storage";
 import { initWss, broadcast, broadcastDeviceUpdate, broadcastAllDevices } from "./wss";
-import { log } from "./index";
+import { log } from "./log";
+import { publishCommand } from "./mqtt";
 import {
   insertDeviceSchema,
   updateDeviceSchema,
@@ -173,6 +174,8 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Invalid mode" });
     }
     await storage.setMode(parsed.data.mode);
+    const deviceKey = process.env.DEVICE_API_KEY || "super";
+    publishCommand(deviceKey, "CHANGE_MODE", parsed.data.mode.toString());
     return res.json({ success: true, mode: parsed.data.mode });
   }));
 
@@ -238,6 +241,8 @@ export async function registerRoutes(
     if (!deleted) {
       return res.status(404).json({ message: "Device not found" });
     }
+    const deviceKey = process.env.DEVICE_API_KEY || "super";
+    publishCommand(deviceKey, "REMOVE_DEVICE", req.params.deviceId as string);
     broadcast({ type: "DELETE", payload: { deviceId: req.params.deviceId as string } });
     return res.json({ success: true, message: "Deleted" });
   }));
@@ -359,6 +364,8 @@ export async function registerRoutes(
     if (!device) {
       return res.status(404).json({ message: "Device not found" });
     }
+    const deviceKey = process.env.DEVICE_API_KEY || "super";
+    publishCommand(deviceKey, "SYNC_NOW");
     broadcast({ type: "UPDATE", payload: device });
     return res.json({ success: true, device });
   }));
@@ -373,6 +380,8 @@ export async function registerRoutes(
     if (!device) {
       return res.status(404).json({ message: "Device not found" });
     }
+    const deviceKey = process.env.DEVICE_API_KEY || "super";
+    publishCommand(deviceKey, "SYNC_NOW");
     broadcast({ type: "UPDATE", payload: device });
     return res.json({ success: true, device });
   }));
@@ -383,6 +392,8 @@ export async function registerRoutes(
     if (!cleared) {
       return res.status(404).json({ message: "Device not found" });
     }
+    const deviceKey = process.env.DEVICE_API_KEY || "super";
+    publishCommand(deviceKey, "clear_alert", deviceId);
     await broadcastDeviceUpdate(deviceId);
     return res.json({ success: true, message: "Alert cleared" });
   }));

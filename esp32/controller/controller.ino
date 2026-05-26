@@ -64,9 +64,11 @@ void checkNewFlash() {
     if (ERASE_ON_FLASH && lastBuild.length() > 0 && lastBuild != currentBuild) {
         Serial.println("║  [MAINTENANCE] New firmware detected!               ║");
         Serial.println("║  Performing automatic factory reset...               ║");
+        prefs.end();
         onFactoryReset();
     } else {
         prefs.putString("build_id", currentBuild);
+        prefs.end();
     }
 }
 
@@ -382,10 +384,6 @@ void onRemoteCommand(const String& cmd, const String& params) {
         if (newMode >= 1 && newMode <= 4) {
             currentMode = (WiFiOpMode)newMode;
             saveSettings();
-            // Logic: We set the HTTP timeout to 3000ms (3 seconds) using the CLOUD_TIMEOUT constant.
-            // This prevents the Controller from hanging if the cloud server is unresponsive, 
-            // ensuring the main loop remains responsive for local patient alarms.
-            cloudSync.setTimeout(3000); 
             delay(500);
             ESP.restart();
         }

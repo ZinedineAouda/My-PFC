@@ -30,12 +30,14 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 #define HEARTBEAT_TIMEOUT_MS  30000   // Mark device offline after 30s silence
 #define TIMEOUT_CHECK_MS      5000    // Run timeout scan every 5s
 
-// ─── Cloud Sync (Mode 4 only) ───────────────────────────────
-#define CLOUD_SERVER_URL      "https://my-pfc-production.up.railway.app"
+// ─── Cloud MQTT Sync (Mode 4 only) ───────────────────────────
+#define CLOUD_MQTT_HOST       "my-pfc-production.up.railway.app"
+#define CLOUD_MQTT_PORT       1883    // Change to 8883 for MQTTS (Secure TLS)
+#define CLOUD_MQTT_USER       ""
+#define CLOUD_MQTT_PASS       ""
 #define CLOUD_DEVICE_KEY      "super"
-#define CLOUD_SYNC_INTERVAL   30000   // 30s (Sane for ESP32 TLS)
-#define CLOUD_PING_INTERVAL   60000   // 60s (Sane for ESP32 TLS)
-#define CLOUD_HTTP_TIMEOUT    20000   // 20s for slow hotspot handshakes
+#define CLOUD_SYNC_INTERVAL   30000   // 30s
+#define CLOUD_PING_INTERVAL   60000   // 60s
 
 // ─── Hardware Pins ──────────────────────────────────────────
 #define BUZZER_PIN            4

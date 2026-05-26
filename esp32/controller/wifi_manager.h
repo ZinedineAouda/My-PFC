@@ -226,7 +226,7 @@ private:
         // Diagnostics show 1.1.1.1 (Cloudflare) is much faster for Railway domains.
         IPAddress dns1(1, 1, 1, 1); // Cloudflare (Primary)
         IPAddress dns2(8, 8, 8, 8); // Google (Secondary)
-        WiFi.config(IPAddress(0,0,0,0), IPAddress(0,0,0,0), IPAddress(0,0,0,0), dns1, dns2);
+        WiFi.config(IPAddress(), IPAddress(), IPAddress(), dns1, dns2);
         
         // HOTSPOT OPTIMIZATION: Set MTU to 1400 to prevent TLS handshake fragmentation
         // This is supported in ESP32 Core 3.x

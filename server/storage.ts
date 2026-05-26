@@ -206,6 +206,7 @@ export class DatabaseStorage implements IStorage {
 
   async isControllerOnline(): Promise<boolean> {
     const settings = await this.getSettings();
+    if (!settings) return false;
     const lastSeen = settings.controllerLastSeen;
     if (!lastSeen) return false;
     
