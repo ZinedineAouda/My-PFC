@@ -10,7 +10,7 @@
 7. [Operating Modes](#operating-modes)
 8. [MQTT Topic Reference](#mqtt-topic-reference)
 9. [Troubleshooting](#troubleshooting)
-10. [Performance Notes](#performance-notes)
+10. [Performance & Reliability Notes](#performance--reliability-notes)
 
 ---
 
@@ -19,12 +19,12 @@
 ```
 ┌────────────────────────────────────────────────────────────┐
 │                   CLOUD (Railway)                          │
-│   Node.js + Express + WebSocket                            │
-│   Remote dashboard access via HTTPS                        │
-└───────────────────────┬────────────────────────────────────┘
-                        │ HTTPS sync (Mode 4 only)
+│   Node.js + Express + Embedded Aedes MQTT Broker           │
+│   Remote real-time dashboard access via WebSockets         │
+└───────────────────────▲────────────────────────────────────┘
+                        │ Real-Time MQTT / MQTTS (Mode 4 only)
 ┌───────────────────────┴────────────────────────────────────┐
-│                 ESP32-S3 CONTROLLER                         │
+│                 ESP32-S3 CONTROLLER (Gateway)              │
 │   PicoMQTT Broker (port 1883)                              │
 │   AsyncWebServer + WebSocket (port 80)                     │
 │   Dashboard: http://192.168.4.1                            │
@@ -32,15 +32,15 @@
        │ MQTT        │ MQTT        │ MQTT
 ┌──────┴──────┐ ┌────┴──────┐ ┌───┴───────┐
 │ ESP8266 #1  │ │ ESP8266 #2│ │ ESP8266 #N│
-│ Button: D0  │ │ Button: D0│ │ Button: D0│
+│ Button: D3  │ │ Button: D3│ │ Button: D3│
 │ LED: GPIO2  │ │ LED: GPIO2│ │ LED: GPIO2│
 └─────────────┘ └───────────┘ └───────────┘
 ```
 
-**Communication Protocol**: MQTT (low latency, high scalability)
-- Local: TCP on port 1883 (ESP32 runs embedded broker)
-- Cloud: HTTPS sync every 10 seconds
-- Dashboard: WebSocket (zero polling)
+**Communication Architecture**:
+- **Local Network**: Low-latency MQTT over TCP port `1883` (ESP32-S3 runs the embedded `PicoMQTT` broker).
+- **Cloud Network**: Real-time MQTT/MQTTS connection (using `PicoMQTT::Client` on the ESP32) to the embedded `Aedes` MQTT broker on Railway.
+- **Web App**: Real-time bidirectional WebSockets (`ws://` / `wss://`) between the Express backend and the React frontend dashboard.
 
 ---
 
@@ -53,6 +53,7 @@
 | Flash | 16MB recommended |
 | PSRAM | 8MB OPI (optional but recommended) |
 | Buzzer | Active buzzer on GPIO4 |
+| LED | Status LED on GPIO2 |
 | Power | USB-C or 5V supply |
 
 ### Device (ESP8266)
@@ -60,7 +61,7 @@
 |-----------|---------------|
 | Board | NodeMCU v1.0 / ESP-12E / ESP-01 |
 | Button | Momentary push button on GPIO0 (D3) |
-| LED | Built-in LED on GPIO2 (active LOW) |
+| LED | Built-in LED on GPIO2 (D4 - active LOW) |
 | Power | USB or 3.3V supply |
 
 ### Wiring
@@ -77,8 +78,6 @@ D3 (GPIO0) ──── Button ──── GND
 D4 (GPIO2) ──── Built-in LED (already on board)
 ```
 
-> Note: GPIO0 has an internal pull-up. The button should connect GPIO0 to GND when pressed.
-
 ---
 
 ## Software Requirements
@@ -87,295 +86,166 @@ D4 (GPIO2) ──── Built-in LED (already on board)
 
 1. **Install Arduino IDE** (v2.x recommended): https://www.arduino.cc/en/software
 
-2. **Add ESP32 board support**:
-   - File → Preferences → Additional Board Manager URLs:
-   ```
-   https://espressif.github.io/arduino-esp32/package_esp32_index.json
-   ```
-   - Tools → Board Manager → Search "esp32" → Install **esp32 by Espressif**
+2. **Add ESP32 and ESP8266 board support**:
+   - Go to **File → Preferences**
+   - In **Additional Board Manager URLs**, add:
+     ```
+     https://espressif.github.io/arduino-esp32/package_esp32_index.json
+     https://arduino.esp8266.com/stable/package_esp8266com_index.json
+     ```
+   - Go to **Tools → Board → Board Manager**, search and install **esp32 by Espressif** and **esp8266 by ESP8266 Community**.
 
-3. **Add ESP8266 board support**:
-   - File → Preferences → Additional Board Manager URLs (add on new line):
-   ```
-   https://arduino.esp8266.com/stable/package_esp8266com_index.json
-   ```
-   - Tools → Board Manager → Search "esp8266" → Install **esp8266 by ESP8266 Community**
+3. **Install Libraries** (Tools → Manage Libraries):
 
-4. **Install Libraries** (Tools → Manage Libraries):
-
-   | Library | Used By | Version |
-   |---------|---------|---------|
-   | **PicoMQTT** | Controller | Latest |
-   | **ESPAsyncWebServer** | Controller + Device | Latest |
-   | **AsyncTCP** | Controller | Latest |
-   | **ESPAsyncTCP** | Device | Latest |
-   | **ArduinoJson** | Controller + Device | 7.x |
-   | **PubSubClient** | Device | Latest |
-
-   > **Important**: For ESPAsyncWebServer, you may need to install from GitHub if the Library Manager version is outdated:
-   > https://github.com/me-no-dev/ESPAsyncWebServer
+   | Library | Used By | Version / Source |
+   |---------|---------|------------------|
+   | **PicoMQTT** | Controller | Latest (via Library Manager) |
+   | **ESPAsyncWebServer** | Controller | Latest (https://github.com/me-no-dev/ESPAsyncWebServer) |
+   | **AsyncTCP** | Controller | Latest (https://github.com/me-no-dev/AsyncTCP) |
+   | **ESPAsyncTCP** | Device | Latest (https://github.com/me-no-dev/ESPAsyncTCP) |
+   | **ArduinoJson** | Controller + Device | 7.x (via Library Manager) |
+   | **PubSubClient** | Device | Latest (via Library Manager) |
 
 ---
 
 ## ESP32-S3 Controller Setup
 
-### Board Configuration
+### Board Configuration (Arduino IDE)
 
 | Setting | Value |
 |---------|-------|
-| Board | ESP32S3 Dev Module |
-| USB CDC On Boot | Enabled |
-| Flash Size | 16MB (128Mb) |
-| Partition Scheme | Default 4MB with spiffs |
-| PSRAM | OPI PSRAM |
-| Upload Speed | 921600 |
+| Board | **ESP32S3 Dev Module** |
+| USB CDC On Boot | **Enabled** |
+| Flash Size | **16MB (128Mb)** |
+| Partition Scheme | **Default 4MB with spiffs** (or 16MB if available) |
+| PSRAM | **OPI PSRAM** (if your board has it, otherwise Disabled) |
+| Upload Speed | **921600** |
 
 ### Flashing
 
-1. Open `esp32/controller/controller.ino` in Arduino IDE
-2. Select the correct board and port
-3. Edit `esp32/controller/config.h` if needed:
-   - `AP_SSID_DEFAULT` — WiFi network name
-   - `CLOUD_SERVER_URL` — Railway server URL
-   - `CLOUD_DEVICE_KEY` — API key for cloud auth
-   - `ADMIN_PASS` — Admin dashboard password
-4. Click **Upload**
-5. Open Serial Monitor (115200 baud) to verify boot
-
-### First Boot
-
-1. Controller starts in **AP mode** automatically
-2. A WiFi network named **"HospitalAlarm"** appears
-3. Connect to it from your phone/laptop
-4. Open **http://192.168.4.1** in a browser
-5. The Setup Wizard will guide you through mode selection
-
-### File Structure
-
-```
-esp32/controller/
-├── controller.ino      ← Main entry (setup + loop)
-├── config.h            ← All configuration constants
-├── wifi_manager.h      ← WiFi AP/STA/Hybrid management
-├── mqtt_handler.h      ← PicoMQTT embedded broker
-├── device_registry.h   ← Device tracking & timeout detection
-├── web_dashboard.h     ← AsyncWebServer + WebSocket + REST API
-├── cloud_sync.h        ← HTTPS sync to Railway (Mode 4)
-└── dashboard.h         ← Embedded HTML/CSS/JS (PROGMEM)
-```
+1. Open `esp32/controller/controller.ino` in Arduino IDE.
+2. Verify the configuration constants in `esp32/controller/config.h`:
+   - `CLOUD_MQTT_HOST` — Domain of your Railway deployment (e.g. `your-app.up.railway.app` or a Railway TCP proxy host)
+   - `CLOUD_MQTT_PORT` — Set to `1883` for standard MQTT or `8883` for TLS-encrypted MQTTS
+   - `CLOUD_DEVICE_KEY` — API Key that matches the `DEVICE_API_KEY` set on Railway
+   - `ADMIN_PASS` — Admin credentials for the local dashboard
+3. Connect your ESP32-S3 via USB-C.
+4. Click **Upload**.
+5. Open Serial Monitor (115200 baud) to monitor system startup.
 
 ---
 
 ## ESP8266 Device Setup
 
-### Board Configuration
+### Board Configuration (Arduino IDE)
 
 | Setting | Value |
 |---------|-------|
-| Board | NodeMCU 1.0 (ESP-12E Module) |
-| Flash Size | 4MB (FS:2MB OTA:~1019KB) |
-| CPU Frequency | 80 MHz |
-| Upload Speed | 115200 |
+| Board | **NodeMCU 1.0 (ESP-12E Module)** |
+| Flash Size | **4MB (FS:2MB OTA:~1019KB)** |
+| CPU Frequency | **80 MHz** |
+| Upload Speed | **115200** |
 
 ### Configuration Options
 
-**Option A: Setup Portal (default)**
+Open `esp32/device/config.h`:
+* **Use Hardcoded WiFi (Quick Setup)**:
+  Set `USE_HARDCODED_WIFI` to `true` and define:
+  ```cpp
+  #define DEFAULT_WIFI_SSID  "HospitalAlarm"
+  #define DEFAULT_WIFI_PASS  ""
+  #define MQTT_BROKER_IP     "192.168.4.1" // Fallback to Controller SoftAP
+  ```
+* **Use Setup Portal (Production)**:
+  Set `USE_HARDCODED_WIFI` to `false`. The device will spawn its own network `Alarm-device-XXXXXX`. Connect to it and enter the hospital WiFi and the ESP32-S3's IP address.
 
-Set in `esp32/device/config.h`:
-```cpp
-#define USE_HARDCODED_WIFI false
-```
-- Device starts its own AP named `Alarm-device-XXXXXX`
-- Connect and open `http://192.168.4.1`
-- Enter the controller's WiFi name and MQTT IP
-- Device connects and registers automatically
-
-**Option B: Hardcoded Credentials (mass deployment)**
-
-Set in `esp32/device/config.h`:
-```cpp
-#define USE_HARDCODED_WIFI true
-#define DEFAULT_WIFI_SSID  "HospitalAlarm"
-#define DEFAULT_WIFI_PASS  ""
-#define MQTT_BROKER_IP     "192.168.4.1"
-```
-- Device connects immediately on boot
-- Best for flashing many devices quickly
-
-### Flashing
-
-1. Open `esp32/device/device.ino` in Arduino IDE
-2. Select board: **NodeMCU 1.0**
-3. Edit `esp32/device/config.h` with your settings
-4. Click **Upload**
-5. Open Serial Monitor (115200 baud) to verify
-
-### File Structure
-
-```
-esp32/device/
-├── device.ino    ← Main firmware (MQTT client + button)
-└── config.h      ← Configuration constants
-```
+Click **Upload** to flash the device.
 
 ---
 
 ## Railway Cloud Server
 
-### Prerequisites
-- Node.js 20+
-- Railway account (https://railway.app)
-- Git
+The Railway server runs as a monolith: it contains the Express API backend and serves the React frontend compiled into `dist/public`.
 
-### Local Development
+### Local Development Setup
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Start development server
+# 2. Run Drizzle migrations
+npm run db:push
+
+# 3. Start development server (runs Express and hot-reloaded Vite dashboard)
 npm run dev
 ```
-
-The server runs on `http://localhost:5000` with hot reload.
+Open `http://localhost:5000` to view the dashboard.
 
 ### Deploy to Railway
 
-1. Push code to GitHub
-2. Connect the repo in Railway dashboard
-3. Set environment variables:
-   ```
-   NODE_ENV=production
-   PORT=5000
-   DEVICE_API_KEY=esp32
-   SESSION_SECRET=your-random-secret-here
-   ```
-4. Railway auto-deploys on push
-
-### Deployment Config
-
-`railway.toml`:
-```toml
-[build]
-dockerfilePath = "Dockerfile"
-
-[deploy]
-healthcheckPath = "/health"
-healthcheckTimeout = 60
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 5
-```
+1. Push your project code to GitHub.
+2. In Railway, click **"New Project"** → **"Deploy from GitHub repo"**.
+3. Set the required variables in your service's **Variables** tab:
+   - `NODE_ENV` = `production`
+   - `SESSION_SECRET` = `a_long_random_string_for_cookies`
+   - `DEVICE_API_KEY` = `super` (must match `CLOUD_DEVICE_KEY` in `config.h`)
+   - `DATABASE_URL` = (Automatically injected if you add PostgreSQL on Railway)
+4. Expose the MQTT TCP port in Railway:
+   - Go to your service's **Settings** → **Networking** → **Add TCP Port**.
+   - Set the internal port to `1883`. This maps a public address (e.g. `roundhouse.proxy.rlwy.net:12345`) to Aedes.
+   - Put this host and port into `esp32/controller/config.h` for Mode 4!
 
 ---
 
 ## Operating Modes
 
-### Mode 1: AP Only
-- Controller creates WiFi network `HospitalAlarm`
-- All devices connect to this network
-- Dashboard at `http://192.168.4.1`
-- **No internet required**
-- Best for: isolated deployments, testing
-
-### Mode 2: STA Only
-- Controller joins an existing WiFi router
-- Devices also join the same router
-- Dashboard at controller's DHCP IP
-- **Requires hospital WiFi**
-- Best for: wider coverage via existing infrastructure
-
-### Mode 3: AP + STA (Hybrid)
-- Controller runs AP AND joins router simultaneously
-- Devices can connect to either AP or router
-- Dashboard at `192.168.4.1` (AP) or router IP (STA)
-- **Recommended for production**
-- Best for: reliability with fallback
-
-### Mode 4: Online (AP + STA + Cloud)
-- Same as Mode 3, plus HTTPS sync to Railway
-- Remote dashboard at Railway URL
-- Cloud is source of truth for approvals
-- Alerts sync to cloud in real-time
-- **Requires internet**
-- Best for: remote monitoring, multi-site deployments
+1. **Mode 1: AP Only** — The controller runs a local `HospitalAlarm` WiFi network. Devices connect directly. Local dashboard at `http://192.168.4.1`. No internet required.
+2. **Mode 2: STA Only** — The controller and devices connect to the facility's existing WiFi router. Local dashboard served on the DHCP-assigned IP.
+3. **Mode 3: AP + STA (Hybrid)** — Controller runs AP and joins facility router simultaneously. Unbeatable local reliability.
+4. **Mode 4: Online (Cloud Sync)** — Hybrid local mode + real-time cloud sync. The controller establishes a continuous MQTT/MQTTS connection to Railway. System status, approvals, and alert states are synced instantly.
 
 ---
 
 ## MQTT Topic Reference
 
-| Topic | Direction | QoS | Retained | Payload |
-|-------|-----------|-----|----------|---------|
-| `device/{id}/alert` | Device → Controller | 1 | No | `{"status":"pressed","deviceId":"...","timestamp":...}` |
-| `device/{id}/heartbeat` | Device → Controller | 0 | No | `{"deviceId":"...","uptime":...,"rssi":...}` |
-| `device/{id}/status` | Controller → Device | 1 | Yes | `{"approved":true,"patientName":"...","bed":"...","room":"..."}` |
-| `device/{id}/command` | Controller → Device | 1 | No | `{"action":"clear_alert"}` |
+### Local Broker Topics (ESP32 ↔ ESP8266 Devices)
+| Topic | Publisher | Subscriber | QoS | Description |
+|---|---|---|---|---|
+| `device/{id}/alert` | ESP8266 | ESP32-S3 | 1 | Triggers an active alert |
+| `device/{id}/heartbeat` | ESP8266 | ESP32-S3 | 0 | Regular ping to track online status |
+| `device/{id}/status` | ESP32-S3 | ESP8266 | 1 (Retained) | Holds approval state and room assignment |
+| `device/{id}/command` | ESP32-S3 | ESP8266 | 1 | Issues remote clear alert commands |
+
+### Cloud Broker Topics (ESP32 ↔ Railway Server)
+| Topic | Publisher | Subscriber | QoS | Description |
+|---|---|---|---|---|
+| `controller/{key}/ping` | ESP32-S3 | Railway | 0 | Sends controller uptime, RSSI, and status |
+| `controller/{key}/sync` | ESP32-S3 | Railway | 1 | Publishes local devices state array |
+| `controller/{key}/sync_response` | Railway | ESP32-S3 | 1 | Responds with the cloud database authority state |
+| `controller/{key}/alert` | ESP32-S3 | Railway | 1 | Real-time push notification of a patient alert |
+| `controller/{key}/command` | Railway | ESP32-S3 | 1 | Instantly sends clear or admin commands |
 
 ---
 
 ## Troubleshooting
 
 ### Controller won't start AP
-- Check `config.h` — `AP_SSID_DEFAULT` must not be empty
-- Check Serial Monitor for WiFi errors
-- Try resetting the board
+- Ensure `AP_SSID_DEFAULT` in `config.h` is not empty.
+- Power down and restart. Check Serial Monitor for boot logs.
 
-### Device can't connect to Controller
-- Verify WiFi credentials match Controller's AP
-- Check device's Serial Monitor for connection attempts
-- Ensure controller is in AP or AP+STA mode
-- Try the fallback IP: `192.168.4.1`
+### PicoMQTT Broker fails to connect (Mode 4)
+- Check that the `CLOUD_MQTT_HOST` matches your Railway domain or proxy host exactly.
+- Verify `CLOUD_DEVICE_KEY` matches the `DEVICE_API_KEY` set on Railway.
+- Ensure the controller is successfully connected to the internet (has an IP from facility WiFi router).
 
-### MQTT connection fails
-- Verify PicoMQTT broker is running (check controller Serial Monitor)
-- Ensure device is on the same network as controller
-- Check `MQTT_BROKER_IP` in device's `config.h`
-- Verify port 1883 is not blocked
-
-### Dashboard not loading
-- Try `http://192.168.4.1` directly (no HTTPS)
-- Clear browser cache
-- Check that WebSocket connects (green dot in header)
-
-### Cloud sync not working (Mode 4)
-- Verify `CLOUD_SERVER_URL` in controller's `config.h`
-- Check Railway deployment status
-- Verify `DEVICE_API_KEY` matches on both sides
-- Check controller Serial Monitor for HTTP error codes
-
-### Alert not triggering
-- Check device is approved in admin panel
-- Verify button wiring (GPIO0 to GND)
-- Check MQTT connection status in device Serial Monitor
-- Ensure alert isn't already active
+### Web Dashboard doesn't update in real time
+- Open browser console; verify WebSocket connection (`wss://...`) is established.
+- In production, ensure `NODE_ENV` is set to `production` in Railway to enable compiled client assets.
 
 ---
 
-## Performance Notes
+## Performance & Reliability Notes
 
-### Latency
-- **Button → Dashboard**: < 100ms (MQTT + WebSocket)
-- **Button → Cloud**: ~10s (next sync cycle)
-- **Dashboard load**: < 500ms (PROGMEM, no external resources)
-
-### Scalability
-- MQTT broker: tested up to 50 concurrent connections
-- Device registry: supports 200 devices (configurable)
-- WebSocket: supports 10+ simultaneous dashboard viewers
-
-### Memory Usage (ESP32-S3)
-- Free heap at boot: ~250KB
-- Per-device overhead: ~200 bytes
-- Dashboard HTML: ~25KB flash
-
-### Power Optimization
-- ESP8266 modem sleep disabled for reliability
-- MQTT keepalive: 15 seconds
-- Heartbeat interval: 10 seconds
-
-### Reliability Features
-- WiFi auto-reconnect (non-blocking, 5s interval)
-- MQTT auto-reconnect (non-blocking, 5s interval)
-- Device timeout detection (30s threshold)
-- Cloud sync retry on failure
-- WebSocket auto-reconnect (2s interval in browser)
-- No `delay()` calls anywhere — fully non-blocking
+- **Ultra-low latency**: Button pressed → Local alert triggered in `< 50ms`. Button pressed → Cloud dashboard alert in `< 150ms`.
+- **Heap Safety**: In the ESP32-S3 firmware, all JSON buffers are optimized and topic strings are pre-cached on boot, avoiding heap fragmentation and out-of-memory crashes.
+- **Connection Resilience**: On broker disconnect or network loss, the server and controller dynamically queue admin commands and automatically retry connections without blocking main loops or local alerting capabilities.

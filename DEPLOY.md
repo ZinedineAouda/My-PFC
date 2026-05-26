@@ -1,176 +1,145 @@
-# Deployment Guide — Split Setup
+# Guide de Déploiement — Monolithe Full-Stack sur Railway (MQTT inclus)
 
-Deploy the Hospital Patient Alarm System as a **split deployment**:
-- **Railway** — Backend API (receives ESP32 data, handles authentication)
-- **Vercel** — Frontend dashboard and admin panel (static React app)
+Ce guide décrit le processus étape par étape pour déployer le **Système d'Alerte Médicale pour Patients Hospitalisés (My-PFC)** en production.
 
----
-
-## Step 1: Push Code to GitHub
-
-Create a GitHub repository and push all the project code. Both Railway and Vercel will deploy from this same repo.
+Dans l'architecture moderne du système, tout est regroupé dans un **monolithe haute performance** déployé sur **Railway** :
+1. Le **Serveur API Express** (Node.js/TypeScript)
+2. Le **Tableau de bord de surveillance React** (servi statiquement par le serveur en production)
+3. Le **Courtier MQTT Aedes** intégré (pour recevoir les alertes temps réel de l'ESP32)
 
 ---
 
-## Step 2: Deploy Backend on Railway
+## 📋 Prérequis de déploiement
 
-Railway runs your API server 24/7 — it receives data from ESP32 devices and serves the REST API.
-
-### Setup
-
-1. Go to [railway.app](https://railway.app) and sign in
-2. Click **"New Project"** → **"Deploy from GitHub repo"**
-3. Select your repository
-4. Railway auto-detects the `Dockerfile` and builds
-
-### Environment Variables
-
-Go to your service → **Variables** tab and add:
-
-| Variable | Value | Description |
-|----------|-------|-------------|
-| `SESSION_SECRET` | Any random string | Session encryption key |
-| `DEVICE_API_KEY` | Any random string | ESP32 authentication key |
-| `FRONTEND_URL` | `https://your-app.vercel.app` | Your Vercel frontend URL (for CORS) |
-
-### Get Your Backend URL
-
-1. Go to **Settings** → **Networking** → **Generate Domain**
-2. Copy the URL (e.g. `https://your-app.up.railway.app`)
-3. You'll need this URL for both Vercel and ESP32 setup
+Avant de commencer, assurez-vous d'avoir :
+- Un compte [GitHub](https://github.com)
+- Un compte [Railway](https://railway.app) (l'offre Hobby ou Pro convient parfaitement)
+- Une base de données PostgreSQL provisionnée (sur Railway ou externe)
+- Le code de votre projet poussé sur un dépôt GitHub public ou privé
 
 ---
 
-## Step 3: Deploy Frontend on Vercel
+## 🚀 Étape 1 : Pousser le code sur GitHub
 
-Vercel serves the React dashboard and admin panel as a fast static site.
-
-### Setup
-
-1. Go to [vercel.com](https://vercel.com) and sign in
-2. Click **"Add New"** → **"Project"** → Import your GitHub repo
-3. Vercel auto-detects settings from `vercel.json`
-
-### Environment Variables
-
-Go to **Settings** → **Environment Variables** and add:
-
-| Variable | Value | Description |
-|----------|-------|-------------|
-| `VITE_API_URL` | `https://your-app.up.railway.app` | Your Railway backend URL |
-
-**Important:** The variable must start with `VITE_` to be available in the frontend.
-
-### Deploy
-
-Click **Deploy**. Your frontend will be at `https://your-app.vercel.app`.
-
----
-
-## Step 4: Connect Railway and Vercel
-
-After both are deployed, you need to link them:
-
-1. **On Railway:** Add `FRONTEND_URL` variable with your Vercel URL
-   - Example: `https://your-app.vercel.app`
-   - This allows the backend to accept requests from your frontend (CORS)
-   - If you have multiple frontends, separate URLs with commas
-
-2. **On Vercel:** Add `VITE_API_URL` variable with your Railway URL
-   - Example: `https://your-app.up.railway.app`
-   - This tells the frontend where to send API requests
-   - **Redeploy** Vercel after adding this variable (the variable is baked into the build)
-
----
-
-## Step 5: Configure ESP32
-
-Open `esp32/controller/controller.ino` and update:
-
-```cpp
-char serverURL[128] = "https://your-app.up.railway.app";  // Railway backend URL
-char deviceKey[64] = "your-device-api-key";                // Must match DEVICE_API_KEY on Railway
-```
-
-Flash to your ESP32-S3 and it will send data directly to the Railway backend.
-
----
-
-## How It Works
-
-```
-[ESP32 Devices] → [ESP32 Controller] → [Railway Backend API]
-                                           ↑
-                                    [Vercel Frontend] ← [Browser/Phone]
-```
-
-- ESP32 controller sends device data to Railway backend via HTTP
-- Users open the Vercel frontend in their browser
-- Frontend fetches data from Railway backend via API calls
-- Railway handles all authentication, device registration, and alerts
-- Vercel serves the fast, globally-distributed dashboard
-
----
-
-## Verifying Deployment
-
-### Test Backend (Railway)
+Initialisez git et poussez votre code si ce n'est pas déjà fait :
 
 ```bash
-# Check server status
-curl https://YOUR-RAILWAY-URL/api/status
-
-# Test device registration
-curl -X POST https://YOUR-RAILWAY-URL/api/register \
-  -H "Content-Type: application/json" \
-  -H "X-Device-Key: YOUR_KEY" \
-  -d '{"deviceId": "test-device"}'
+git init
+git add .
+git commit -m "feat: migration temps réel MQTT"
+git branch -M main
+git remote add origin https://github.com/VOTRE_NOM/VOTRE_REPO.git
+git push -u origin main
 ```
 
-### Test Frontend (Vercel)
+---
 
-1. Open `https://YOUR-VERCEL-URL` — Dashboard should load
-2. Open `https://YOUR-VERCEL-URL/admin` — Login with admin/admin1234
-3. Approve test devices and verify they appear on dashboard
+## 🛠️ Étape 2 : Déploiement sur Railway
+
+Railway utilise le `Dockerfile` à la racine pour construire et exécuter automatiquement le projet.
+
+### 2.1 Créer le projet et lier le dépôt
+1. Connectez-vous sur [railway.app](https://railway.app).
+2. Cliquez sur **"New Project"** → **"Deploy from GitHub repo"**.
+3. Sélectionnez le dépôt de votre projet.
+4. Laissez Railway détecter le `Dockerfile` et lancer le premier build.
+
+### 2.2 Ajouter la base de données PostgreSQL (Recommandé)
+Le système nécessite PostgreSQL pour stocker l'état des patients, des chambres et l'approbation des terminaux.
+1. Sur le tableau de bord de votre projet Railway, cliquez sur **"New"** (bouton en haut à droite) → **"Database"** → **"Add PostgreSQL"**.
+2. Railway va provisionner une instance de base de données PostgreSQL instantanément dans le même réseau privé.
+3. Railway va automatiquement lier la variable `DATABASE_URL` à votre service d'application principal.
+
+### 2.3 Variables d'environnement requises
+Allez dans votre service principal (le service lié à votre dépôt GitHub) → Onglet **Variables**, et ajoutez les variables suivantes :
+
+| Variable | Exemple de Valeur / Type | Rôle / Description |
+|:---|:---|:---|
+| `NODE_ENV` | `production` | Active les optimisations de production et le service statique du dashboard. |
+| `SESSION_SECRET` | `un_secret_tres_long_et_securise_123` | Clé utilisée pour chiffrer les sessions de connexion administrateur. |
+| `DEVICE_API_KEY` | `super` (ou votre clé sécurisée) | Clé secrète de sécurité partagée avec le contrôleur ESP32-S3. |
+| `DATABASE_URL` | *Généré automatiquement par Railway* | URL de connexion à la base de données PostgreSQL (ex: `postgresql://...`). |
+| `PORT` | `5000` *(géré par Railway)* | Port sur lequel le serveur Express écoute les requêtes HTTP. |
 
 ---
 
-## Environment Variables Summary
+## 🔌 Étape 3 : Configuration du Courtier MQTT (Aedes)
 
-### Railway (Backend)
+Le contrôleur ESP32-S3 doit se connecter au serveur en MQTT (Mode 4). Deux approches de déploiement sont possibles pour le transport MQTT :
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SESSION_SECRET` | Yes | Random string for session encryption |
-| `DEVICE_API_KEY` | Yes | API key for ESP32 authentication |
-| `FRONTEND_URL` | Yes | Vercel URL for CORS (e.g. `https://your-app.vercel.app`) |
-| `PORT` | No | Server port (Railway sets this automatically) |
+### 🚨 Option A : Utilisation du courtier MQTT intégré (Aedes) sur Railway (Recommandé avec Proxy TCP)
+Par défaut, si vous ne spécifiez pas d'hôte externe, le serveur démarre un courtier MQTT intégré (Aedes) sur le port `1883`.
 
-### Vercel (Frontend)
+Pour que l'ESP32 puisse l'atteindre depuis l'extérieur de Railway :
+1. Allez dans les **Settings** de votre service principal sur Railway.
+2. Descendez jusqu'à la section **Networking**.
+3. Cliquez sur **"Add TCP Port"** (Ajouter un port TCP).
+4. Saisissez le port interne `1883`.
+5. Railway va générer un domaine TCP externe (ex: `tcp://roundhouse.proxy.rlwy.net:25432`).
+6. **Notez bien cette adresse** : c'est l'adresse que vous saisirez dans l'assistant de configuration de l'ESP32 (Hôte: `roundhouse.proxy.rlwy.net`, Port: `25432`).
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_API_URL` | Yes | Railway backend URL (e.g. `https://your-app.up.railway.app`) |
+### ☁️ Option B : Utilisation d'un courtier MQTT Cloud externe (HiveMQ, EMQX, Adafruit)
+Si vous préférez ne pas exposer de port TCP sur Railway, vous pouvez utiliser un service de courtier MQTT managé gratuit (ex: HiveMQ Cloud, EMQX Serverless).
+
+Ajoutez les variables d'environnement suivantes sur Railway pour connecter votre backend au courtier externe :
+
+| Variable | Exemple de Valeur | Description |
+|:---|:---|:---|
+| `MQTT_BROKER_HOST` | `broker.hivemq.com` ou `xxxxxx.s1.eu.hivemq.cloud` | Hôte du courtier MQTT externe |
+| `MQTT_BROKER_PORT` | `1883` ou `8883` (sécurisé) | Port de connexion (8883 pour MQTTS TLS) |
+| `MQTT_BROKER_USER` | `votre_utilisateur` *(optionnel)* | Nom d'utilisateur MQTT |
+| `MQTT_BROKER_PASS` | `votre_mot_de_passe` *(optionnel)* | Mot de passe de connexion MQTT |
+
+*Si ces variables sont définies, le contrôleur ESP32-S3 et le serveur Railway se connecteront tous les deux à ce courtier externe en tant que clients. C'est l'approche la plus stable pour les déploiements de type production avec pare-feux stricts.*
 
 ---
 
-## Troubleshooting
+## 📱 Étape 4 : Déploiement Mobile (Capacitor & APK)
 
-**Frontend can't reach backend:**
-- Check `VITE_API_URL` is set correctly on Vercel (must include `https://`)
-- Check `FRONTEND_URL` is set correctly on Railway (must match Vercel URL exactly)
-- Redeploy Vercel after changing `VITE_API_URL` (it's a build-time variable)
+L'application intègre **Capacitor** pour compiler le dashboard React en application mobile native Android.
 
-**ESP32 can't connect:**
-- Check `serverURL` in firmware matches your Railway URL
-- Check `deviceKey` matches `DEVICE_API_KEY` on Railway
-- Ensure ESP32 has internet access (STA or AP+STA mode)
+### 4.1 Générer le Domaine Public Web
+1. Dans l'onglet **Settings** → **Networking** de votre service principal Railway.
+2. Cliquez sur **"Generate Domain"** (Générer un domaine public).
+3. Vous obtiendrez une URL sécurisée (ex: `https://my-pfc-production.up.railway.app`).
 
-**Admin login doesn't persist:**
-- Cross-origin cookies require `secure: true` and `sameSite: none`
-- Make sure Railway is serving over HTTPS (it does by default)
-- Try in a different browser if cookies are blocked
+### 4.2 Lier l'application mobile à la production
+1. Ouvrez le fichier [capacitor.config.ts](file:///c:/Users/zined/Documents/GitHub/My-PFC/capacitor.config.ts).
+2. Remplacez la propriété `url` par votre domaine de production Railway :
+   ```typescript
+   server: {
+     url: 'https://votre-app.up.railway.app',
+     cleartext: true,
+     allowNavigation: ['votre-app.up.railway.app'],
+   }
+   ```
+3. Exécutez la synchronisation et ouvrez Android Studio pour compiler votre APK :
+   ```bash
+   npx cap sync android
+   npx cap open android
+   ```
 
-**CORS errors:**
-- Ensure `FRONTEND_URL` on Railway exactly matches the origin (including `https://`, no trailing slash)
-- For multiple frontends: `FRONTEND_URL=https://app1.vercel.app,https://app2.vercel.app`
+---
+
+## 🔍 Étape 5 : Vérification du Déploiement
+
+### 5.1 Vérifier la disponibilité de l'API
+Ouvrez l'URL de votre application sur le point de terminaison `/health` (ex: `https://votre-app.up.railway.app/health`).
+- **Attendu** : Un texte simple `"OK"` indiquant que le serveur Express fonctionne.
+
+### 5.2 Accéder au Tableau de Bord
+1. Ouvrez l'URL principale de votre déploiement Railway (ex: `https://votre-app.up.railway.app`).
+2. Le tableau de bord de l'hôpital doit s'afficher magnifiquement avec la mention de connexion active.
+3. Pour administrer : naviguez vers `/admin` (identifiants par défaut : `admin` / `admin1234`).
+
+---
+
+## 🛠️ Dépannage en Production
+
+**Les alertes ne remontent pas sur le site web :**
+- Vérifiez dans les logs Railway (onglet **Logs**) que le client MQTT du serveur est bien connecté : `Backend MQTT Client connected successfully!`.
+- Si vous utilisez l'option A (Broker intégré), assurez-vous que le port TCP externe de Railway est correctement mappé sur le port interne `1883`.
+- Si vous utilisez l'option B (Broker externe), vérifiez que l'ESP32 et le serveur Railway utilisent exactement les mêmes identifiants et le même hôte MQTT.
+
+**Erreurs de connexion de base de données :**
+- Vérifiez que la variable `DATABASE_URL` est présente. Si vous avez ajouté le module PostgreSQL après le premier déploiement, vous devrez peut-être déclencher manuellement un nouveau build de votre application (ou cliquer sur **Redeploy** dans Railway).
