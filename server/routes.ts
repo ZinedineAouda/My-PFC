@@ -359,7 +359,7 @@ export async function registerRoutes(
   // ═════════════════════════════════════════════════════════════
   //  ADMIN ACTIONS (approve, clear alerts)
   // ═════════════════════════════════════════════════════════════
-  app.post("/api/approve/:deviceId?", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const approveHandler = asyncHandler(async (req: Request, res: Response) => {
     const deviceId = req.body.deviceId || req.params.deviceId;
     const parsed = approveDeviceSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -373,7 +373,10 @@ export async function registerRoutes(
     publishCommand(deviceKey, "SYNC_NOW");
     broadcast({ type: "UPDATE", payload: device });
     return res.json({ success: true, device });
-  }));
+  });
+
+  app.post("/api/approve", requireAdmin, approveHandler);
+  app.post("/api/approve/:deviceId", requireAdmin, approveHandler);
 
   app.post("/api/update", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const deviceId = req.body.deviceId;
@@ -391,7 +394,7 @@ export async function registerRoutes(
     return res.json({ success: true, device });
   }));
 
-  app.post("/api/clearAlert/:deviceId?", requireAdminOrDevice, asyncHandler(async (req: Request, res: Response) => {
+  const clearAlertHandler = asyncHandler(async (req: Request, res: Response) => {
     const deviceId = req.body.deviceId || req.params.deviceId;
     const cleared = await storage.clearAlert(deviceId);
     if (!cleared) {
@@ -401,7 +404,10 @@ export async function registerRoutes(
     publishCommand(deviceKey, "clear_alert", deviceId);
     await broadcastDeviceUpdate(deviceId);
     return res.json({ success: true, message: "Alert cleared" });
-  }));
+  });
+
+  app.post("/api/clearAlert", requireAdminOrDevice, clearAlertHandler);
+  app.post("/api/clearAlert/:deviceId", requireAdminOrDevice, clearAlertHandler);
 
   return httpServer;
 }
