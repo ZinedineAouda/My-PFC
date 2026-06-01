@@ -25,7 +25,8 @@ app.use(express.urlencoded({ extended: false }));
 const httpServer = createServer(app);
 
 (async () => {
-  const port = parseInt(process.env.PORT || "5000", 10);
+  let port = parseInt(process.env.PORT || "5000", 10);
+  if (port === 1883) port = 8080; // Avoid conflict with MQTT broker
   const isProd = process.env.NODE_ENV === "production" || !process.env.NODE_ENV;
 
   // ─── STAGE 1: Open the Gates (Pass Healthchecks Instantly) ────────
