@@ -218,7 +218,10 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
         credentials: "include",
         body: JSON.stringify({ username: user, password: pass }),
       });
-      if (!res.ok) throw new Error(res.status === 401 ? "Incorrect password" : "Error");
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(res.status === 401 ? "Incorrect password" : `HTTP ${res.status}: ${errText || res.statusText}`);
+      }
       onLogin();
       toast({ title: "Authorized", description: "Dashboard ready." });
     } catch (err: any) {
