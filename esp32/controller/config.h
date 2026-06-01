@@ -31,8 +31,8 @@ static const IPAddress AP_SUBNET(255, 255, 255, 0);
 #define TIMEOUT_CHECK_MS      5000    // Run timeout scan every 5s
 
 // ─── Cloud MQTT Sync (Mode 4 only) ───────────────────────────
-#define CLOUD_MQTT_HOST       "my-pfc-production.up.railway.app"
-#define CLOUD_MQTT_PORT       1883    // Change to 8883 for MQTTS (Secure TLS)
+#define CLOUD_MQTT_HOST       "monorail.proxy.rlwy.net"
+#define CLOUD_MQTT_PORT       57804    // Change to 8883 for MQTTS (Secure TLS)
 #define CLOUD_MQTT_USER       ""
 #define CLOUD_MQTT_PASS       ""
 #define CLOUD_DEVICE_KEY      "super"

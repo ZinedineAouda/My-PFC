@@ -210,9 +210,9 @@ export class DatabaseStorage implements IStorage {
     const lastSeen = settings.controllerLastSeen;
     if (!lastSeen) return false;
     
-    // 12 second timeout for "Ultra-Live" feel (ESP32 pings every 5s)
+    // 75 second timeout to accommodate the 60s CLOUD_PING_INTERVAL
     const lastSeenNum = typeof lastSeen === 'string' ? parseInt(lastSeen) : Number(lastSeen);
-    return Date.now() - lastSeenNum < 12000;
+    return Date.now() - lastSeenNum < 75000;
   }
 
   async syncFromController(incoming: Array<any>, stats?: { mode?: number, uptime?: number, rssi?: number, wifiError?: string }): Promise<void> {

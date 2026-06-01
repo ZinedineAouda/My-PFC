@@ -124,7 +124,8 @@ private:
         }
 
         if (strlen(CLOUD_MQTT_USER) > 0) {
-            _mqtt->set_credentials(CLOUD_MQTT_USER, CLOUD_MQTT_PASS);
+            _mqtt->username = CLOUD_MQTT_USER;
+            _mqtt->password = CLOUD_MQTT_PASS;
         }
 
         // ── Connection lifecycle callbacks ───────────────────────────────
