@@ -255,21 +255,13 @@ bool connectMQTT() {
 
     String targetIP = String(mqttIP);
     if (targetIP.endsWith(".local")) {
-        String host = targetIP.substring(0, targetIP.length() - 6); // Remove ".local"
-        Serial.printf("[MDNS] Resolving %s...\n", host.c_str());
-        int n = MDNS.queryHost(host, 2000); // 2000ms timeout
-        if (n > 0) {
-            targetIP = MDNS.IP(0).toString();
+        Serial.printf("[MDNS] Resolving %s...\n", targetIP.c_str());
+        IPAddress res;
+        if (WiFi.hostByName(targetIP.c_str(), res)) {
+            targetIP = res.toString();
             Serial.printf("[MDNS] Resolved to: %s\n", targetIP.c_str());
         } else {
-            Serial.println("[MDNS] queryHost failed, trying hostByName...");
-            IPAddress res;
-            if (WiFi.hostByName(mqttIP, res)) {
-                targetIP = res.toString();
-                Serial.printf("[MDNS] Resolved via hostByName: %s\n", targetIP.c_str());
-            } else {
-                Serial.println("[MDNS] Resolution FAILED");
-            }
+            Serial.println("[MDNS] Resolution FAILED");
         }
     }
 
