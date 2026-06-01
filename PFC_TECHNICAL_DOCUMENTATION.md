@@ -5,61 +5,63 @@
 
 ## 1. Introduction Générale
 
-Le présent projet consiste en la conception et la réalisation d'un **système d'alerte médicale connecté (Hospital Patient Alarm System)**. Ce système permet aux patients hospitalisés d'émettre des alertes d'urgence depuis leur lit vers un tableau de bord surveillé par le personnel soignant (infirmiers/médecins).
+Le présent projet consiste en la conception et la réalisation d'un **système d'alerte médicale connecté (Hospital Patient Alarm System)**. Ce système permet aux patients hospitalisés d'émettre des alertes d'urgence depuis leur lit vers un tableau de bord surveillé par le personnel soignant (infirmiers/médecins) ou via leurs appareils mobiles.
 
 ### 1.1 Problématique
-Dans les établissements hospitaliers, la réactivité lors d'un appel d'urgence est un facteur critique. Les systèmes traditionnels filaires sont coûteux à installer, difficiles à maintenir et manquent de flexibilité. Les systèmes purement basés sur le cloud peuvent faillir en cas de perte de connexion Internet.
+Dans les établissements hospitaliers, la réactivité lors d'un appel d'urgence est un facteur critique. Les systèmes traditionnels filaires sont coûteux à installer, difficiles à maintenir et manquent de flexibilité. Les systèmes purement basés sur le cloud peuvent faillir en cas de perte de connexion Internet locale.
 
 ### 1.2 Solution Proposée
-Pour répondre à cette double problématique de fiabilité et de mobilité, nous proposons un système hybride à deux niveaux :
-1. **Un réseau local robuste** basé sur le protocole **MQTT** où un contrôleur central **ESP32-S3** embarque son propre courtier (broker) MQTT et gère en local des terminaux d'appel d'urgence **ESP8266**. Ce réseau fonctionne de manière 100% autonome, même sans Internet.
-2. **Une synchronisation Cloud temps réel** bidirectionnelle via le protocole **MQTT/MQTTS** (Railway) qui permet de centraliser les alertes sur une base de données PostgreSQL, de suivre l'état de l'infrastructure à distance, et de gérer les patients via une interface Web d'administration sécurisée ou une application mobile native (Capacitor).
+Pour répondre à cette double problématique de fiabilité et de mobilité, nous proposons un système hybride :
+1. **Un réseau local robuste** basé sur le protocole **MQTT** où un contrôleur central **ESP32-S3** gère en local des terminaux d'appel d'urgence **ESP8266**. Ce réseau fonctionne de manière 100% autonome pour déclencher des alarmes sonores physiques.
+2. **Une Plateforme Cloud Monolithique (Railway)** qui combine le backend Node.js, un broker MQTT (Aedes) intégré, une base de données PostgreSQL et sert le tableau de bord React (SPA).
+3. **Une application Mobile Native (Capacitor)** pour Android, qui enveloppe dynamiquement la plateforme cloud et permet aux infirmiers de recevoir les alertes sur leur smartphone (vibrations et interface en temps réel) sans nécessiter de recompilation constante de l'APK.
 
 ---
 
 ## 2. Architecture Globale du Système
 
-Le système est segmenté en trois grandes couches : les terminaux clients (Devices), le contrôleur de passerelle local (Controller), et la plateforme de surveillance Cloud (Server + Dashboards).
+Le système a récemment évolué vers une architecture **Cloud Monolithique centralisée**, tout en conservant la résilience locale via la passerelle ESP32.
 
 ```
- ┌────────────────────────────────────────────────────────────┐
- │                     CLOUD PLATFORM                         │
- │   - Backend : Node.js (Express) sur Railway                │
- │   - Base de Données : PostgreSQL                           │
- │   - Broker MQTT Cloud : Embarqué Aedes (Port 1883/8883)    │
- │   - Frontend : Tableau de Bord React sur Vercel            │
- └───────────────────────▲────────────────────────────────────┘
-                         │ MQTT / MQTTS (Sécurisé & Temps Réel)
- ┌───────────────────────┴────────────────────────────────────┐
- │                 ESP32-S3 CONTROLLER (Passerelle)           │
- │   - Broker MQTT local (PicoMQTT sur port 1883)             │
- │   - Serveur Web local (AsyncWebServer sur port 80)          │
- │   - Client MQTT Cloud (PicoMQTT::Client)                   │
- │   - Tableau de bord autonome (HTML/JS en PROGMEM)          │
- └──────▲─────────────▲─────────────▲─────────────────────────┘
-         │ MQTT        │ MQTT        │ MQTT (Wi-Fi Local)
- ┌──────┴──────┐ ┌────┴──────┐ ┌───┴───────┐
- │   ESP8266   │ │   ESP8266   │ │   ESP8266   │
- │  Chambre 1  │ │  Chambre 2  │ │  Chambre N  │
- └─────────────┘ └───────────┘ └───────────┘
++------------------------------------------------------------+
+|                     CLOUD PLATFORM (Railway)               |
+|   - Backend : Node.js (Express)                            |
+|   - Broker MQTT Cloud : Aedes (Intégré dans Node.js)       |
+|   - Base de Données : PostgreSQL                           |
+|   - Serveur Web : Hébergement statique de l'UI React       |
++-----------------------^------------------------------------+
+                        | API HTTPS & WebSockets (WSS) & MQTT TCP (Port 1883)
++-----------------------v------------------------------------+
+|                 ESP32-S3 CONTROLLER (Passerelle)           |
+|   - Passerelle IoT Locale                                  |
+|   - Buzzer d'alerte physique local                         |
+|   - Connexion Wi-Fi au réseau de l'hôpital                 |
++------^-------------^-------------^-------------------------+
+       | MQTT (Local / Cloud)
++------v------+ +----v------+ +---v-------+
+|   ESP8266   | |   ESP8266   | |   ESP8266   |
+|  Chambre 1  | |  Chambre 2  | |  Chambre N  |
++-------------+ +-----------+ +-----------+
 ```
 
 ### 2.1 Les Terminaux Patients (ESP8266)
-Chaque lit de patient est équipé d'un boîtier doté d'un bouton poussoir relié à un module Wi-Fi low-cost **ESP8266**. Ce module communique en Wi-Fi local avec le contrôleur central via le protocole MQTT (QoS 0 pour les battements de cœur, QoS 0/1 pour les alertes).
+Chaque lit de patient est équipé d'un boîtier doté d'un bouton poussoir relié à un module Wi-Fi low-cost **ESP8266**. Ce module communique en Wi-Fi avec le contrôleur et/ou directement avec le broker MQTT Cloud (Aedes) hébergé sur Railway.
 
 ### 2.2 Le Contrôleur Local (ESP32-S3)
-Le cœur logique du réseau local est un **ESP32-S3**. Il cumule plusieurs rôles :
-* **Point d'Accès Wi-Fi (SoftAP)** ou client Wi-Fi connecté au réseau de l'hôpital.
-* **Broker MQTT local** (via la bibliothèque PicoMQTT) pour orchestrer les terminaux.
-* **Serveur Web asynchrone** hébergeant un tableau de bord local (embarqué dans la mémoire flash `PROGMEM`) accessible via IP locale (`192.168.4.1` ou DHCP).
+Le cœur logique matériel du réseau hospitalier est un **ESP32-S3**. Il cumule plusieurs rôles :
 * **Générateur d'alerte physique** via un avertisseur sonore (buzzer actif) connecté à une broche GPIO.
-* **Passerelle IoT temps réel** (via `PicoMQTT::Client`) qui synchronise l'état local avec le serveur Cloud par MQTT/MQTTS (avec chiffrement optionnel TLS/MQTTS sur le port 8883).
+* **Passerelle IoT** qui peut servir de relais pour la synchronisation locale vers le cloud.
 
-### 2.3 Le Serveur Cloud & Base de Données (Railway)
-Un serveur Node.js exécutant Express intègre un courtier MQTT **Aedes** complet. Le client MQTT interne du serveur écoute les topics publiés par le contrôleur local et met à jour l'état du système (liste des périphériques, alertes actives, logs) dans une base de données relationnelle **PostgreSQL** via l'ORM **Drizzle**.
+### 2.3 Le Serveur Cloud Monolithique (Node.js sur Railway)
+Un serveur Node.js unique exécutant Express traite la totalité du trafic :
+* **Broker MQTT (Aedes)** : Intégré directement dans le même processus Node.js. Il reçoit les connexions TCP sur le port 1883 des appareils IoT ESP32/ESP8266 et relaye les données en interne vers le reste de l'application.
+* **API & WebSockets** : Sert l'API REST sécurisée, ainsi que le flux WebSocket en temps réel vers les terminaux web des infirmiers.
+* **Base de données** : Persiste l'état du système via **PostgreSQL** géré via l'ORM **Drizzle**.
+* **Serveur Statique** : Diffuse l'application frontend React compilée (`dist/public`).
 
-### 2.4 Le Dashboard Web & Mobile (Vercel / Capacitor)
-Développé en **React 18** avec **Tailwind CSS** et **Radix UI**, ce tableau de bord affiche en temps réel les appels de patients grâce à une connexion **WebSocket** permanente avec le serveur de l'API. L'application est également encapsulée pour Android via **Capacitor**, permettant l'envoi de notifications locales push et l'usage de retours haptiques (vibrations) sur les téléphones des infirmiers.
+### 2.4 Le Dashboard Web & Mobile (Capacitor)
+Développé en **React 18** avec **Tailwind CSS** et **Radix UI**, ce tableau de bord affiche en temps réel les appels de patients grâce à une connexion **WebSocket**.
+Pour la version mobile, **Capacitor** a remplacé React Native. Il agit comme un conteneur Web (WebView) ultra-léger et performant qui charge l'URL de production Railway. Cette approche permet de déployer de nouvelles mises à jour UI instantanément, sans jamais nécessiter la reconstruction ou la redistribution de l'APK (fichier `.apk` Android).
 
 ---
 
@@ -68,22 +70,13 @@ Développé en **React 18** avec **Tailwind CSS** et **Radix UI**, ce tableau de
 ### 3.1 Schéma des Connexions & Broches (Pin Mapping)
 
 #### A. Contrôleur Central (ESP32-S3 DevKitC-1)
-Le contrôleur n'a besoin que d'un buzzer pour l'alarme sonore physique locale et d'une LED de statut.
+Le contrôleur n'a besoin que d'un buzzer pour l'alarme sonore physique locale.
 
 | Broche ESP32-S3 | Composant | Rôle | Description |
 |:---:|:---:|:---:|---|
 | **GPIO 4** | Buzzer Actif (+) | Sortie Numérique | Activé (HIGH) lors d'une alerte, désactivé (LOW) sinon. |
-| **GPIO 2** | LED de Statut | Sortie Numérique | Témoin visuel de l'état du contrôleur. |
 | **GND** | Buzzer Actif (-) | Masse | Référence 0V |
 | **USB-C** | Port Série / Alim | Alimentation + Debug | 5V / Communication Série à 115200 Bauds |
-
-```
-              ┌──────────────────┐
-              │     ESP32-S3     │
-              │                  │
-    GPIO4 ───►│ (+)  Buzzer  (-) │◄─── GND
-              └──────────────────┘
-```
 
 #### B. Terminal Bouton Patient (ESP8266 NodeMCU)
 Chaque boîtier patient possède un bouton-poussoir pour déclencher l'alerte et une LED d'état.
@@ -91,18 +84,7 @@ Chaque boîtier patient possède un bouton-poussoir pour déclencher l'alerte et
 | Broche ESP8266 | Composant | Mode de Configuration | Description |
 |:---:|:---:|:---:|---|
 | **GPIO 0 (D3)** | Bouton Poussoir | `INPUT_PULLUP` | Connecté au GND lors de l'appui (Actif à l'état BAS). |
-| **GPIO 2 (D4)** | LED intégrée | `OUTPUT` | Active à l'état BAS (Active LOW). Indique le statut de connexion et d'alerte. |
-| **GND** | Bouton Poussoir | Masse | Connecté au pôle opposé du bouton. |
-
-```
-              ┌──────────────────┐
-              │   ESP8266 Node   │
-              │                  │
-    GPIO0 ───►│ [ Bouton-Poussoir ] ─── GND
-              │                  │
-    GPIO2 ───►│ [ LED Intégrée  ] ─── VCC (Interne)
-              └──────────────────┘
-```
+| **GPIO 2 (D4)** | LED intégrée | `OUTPUT` | Active à l'état BAS (Active LOW). Indique le statut. |
 
 ### 3.2 Comportement Lumineux de la LED du Terminal (ESP8266)
 La LED du terminal donne un retour visuel instantané sur son état :
@@ -113,196 +95,61 @@ La LED du terminal donne un retour visuel instantané sur son état :
 
 ---
 
-## 4. Modes de Fonctionnement (Operating Modes)
+## 4. Protocoles de Communication
 
-Le système propose 4 modes opératoires sélectionnables lors de la configuration initiale (Setup Wizard) :
-
-| Mode | Nom | Description | Wi-Fi Requis | Liaison Cloud |
-|:---:|---|---|:---:|:---:|
-| **Mode 1** | **AP Only** (Point d'Accès local) | Le contrôleur crée son propre réseau Wi-Fi nommé `HospitalAlarm`. Tous les terminaux s'y connectent. Interface accessible sur `http://192.168.4.1`. Idéal pour une cellule isolée sans infrastructure réseau. | Non | Non |
-| **Mode 2** | **STA Only** (Station locale) | Le contrôleur se connecte à un réseau Wi-Fi existant (ex: Wi-Fi de l'hôpital). Les terminaux s'y connectent aussi. L'interface locale est servie sur l'adresse IP fournie par le DHCP du réseau local. | Oui | Non |
-| **Mode 3** | **AP + STA Hybrid** | Le contrôleur maintient son propre Point d'Accès (`HospitalAlarm`) tout en se connectant au réseau local de l'hôpital. Les terminaux peuvent se connecter indifféremment sur l'un des deux réseaux. | Oui | Non |
-| **Mode 4** | **Online (Cloud Sync)** | Même fonctionnement que le Mode 3, mais le contrôleur se connecte en continu au Broker MQTT Cloud (Railway). Les alertes sont acquittables mondialement en temps réel via le Web. | Oui | **Oui (Temps Réel / MQTT)** |
-
----
-
-## 5. Protocoles de Communication
-
-Le projet exploite quatre protocoles distincts adaptés à chaque niveau de l'architecture :
+Le projet exploite trois protocoles distincts adaptés à chaque niveau de l'architecture :
 
 ```
-[Terminal ESP8266] <======== MQTT Local ========> [ESP32 Controller] <======== MQTT/MQTTS Cloud ========> [Backend Railway] <======== WebSockets (WSS) ========> [Dashboard Client]
+[Terminal ESP8266] <== MQTT (TCP 1883) ==> [Aedes Broker (Node.js Railway)] <== WebSockets (WSS) ==> [Dashboard Client/Capacitor]
 ```
 
-### 5.1 Protocole MQTT Local (Contrôleur ↔ Terminaux)
-Le protocole MQTT (Message Queuing Telemetry Transport) est utilisé au niveau local sur le port TCP `1883`. C'est un protocole léger de type publication/abonnement (Pub/Sub).
+### 4.1 Protocole MQTT (Réseau IoT)
+Le protocole MQTT (Message Queuing Telemetry Transport) est utilisé par les appareils IoT pour communiquer avec le serveur Railway de manière extrêmement réactive.
+Le client Node.js backend s'abonne lui-même au broker intégré pour interagir avec la base de données PostgreSQL.
 
-#### Topics MQTT locaux implémentés :
+* **Pings de Maintien** : Les périphériques envoient des pings réguliers (`controller/+/ping`) pour informer le serveur de leur santé (RSSI, uptime).
+* **Alertes** : Un appui sur le bouton publie instantanément sur le topic `controller/{deviceId}/alert`, ce qui déclenche une insertion en base de données et l'émission immédiate d'un message WebSocket vers l'UI des infirmiers.
 
-1. **`device/{deviceId}/alert`** (Device → Controller)
-   * **Déclencheur** : Appui sur le bouton d'alerte.
-   * **Payload** :
-     ```json
-     {
-       "status": "pressed",
-       "deviceId": "device-4a2b9f",
-       "timestamp": 1716768000
-     }
-     ```
+### 4.2 API REST HTTPS
+En supplément du MQTT, le serveur Express expose des endpoints REST classiques pour les fonctionnalités administratives (approbation de périphériques, acquittement manuel d'alertes via HTTP) sécurisés par `X-Admin-Token` ou cookies de session.
 
-2. **`device/{deviceId}/heartbeat`** (Device → Controller)
-   * **Déclencheur** : Périodique (toutes les 10 secondes).
-   * **Payload** :
-     ```json
-     {
-       "deviceId": "device-4a2b9f",
-       "uptime": 1284,
-       "rssi": -65
-     }
-     ```
-
-3. **`device/{deviceId}/status`** (Controller → Device)
-   * **Option** : Retained (le terminal reçoit son statut immédiatement lors d'une reconnexion).
-   * **Payload** :
-     ```json
-     {
-       "approved": true,
-       "patientName": "Jean Dupont",
-       "bed": "Chambre 4 - Lit A",
-       "room": "Cardiologie"
-     }
-     ```
-
-4. **`device/{deviceId}/command`** (Controller → Device)
-   * **Payload** (ex: acquittement de l'alerte) :
-     ```json
-     {
-       "action": "clear_alert"
-     }
-     ```
+### 4.3 Protocole WebSocket (Server ↔ Dashboards)
+Pour garantir une réactivité instantanée (<100ms) sur les écrans de surveillance du personnel médical (Mobile ou Web), l'application React maintient une connexion **WebSocket (WSS)** permanente.
 
 ---
 
-### 5.2 Protocole MQTT / MQTTS Cloud (Controller ↔ Railway)
-Lorsque le système tourne en **Mode 4 (Online)**, le contrôleur utilise `PicoMQTT::Client` pour maintenir une connexion active avec le broker Aedes exécuté par le serveur cloud. Pour des raisons d'optimisation mémoire (Heap), les chaînes de topics sont pré-calculées une seule fois lors de la connexion initiale.
-
-#### Topics MQTT Cloud implémentés :
-
-1. **`controller/{deviceKey}/ping`** (Controller → Cloud Broker)
-   * **QoS** : 0 (Acceptation de perte ponctuelle, intervalle de 60 secondes).
-   * **Payload** :
-     ```json
-     {
-       "mode": 4,
-       "uptime": 3600,
-       "rssi": -55,
-       "wifiError": "OK"
-     }
-     ```
-
-2. **`controller/{deviceKey}/sync`** (Controller → Cloud Broker)
-   * **QoS** : 1 (Livraison garantie, intervalle de 30 secondes ou sur événement).
-   * **Payload** :
-     ```json
-     {
-       "mode": 4,
-       "uptime": 3600,
-       "rssi": -55,
-       "wifiError": "OK",
-       "devices": [
-         {
-           "deviceId": "device-4a2b9f",
-           "patientName": "Jean Dupont",
-           "bed": "Lit A",
-           "room": "Chambre 4",
-           "alertActive": true,
-           "approved": true,
-           "online": true,
-           "lastUpdatedAt": 1716768100
-         }
-       ]
-     }
-     ```
-
-3. **`controller/{deviceKey}/sync_response`** (Cloud Broker → Controller)
-   * **QoS** : 1.
-   * **Déclencheur** : En réponse immédiate à la publication d'un message `sync`. Le serveur renvoie sa liste de périphériques faisant autorité (résolution de conflits basée sur `lastUpdatedAt`).
-
-4. **`controller/{deviceKey}/alert`** (Controller → Cloud Broker)
-   * **QoS** : 1.
-   * **Déclencheur** : Émis instantanément sans throttling dès qu'un périphérique local déclenche une alerte.
-   * **Payload** :
-     ```json
-     {
-       "deviceId": "device-4a2b9f"
-     }
-     ```
-
-5. **`controller/{deviceKey}/command`** (Cloud Broker → Controller)
-   * **QoS** : 1.
-   * **Déclencheur** : Commandes instantanées émises par le tableau de bord cloud.
-   * **Payload** :
-     ```json
-     {
-       "command": "clear_alert",
-       "params": "device-4a2b9f"
-     }
-     ```
-     *(Commandes supportées : `clear_alert`, `CLEAR_ALL_ALERTS`, `REMOVE_DEVICE`, `CHANGE_MODE`, `SYNC_NOW`)*
-
----
-
-### 5.3 Protocole WebSocket (Server ↔ Dashboards)
-Pour garantir une réactivité instantanée (<100ms) sur les écrans de surveillance du personnel médical, l'application React n'interroge pas le serveur en boucle (polling). Elle maintient une connexion **WebSocket (WSS)** permanente sur l'URL `wss://{domain}/ws`.
-
-* **Pings de Maintien** : Un ping-pong automatisé toutes les 25 secondes évite les déconnexions pour inactivité imposées par l'infrastructure cloud (Railway).
-* **Événements WebSocket Émis par le Serveur** :
-  * `FULL_STATE` : Envoyé immédiatement à la connexion du client. Contient tous les terminaux et l'état global de la passerelle.
-  * `ALERT` : Émis en temps réel dès qu'un patient active son alarme.
-  * `UPDATE` : Émis lors d'une approbation ou d'une modification des données d'un patient.
-  * `DELETE` : Émis lorsqu'un périphérique est supprimé.
-  * `CONTROLLER_STATUS` : Met à jour la force du signal Wi-Fi et l'état en ligne/hors-ligne du contrôleur central.
-
----
-
-## 6. Structure du Code & Base de Données
+## 5. Structure du Code & Base de Données
 
 Le projet utilise une architecture moderne basée sur TypeScript avec un monorepo structuré.
 
-### 6.1 Arborescence du Code
+### 5.1 Arborescence du Code
 
 ```
 My-PFC/
-├── server/               # Backend Node.js / Express / Aedes Broker / WebSockets
-│   ├── index.ts          # Point d'entrée de l'application & initialisation
-│   ├── mqtt.ts           # Initialisation Aedes Broker & Client MQTT de synchronisation
-│   ├── log.ts            # Utilitaire de logs centralisé pour casser les dépendances circulaires
+├── server/               # Backend Node.js / Express / WebSockets / Aedes MQTT
+│   ├── index.ts          # Point d'entrée de l'application & initialisation de la base
 │   ├── routes.ts         # Définition des endpoints REST HTTP & Middleware
 │   ├── wss.ts            # Gestion du serveur de WebSockets
+│   ├── mqtt.ts           # Logique du broker MQTT intégré (Aedes) et gestion des queues de commandes
 │   ├── storage.ts        # Logique d'accès aux données (PostgreSQL via Drizzle ORM)
 │   ├── db.ts             # Configuration du pool de connexion PostgreSQL
 │   └── static.ts         # Serveur de fichiers statiques pour le SPA React
 ├── shared/               # Code partagé entre le frontend et le backend
 │   └── schema.ts         # Modèles de base de données Drizzle et schémas de validation Zod
-├── client/               # Application Frontend React
+├── client/               # Application Frontend React (Servie par Node.js)
 │   ├── src/
-│   │   ├── App.tsx       # Routage (wouter) et initialisation des Query Providers
-│   │   ├── main.tsx      # Point de montage React dans le DOM
-│   │   ├── pages/        # Écrans principaux (Dashboard, AdminPanel, Login)
+│   │   ├── App.tsx       # Routage (wouter) et initialisation
 │   │   ├── components/   # Composants réutilisables (DeviceCard, SetupWizard, AlertBanner)
-│   │   ├── hooks/        # Hooks personnalisés (useAlertSound, use-mobile)
-│   │   └── contexts/     # Provider pour l'application mobile (mobile-context)
-│   └── capacitor.config.ts # Configuration de la couche mobile native
+│   │   └── hooks/        # Hooks personnalisés (useAlertSound, use-mobile)
+│   └── vite.config.ts    # Build frontend
+├── android/              # Application Mobile (Capacitor WebView)
+│   └── capacitor.config.ts # Pointe l'application mobile vers https://my-pfc-production.up.railway.app
 └── esp32/                # Firmware des microcontrôleurs (C++)
-    ├── controller/       # Code du contrôleur central ESP32-S3
-    └── device/           # Code du boîtier patient ESP8266
 ```
 
----
+### 5.2 Base de Données : Schémas des Tables
 
-### 6.2 Base de Données : Schémas des Tables
-
-Le système utilise PostgreSQL. L'accès s'effectue via Drizzle ORM avec des schémas validés en amont par la bibliothèque **Zod**.
+Le système utilise PostgreSQL sur Railway avec un paramétrage optimisé pour le Cloud (Pool Timeout 15s, SSL configuré). L'accès s'effectue via Drizzle ORM avec des schémas validés en amont par **Zod**.
 
 #### Table 1 : `devices`
 Enregistre la liste des boîtiers d'alerte, les informations des patients affectés et l'état de l'alerte.
@@ -319,37 +166,31 @@ Enregistre la liste des boîtiers d'alerte, les informations des patients affect
 | `approved`    | `BOOLEAN`| `false` | Indique si l'administrateur a validé l'appareil et lui a affecté un lit. |
 | `online`      | `BOOLEAN`| `false` | Indique si le boîtier émet des pulsations (heartbeats) actives. |
 | `last_seen`   | `BIGINT`  | `Unix ms` | Timestamp Unix de la dernière activité reçue du terminal. |
-| `last_updated_at`|`BIGINT` | `Unix ms` | Utilisé pour la résolution de conflits lors de la synchro Cloud. |
+| `last_updated_at`|`BIGINT` | `Unix ms` | Timestamp de modification. |
 
 #### Table 2 : `system_settings`
-Cette table ne contient qu'une seule ligne (Singleton, `id = 1`) et stocke l'état matériel du contrôleur central ainsi que les commandes en attente d'envoi vers celui-ci.
+Cette table stocke l'état matériel du contrôleur central ainsi que les commandes en attente d'envoi.
 
 | Nom de Colonne | Type SQL | Valeur par défaut | Description |
 |---|---|---|---|
 | `id` | `INTEGER` | `PRIMARY KEY (1)` | Clé primaire unique forcée à 1. |
-| `controller_last_seen` | `BIGINT` | `NULL` | Timestamp Unix de la dernière synchronisation réussie de l'ESP32. |
-| `controller_uptime` | `INTEGER` | `0` | Temps de fonctionnement en secondes du contrôleur local. |
-| `controller_rssi` | `INTEGER` | `0` | Force du signal Wi-Fi (en dBm) capté par le contrôleur. |
-| `controller_wifi_error` | `TEXT` | `NULL` | Libellé d'erreur si la connexion Wi-Fi de l'ESP32 échoue. |
+| `controller_last_seen` | `BIGINT` | `NULL` | Timestamp Unix de la dernière synchronisation de l'ESP32. |
+| `controller_uptime` | `INTEGER` | `0` | Temps de fonctionnement en secondes du contrôleur. |
+| `controller_rssi` | `INTEGER` | `0` | Force du signal Wi-Fi (en dBm). |
+| `controller_wifi_error` | `TEXT` | `NULL` | Libellé d'erreur de connexion Wi-Fi. |
 | `wifi_mode` | `INTEGER` | `1` | Mode réseau configuré (1 à 4). |
-| `pending_command` | `TEXT` | `NULL` | Type de commande en attente (ex: `clear_alert`, `REMOVE_DEVICE`, `CHANGE_MODE`). |
-| `command_params` | `TEXT` | `NULL` | Paramètres complémentaires pour la commande (ex: l'ID de l'appareil à supprimer). |
+| `pending_command` | `TEXT` | `NULL` | Type de commande en attente. |
+| `command_params` | `TEXT` | `NULL` | Paramètres complémentaires pour la commande. |
 
 ---
 
-## 7. Sécurité, Résilience et Performance du Système
+## 6. Sécurité et Avantages de la Nouvelle Architecture Monolithique
 
-Pour assurer un service critique de type médical, plusieurs mécanismes de protection ont été intégrés :
-
-1. **Isolation locale en cas de panne Internet** :
-   En mode 4, si la liaison Internet/Cloud est coupée, l'ESP32-S3 continue d'héberger localement son broker MQTT. Les infirmiers présents dans l'unité de soin peuvent toujours se connecter en Wi-Fi direct sur l'ESP32 (`192.168.4.1`) pour surveiller les alertes et les acquitter. Une fois la connexion Internet rétablie, la synchronisation avec le cloud se relance de manière transparente.
-2. **File de commandes d'administration persistante (Command Queue)** :
-   Le serveur intègre une file d'attente de commandes temporaire. Si le contrôleur local se déconnecte temporairement de la couverture 3G/4G/Wi-Fi du cloud, les commandes de coupure d'alarme ou de suppression d'équipements émises par le personnel distant ne sont pas perdues. Elles sont stockées au niveau de la passerelle serveur et automatiquement poussées vers l'ESP32 avec une priorité absolue (QoS 1) dès qu'il rétablit sa session.
-3. **Protection contre la fragmentation mémoire (Heap)** :
-   Sur l'ESP32-S3, le traitement de chaînes dynamiques répétées dans la boucle `loop()` peut provoquer une fragmentation du tas mémoire (Heap Fragmentation), entraînant des redémarrages intempestifs. L'architecture pré-cache l'ensemble des topics MQTT lors de l'initialisation, garantissant la stabilité à long terme de l'équipement (zéro allocation de chaîne volatile par trame).
-4. **Détection de perte de liaison (Heartbeat & Timeout)** :
-   * Si un terminal patient (ESP8266) n'envoie pas de pulsation pendant plus de **30 secondes**, le contrôleur local le marque comme hors-ligne (`online = false`) et coupe son voyant sur l'interface, avertissant le personnel d'un dysfonctionnement matériel potentiel.
-   * Si le contrôleur local (ESP32-S3) n'a pas émis de ping pendant plus de **120 secondes**, le serveur cloud marque le contrôleur comme hors-ligne, ce qui déclenche un indicateur visuel rouge d'alerte système globale sur l'application Web générale.
-5. **Sécurité des APIs** :
-   * Les communications Cloud/ESP32 sont protégées par une clé API unique (`X-Device-Key` ou `DEVICE_API_KEY`) exigée lors du handshake MQTT.
-   * L'accès au panneau d'administration nécessite une session authentifiée (gérée par Passport.js avec des cookies sécurisés `httpOnly` et configurés en mode `sameSite: "none"` pour le fonctionnement multi-plateforme Vercel-Railway).
+1. **Mises à Jour Dynamiques Mobiles (Capacitor)** :
+   La migration de React Native vers Capacitor WebView signifie que la logique applicative de l'application mobile est intégralement gérée par le backend Railway. Toute modification d'interface, correction de bug ou nouvelle fonctionnalité est répercutée instantanément sur l'application des infirmiers sans qu'ils n'aient à mettre à jour leur fichier APK. L'application mobile se comporte comme une coquille native (avec support des vibrations et notifications locales) contenant le tableau de bord web.
+2. **Déploiement Simplifié et Fiabilité (Monolith Railway)** :
+   Vercel, n'étant adapté qu'aux fonctions Serverless, souffrait de limitations critiques concernant les temps d'exécution (timeouts) et les WebSockets. Héberger l'intégralité du code (Frontend statique, Express API, Aedes MQTT) au sein d'un seul processus Node.js sur Railway garantit une réactivité MQTT et WebSocket ininterrompue.
+3. **Queue de Commandes Déconnectées** :
+   Le nouveau module MQTT interne (`server/mqtt.ts`) intègre un mécanisme intelligent de mise en file d'attente. Si la communication entre le backend MQTT client et le broker s'interrompt temporairement, les commandes vitales d'acquittement d'alarme sont mises en attente et re-émises immédiatement lors de la reconnexion, assurant zéro perte d'information médicale critique.
+4. **Authentification Hybride** :
+   L'accès à l'API est sécurisé doublement : les requêtes de terminaux IoT utilisent un token statique d'appareil (`X-Device-Key` / `X-Admin-Token`), tandis que le panneau d'administration des soignants emploie le framework Passport.js avec des cookies cryptés.
