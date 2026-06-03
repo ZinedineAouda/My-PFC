@@ -411,7 +411,7 @@ void onRemoteCommand(const String& cmd, const String& params) {
 void handleBuzzer() {
     if (!registry.hasActiveAlerts()) {
         if (buzzerState) {
-            digitalWrite(BUZZER_PIN, LOW);
+            noTone(BUZZER_PIN);
             buzzerState = false;
         }
         return;
@@ -420,12 +420,12 @@ void handleBuzzer() {
     unsigned long now = millis();
     if (now - lastBuzzerToggle > 3000) { // Beep every 3 seconds
         lastBuzzerToggle = now;
-        digitalWrite(BUZZER_PIN, HIGH);
+        tone(BUZZER_PIN, 2000); // Generate 2kHz tone
         buzzerState = true;
     }
     // Turn off after 100ms beep
     if (buzzerState && (now - lastBuzzerToggle > 100)) {
-        digitalWrite(BUZZER_PIN, LOW);
+        noTone(BUZZER_PIN);
         buzzerState = false;
     }
 }
