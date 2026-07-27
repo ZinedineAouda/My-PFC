@@ -5,4 +5,9 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
-scratch/
+scratch/build/
+.dart_tool/
+.pub-cache/
+__pycache__/
+venv/
+.venv/
